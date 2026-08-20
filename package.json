@@ -1,0 +1,40 @@
+{
+  "name": "obrigado-client-workspace",
+  "version": "0.0.0",
+  "private": true,
+  "workspaces": {
+    "packages": [
+      "packages/*"
+    ],
+    "catalog": {
+      "fast-check": "4.9.0",
+      "zod": "4.4.3"
+    }
+  },
+  "type": "module",
+  "scripts": {
+    "check": "bun run check:lint && bun run check:fmt && bun run check:types && bun run check:test",
+    "check:lint": "oxlint --deny-warnings .",
+    "check:fmt": "oxfmt --check .",
+    "check:types": "tsc --build --force",
+    "check:test": "bun test",
+    "build:vscode": "bun run --filter obrigado-vscode build",
+    "package:vscode": "bun run --filter obrigado-vscode package"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "oxfmt": "0.60.0",
+    "oxlint": "1.75.0",
+    "typescript": "6.0.3"
+  },
+  "overrides": {
+    "@babel/core": "7.29.7",
+    "fast-uri": "3.1.5",
+    "js-yaml": "4.3.1",
+    "nanoid": "3.3.18"
+  },
+  "engines": {
+    "bun": ">=1.3.10"
+  },
+  "packageManager": "bun@1.3.10"
+}

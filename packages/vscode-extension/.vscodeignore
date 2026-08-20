@@ -1,0 +1,36 @@
+# What stays out of the .vsix.
+#
+# Default-deny would be better but vsce has no such mode, so this is a deny list and it has
+# to be read as one: anything added to this package ships unless a line here stops it.
+#
+# The shipped extension is the bundle, the manifest, the icons and the README — nothing
+# else. `bun build` inlines every import, so there is no runtime dependency to carry and
+# `--no-dependencies` in the package script says so.
+
+# Sources and their tests. The bundle is what runs; shipping the inputs too would double the
+# download and invite someone to edit a file that is never loaded.
+#
+# `test/**` is here because it shipped once: `src/**` was denied and the tests were added
+# later, straight past a rule that named the other directory. That is this file's failure
+# mode in one line — a new directory ships by default and only the packing manifest says so.
+src/**
+test/**
+tsconfig.json
+**/*.tsbuildinfo
+
+# Declaration output. `bun build` writes the bundle here and `tsc --build` writes types
+# beside it; only the bundle belongs in the package.
+dist/**/*.d.ts
+dist/**/*.d.ts.map
+dist/**/*.map
+
+# Previously-built packages. A .vsix inside a .vsix is a recursion nobody wants.
+dist/**/*.vsix
+
+# Dev-only dependencies. @types/vscode and vsce are both build-time; with --no-dependencies
+# this should already be empty, and this line makes that a guarantee rather than a hope.
+node_modules/**
+
+# Repo furniture that means nothing to an installed extension.
+.vscodeignore
+resources/icon.svg

@@ -1,0 +1,27 @@
+{
+  "name": "@obrigado/opencode-plugin",
+  "version": "0.0.0",
+  "private": true,
+  "homepage": "https://obrigado.dev",
+  "bugs": {
+    "url": "https://github.com/obrigado-dev/client/issues"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/obrigado-dev/client.git",
+    "directory": "packages/opencode-plugin"
+  },
+  "type": "module",
+  "exports": {
+    "./tui": "./src/tui.tsx"
+  },
+  "devDependencies": {
+    "@opentui/core": "0.4.5"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": "1.18.10",
+    "@opentui/solid": "0.4.5",
+    "solid-js": "1.9.14"
+  }
+}

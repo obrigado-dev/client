@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": ".",
+    // Solid's JSX is compiled by the build, not by tsc — the runtime is
+    // OpenTUI's universal renderer rather than the DOM, so tsc only needs to
+    // type it, never to emit it.
+    "jsx": "preserve",
+    "jsxImportSource": "@opentui/solid",
+    "composite": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
+}

@@ -1,0 +1,30 @@
+{
+  "name": "@obrigado/shared",
+  "version": "0.0.0",
+  "private": true,
+  "homepage": "https://obrigado.dev",
+  "bugs": {
+    "url": "https://github.com/obrigado-dev/client/issues"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/obrigado-dev/client.git",
+    "directory": "packages/shared"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./agents": "./src/agents.ts",
+    "./money": "./src/money.ts",
+    "./contract": "./src/contract.ts",
+    "./markup": "./src/markup.ts",
+    "./rotation": "./src/rotation.ts"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "fast-check": "catalog:"
+  }
+}

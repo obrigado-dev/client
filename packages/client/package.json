@@ -1,0 +1,25 @@
+{
+  "name": "@obrigado/client",
+  "version": "0.0.0",
+  "private": true,
+  "homepage": "https://obrigado.dev",
+  "bugs": {
+    "url": "https://github.com/obrigado-dev/client/issues"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/obrigado-dev/client.git",
+    "directory": "packages/client"
+  },
+  "bin": {
+    "obrigado": "./src/cli.ts"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/cli.ts"
+  },
+  "dependencies": {
+    "@obrigado/shared": "workspace:*"
+  }
+}

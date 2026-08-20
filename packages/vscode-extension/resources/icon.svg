@@ -1,0 +1,12 @@
+<!-- Source for the Marketplace tile. The Marketplace takes PNG only, so `icon.png` is
+     generated from this: `rsvg-convert -w 128 -h 128 icon.svg -o icon.png`.
+
+     Distinct from `obrigado.svg`, which is the activity bar / sidebar glyph: that one is
+     monochrome and paints itself with `currentColor` so the editor can tint it per theme.
+     A tile cannot do that — it sits on a card whose background we do not control — so this
+     one carries its own surface and the accent as literal values. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <rect width="128" height="128" rx="28" fill="#0b0e0f"/>
+  <circle cx="64" cy="64" r="40" fill="none" stroke="#5fd0cc" stroke-width="11"/>
+  <circle cx="64" cy="64" r="13.5" fill="#5fd0cc"/>
+</svg>

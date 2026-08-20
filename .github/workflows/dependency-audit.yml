@@ -1,0 +1,39 @@
+name: Dependency audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/dependency-audit.yml"
+      - "bun.lock"
+      - "package.json"
+      - "packages/*/package.json"
+  pull_request:
+    paths:
+      - ".github/workflows/dependency-audit.yml"
+      - "bun.lock"
+      - "package.json"
+      - "packages/*/package.json"
+  schedule:
+    - cron: "23 5 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: dependency-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+jobs:
+  audit:
+    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@9a498708959aeaef5ef730655706c5a1df1edbc2" # v2.3.8
+    with:
+      scan-args: |-
+        --offline
+        --download-offline-databases
+        --lockfile=./bun.lock
+      upload-sarif: false
+      fail-on-vuln: true

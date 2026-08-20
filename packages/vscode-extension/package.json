@@ -1,0 +1,57 @@
+{
+  "name": "obrigado-vscode",
+  "displayName": "Obrigado",
+  "version": "0.0.0",
+  "private": true,
+  "description": "One labeled sponsored line in your status bar. 70% of the revenue funds the packages you depend on.",
+  "categories": [
+    "Other"
+  ],
+  "homepage": "https://obrigado.dev",
+  "bugs": {
+    "url": "https://github.com/obrigado-dev/client/issues"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/obrigado-dev/client.git",
+    "directory": "packages/vscode-extension"
+  },
+  "publisher": "obrigado",
+  "main": "./dist/extension.js",
+  "scripts": {
+    "build": "bun build ./src/extension.ts --outfile ./dist/extension.js --target node --format cjs --external vscode",
+    "package": "bun run build && vsce package --no-dependencies --out dist/obrigado-vscode.vsix",
+    "install:code": "code --install-extension dist/obrigado-vscode.vsix --force",
+    "install:cursor": "cursor --install-extension dist/obrigado-vscode.vsix --force"
+  },
+  "devDependencies": {
+    "@types/vscode": "1.94.0",
+    "@vscode/vsce": "3.9.2"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "obrigado.openSponsor",
+        "title": "Obrigado: Open the sponsored link"
+      }
+    ],
+    "configuration": {
+      "title": "Obrigado",
+      "properties": {
+        "obrigado.statuslineCommand": {
+          "type": "string",
+          "default": "",
+          "description": "Command that renders the sponsored line. Leave empty to use `obrigado` from PATH. Set this to run against a source checkout, e.g. `bun /path/to/obrigado-dev/packages/client/src/cli.ts statusline`."
+        }
+      }
+    }
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "icon": "resources/icon.png",
+  "engines": {
+    "vscode": "^1.94.0"
+  }
+}

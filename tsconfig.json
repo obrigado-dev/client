@@ -1,0 +1,17 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "./packages/shared"
+    },
+    {
+      "path": "./packages/client"
+    },
+    {
+      "path": "./packages/opencode-plugin"
+    },
+    {
+      "path": "./packages/vscode-extension"
+    }
+  ]
+}

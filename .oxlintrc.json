@@ -1,0 +1,57 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["import", "typescript", "unicorn", "oxc", "promise", "node"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "error",
+    "pedantic": "error",
+    "nursery": "error",
+    "restriction": "off",
+    "style": "off"
+  },
+  "env": {
+    "builtin": true,
+    "node": true,
+    "browser": true,
+    "es2024": true
+  },
+  "globals": {
+    "Bun": "readonly"
+  },
+  "rules": {
+    "eslint/eqeqeq": ["error", "always", { "null": "ignore" }],
+    "eslint/max-lines-per-function": [
+      "error",
+      { "max": 60, "skipComments": true, "skipBlankLines": true }
+    ],
+    "eslint/max-lines": ["error", { "max": 300, "skipComments": true, "skipBlankLines": true }],
+    "import/max-dependencies": ["error", { "max": 14 }]
+  },
+  "overrides": [
+    {
+      "files": ["packages/shared/src/money.ts"],
+      "rules": {
+        "eslint/no-restricted-globals": [
+          "error",
+          {
+            "name": "parseFloat",
+            "message": "Money is integer micros (bigint). Floats are banned in settlement paths."
+          },
+          {
+            "name": "parseInt",
+            "message": "Use BigInt(...) with an explicit codec; parseInt silently truncates."
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/*.test.ts", "packages/*/test/**/*.ts"],
+      "rules": {
+        "eslint/max-lines-per-function": "off",
+        "eslint/max-lines": "off"
+      }
+    }
+  ],
+  "ignorePatterns": ["node_modules", "dist", "**/*.d.ts"]
+}
