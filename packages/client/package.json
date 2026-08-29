@@ -20,6 +20,7 @@
     ".": "./src/cli.ts"
   },
   "dependencies": {
+    "@obrigado/pi-extension": "workspace:*",
     "@obrigado/shared": "workspace:*"
   }
 }

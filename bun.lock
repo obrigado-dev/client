@@ -18,6 +18,7 @@
         "obrigado": "./src/cli.ts",
       },
       "dependencies": {
+        "@obrigado/pi-extension": "workspace:*",
         "@obrigado/shared": "workspace:*",
       },
     },
@@ -32,6 +33,10 @@
         "@opentui/solid": "0.4.5",
         "solid-js": "1.9.14",
       },
+    },
+    "packages/pi-extension": {
+      "name": "@obrigado/pi-extension",
+      "version": "0.0.0",
     },
     "packages/shared": {
       "name": "@obrigado/shared",
@@ -178,6 +183,8 @@
     "@obrigado/client": ["@obrigado/client@workspace:packages/client"],
 
     "@obrigado/opencode-plugin": ["@obrigado/opencode-plugin@workspace:packages/opencode-plugin"],
+
+    "@obrigado/pi-extension": ["@obrigado/pi-extension@workspace:packages/pi-extension"],
 
     "@obrigado/shared": ["@obrigado/shared@workspace:packages/shared"],
 
