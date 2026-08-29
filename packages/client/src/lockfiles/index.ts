@@ -1,7 +1,7 @@
 /**
  * Lockfile discovery and merging (§10.3, Phase 1).
  *
- * All nine v1 ecosystems. A workspace can legitimately have several — a Rust
+ * All eleven v1 ecosystems. A workspace can legitimately have several — a Rust
  * binary with a TypeScript frontend has both `Cargo.lock` and `pnpm-lock.yaml` —
  * and every one contributes, because the developer depends on all of it.
  *
@@ -17,6 +17,7 @@ import type { DepEntry } from "@obrigado/shared";
 import { bunParser } from "./bun.ts";
 import { cargoParser } from "./cargo.ts";
 import { goParser } from "./go.ts";
+import { gradleParser, mavenParser } from "./maven.ts";
 import { npmParser } from "./npm.ts";
 import { pnpmParser } from "./pnpm.ts";
 import { poetryParser, uvParser } from "./python.ts";
@@ -41,6 +42,16 @@ export const PARSERS: readonly LockfileParser[] = [
   poetryParser,
   goParser,
   rubyParser,
+  /*
+   * Gradle before Maven, and both last.
+   *
+   * They share the `maven` ecosystem, so the first match wins and the other is skipped — which
+   * is the right way round: `gradle.lockfile` is a resolved set with transitives, `pom.xml` is
+   * a manifest of direct dependencies only. A Gradle project that also ships a POM for
+   * publishing should be read from the lockfile.
+   */
+  gradleParser,
+  mavenParser,
 ];
 
 export interface ResolvedDeps {

@@ -5,6 +5,7 @@ import { cargoParser } from "../src/lockfiles/cargo.ts";
 import { computeDepths, depthsWithFallback, MAX_DEPTH } from "../src/lockfiles/graph.ts";
 import { goParser } from "../src/lockfiles/go.ts";
 import { mergeShallowest, PARSERS } from "../src/lockfiles/index.ts";
+import { gradleParser, mavenParser } from "../src/lockfiles/maven.ts";
 import { npmParser } from "../src/lockfiles/npm.ts";
 import { packageName, pnpmParser } from "../src/lockfiles/pnpm.ts";
 import { poetryParser, requirementName, uvParser } from "../src/lockfiles/python.ts";
@@ -482,20 +483,34 @@ describe("merging", () => {
     ]);
   });
 
-  test("all nine v1 ecosystems from §10.3 have a parser", () => {
+  test("every supported ecosystem has a parser, and no more", () => {
     expect(PARSERS.map((parser) => parser.lockfile).toSorted()).toEqual(
       [
         "Cargo.lock",
         "Gemfile.lock",
         "bun.lock",
         "go.sum",
+        // The JVM's two, which are not lockfiles in the same sense — see `maven.ts`.
+        "gradle.lockfile",
         "package-lock.json",
         "pnpm-lock.yaml",
         "poetry.lock",
+        "pom.xml",
         "uv.lock",
         "yarn.lock",
       ].toSorted(),
     );
+  });
+
+  /*
+   * Gradle and Maven deliberately share the `maven` namespace, and `readLockfiles` skips a
+   * parser whose ecosystem is already covered — so the order decides which one a project with
+   * both files is read from. It has to be the one that resolves transitives.
+   */
+  test("a project with both JVM files is read from the lockfile, not the manifest", () => {
+    const jvm = PARSERS.filter((parser) => parser.ecosystem === "maven");
+
+    expect(jvm.map((parser) => parser.lockfile)).toEqual(["gradle.lockfile", "pom.xml"]);
   });
 
   test("npm-family parsers are ordered so a stale lockfile loses", () => {
@@ -525,4 +540,131 @@ describe("robustness", () => {
     });
     expect(deps.map((dep) => dep.p)).toEqual(["npm:lodash"]);
   });
+});
+
+/**
+ * The JVM, which is the ecosystem with no lockfile of its own.
+ *
+ * These fixtures cover what the format allows and the other nine do not: a
+ * `dependencyManagement` block declaring versions for dependencies nobody uses, an `empty=`
+ * line that is not a package, and property placeholders that cannot be resolved without
+ * running the build. Each would fund something the project does not ship.
+ */
+describe("gradle", () => {
+  const LOCK = [
+    "# This is a Gradle generated file for dependency locking.",
+    "# Manual edits can break the build and are not advised.",
+    "com.google.guava:guava:31.1-jre=compileClasspath,runtimeClasspath",
+    "org.junit.jupiter:junit-jupiter-api:5.9.0=testCompileClasspath",
+    "com.squareup.okhttp3:okhttp:4.10.0=runtimeClasspath",
+    "empty=annotationProcessor,testAnnotationProcessor",
+  ].join("\n");
+
+  test("reads coordinates and drops the version", () => {
+    expect(
+      gradleParser
+        .parse({ lockfile: LOCK })
+        .map((dep) => dep.p)
+        .toSorted(),
+    ).toEqual([
+      "maven:com.google.guava:guava",
+      "maven:com.squareup.okhttp3:okhttp",
+      "maven:org.junit.jupiter:junit-jupiter-api",
+    ]);
+  });
+
+  /* `empty` is how Gradle records a configuration that resolved to nothing. It is not a
+     package, and a parser that took it at face value would invoice for one. */
+  test("never treats the empty marker as a package", () => {
+    const names = gradleParser.parse({ lockfile: LOCK }).map((dep) => dep.p);
+
+    expect(names.some((name) => name.includes("empty"))).toBe(false);
+  });
+
+  test("the version catalog promotes its libraries to depth 0", () => {
+    const manifest = [
+      "[libraries]",
+      'guava = { module = "com.google.guava:guava", version = "31.1-jre" }',
+      'okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version = "4.10.0" }',
+    ].join("\n");
+
+    const depths = new Map(
+      gradleParser.parse({ lockfile: LOCK, manifest }).map((dep) => [dep.p, dep.d]),
+    );
+
+    expect(depths.get("maven:com.google.guava:guava")).toBe(0);
+    expect(depths.get("maven:com.squareup.okhttp3:okhttp")).toBe(0);
+    // Not catalogued, so it stays transitive — the direction go.mod's `// indirect` errs in.
+    expect(depths.get("maven:org.junit.jupiter:junit-jupiter-api")).toBe(1);
+  });
+
+  test("a malformed catalog costs depth, never packages", () => {
+    const deps = gradleParser.parse({ lockfile: LOCK, manifest: "this is not toml [[[" });
+
+    expect(deps.length).toBe(3);
+    expect(deps.every((dep) => dep.d === 1)).toBe(true);
+  });
+});
+
+describe("maven", () => {
+  const POM = `<project>
+    <dependencyManagement>
+      <dependencies>
+        <dependency>
+          <groupId>org.never.shipped</groupId>
+          <artifactId>version-pin-only</artifactId>
+        </dependency>
+      </dependencies>
+    </dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>com.google.guava</groupId>
+        <artifactId>guava</artifactId>
+      </dependency>
+      <!-- <dependency><groupId>org.commented</groupId><artifactId>out</artifactId></dependency> -->
+      <dependency>
+        <groupId>\${unresolved.group}</groupId>
+        <artifactId>mystery</artifactId>
+      </dependency>
+      <dependency>
+        <groupId>org.junit.jupiter</groupId>
+        <artifactId>junit-jupiter</artifactId>
+        <scope>test</scope>
+      </dependency>
+    </dependencies>
+  </project>`;
+
+  test("names the project's own dependencies, at depth 0", () => {
+    expect(mavenParser.parse({ lockfile: POM }).toSorted((a, b) => a.p.localeCompare(b.p))).toEqual(
+      [
+        { p: "maven:com.google.guava:guava", d: 0 },
+        { p: "maven:org.junit.jupiter:junit-jupiter", d: 0 },
+      ],
+    );
+  });
+
+  test("excludes dependencyManagement, comments, and unresolved properties", () => {
+    const names = mavenParser.parse({ lockfile: POM }).map((dep) => dep.p);
+
+    expect(names).not.toContain("maven:org.never.shipped:version-pin-only");
+    expect(names).not.toContain("maven:org.commented:out");
+    expect(names.some((name) => name.includes("$"))).toBe(false);
+  });
+
+  test("a POM with nothing in it yields nothing rather than throwing", () => {
+    expect(mavenParser.parse({ lockfile: "<project></project>" })).toEqual([]);
+    expect(mavenParser.parse({ lockfile: "not xml at all" })).toEqual([]);
+  });
+});
+
+/* Both tools resolve from Maven Central, so the same coordinate must land on the same id —
+   otherwise one maintainer is paid twice under two names and ranked as two projects. */
+test("gradle and maven agree about what a package is called", () => {
+  const fromGradle = gradleParser.parse({ lockfile: "com.google.guava:guava:31.1-jre=runtime" });
+  const fromMaven = mavenParser.parse({
+    lockfile:
+      "<dependencies><dependency><groupId>com.google.guava</groupId><artifactId>guava</artifactId></dependency></dependencies>",
+  });
+
+  expect(fromGradle[0]?.p).toBe(fromMaven[0]?.p);
 });
