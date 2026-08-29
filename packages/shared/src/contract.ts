@@ -72,6 +72,32 @@ export const DepEntry = z.object({
 export type DepEntry = z.infer<typeof DepEntry>;
 
 /**
+ * What this developer agreed to be targeted on.
+ *
+ * Three independent flags, not one level: somebody may be happy to share a country and not
+ * what their agent is reading, or the reverse, and an ordinal would present that as a
+ * hierarchy of trust it is not. All default false — an absent object means an older client,
+ * and an older client has consented to nothing.
+ *
+ * Sent on EVERY session rather than recorded once, because it is the developer's live choice
+ * and turning one off has to take effect on the next request rather than at some later sync.
+ *
+ * The developer is not paid for any of this — §3's "you earn nothing from it" is what keeps
+ * impression farming pointless, and paying for consent would undo it. The reason to opt in is
+ * that better-targeted inventory clears higher CPMs and 70% of that lands in the packages
+ * already in their own lockfile.
+ */
+export const SharingSettings = z.object({
+  /** Country, derived from the connecting address and stored on the install. */
+  region: z.boolean().default(false),
+  /** Whether the connecting address may be matched against advertiser-supplied ranges. */
+  network: z.boolean().default(false),
+  /** Whether recently-read package ids may select an ad, not merely weight a payout. */
+  activity: z.boolean().default(false),
+});
+export type SharingSettings = z.infer<typeof SharingSettings>;
+
+/**
  * Client-reported environment signals.
  *
  * Phase 0 records these without acting on them; Phase 3 classifies with them.
@@ -82,6 +108,21 @@ export type DepEntry = z.infer<typeof DepEntry>;
  */
 export const SessionSignals = z.object({
   ci: z.boolean().optional(),
+  /** Absent from an older client, which has consented to nothing. */
+  sharing: SharingSettings.optional(),
+  /**
+   * Packages the agent has been reading lately, for SELECTION (opt-in, `sharing.activity`).
+   *
+   * The same ids the beacon already carries in `signals.retrieved`, arriving one step earlier
+   * so they can influence which ad is chosen rather than only what it pays. Package ids only,
+   * never a path — the client resolves paths locally and drops what does not resolve, because
+   * "the project is the private part" (see the client's `retrieval.ts`).
+   *
+   * Worth knowing what this is NOT: a batch is rotated locally for `BATCH_TTL_SECONDS`, so
+   * anything read after the request cannot reach the batch it already returned. This is
+   * recent intent, up to fifteen minutes stale, not live intent.
+   */
+  retrieved: z.array(z.string().max(200)).max(500).optional(),
   tty: z.boolean().optional(),
   display: z.boolean().optional(),
   docker: z.boolean().optional(),
@@ -326,8 +367,26 @@ export type BeaconResponse = z.infer<typeof BeaconResponse>;
 
 // ─────────────── Advertiser ───────────────
 
+/**
+ * What a campaign may be aimed at.
+ *
+ * The first two describe the PROJECT — they match the dependency set the developer already
+ * sends, so they need no further consent and are the only two that existed until targeting
+ * opened up. The last three describe the DEVELOPER, and each serves only to installs that
+ * opted into that dimension (`SharingSettings`):
+ *
+ *   - `region`    ISO-3166 alpha-2, matched against the install's stored country.
+ *   - `cidr`      an IP range the ADVERTISER supplies, matched against the connecting address
+ *                 at request time and never stored. Obrigado sells no IP-to-organisation
+ *                 mapping; an advertiser wanting account targeting brings their own ranges.
+ *   - `retrieval` a package the agent has been reading lately (§14 Phase 6's signal, reused
+ *                 for selection rather than only for payout weighting).
+ */
+export const TargetingRuleType = z.enum(["package", "ecosystem", "region", "cidr", "retrieval"]);
+export type TargetingRuleType = z.infer<typeof TargetingRuleType>;
+
 export const TargetingRule = z.object({
-  rule_type: z.enum(["package", "ecosystem"]),
+  rule_type: TargetingRuleType,
   rule_value: z.string().min(1).max(512),
 });
 export type TargetingRule = z.infer<typeof TargetingRule>;
@@ -421,6 +480,53 @@ export const CreateCreativeRequest = z.object({
 });
 export type CreateCreativeRequest = z.infer<typeof CreateCreativeRequest>;
 
+/**
+ * One ad, composed and paid for in a single step.
+ *
+ * The console's own flow is four requests — register, create a campaign, add a creative,
+ * fund it — and each of them is a decision standing between somebody and the thing they came
+ * to do. This is the same four collapsed into one, which is why it reads as a creative with
+ * a budget stapled on rather than as a campaign: the campaign is what the server derives,
+ * not what the advertiser fills in.
+ *
+ * Composed from the existing pieces rather than restating them. `AuthoredBody` is what makes
+ * the control-character rule and the emphasis caps apply identically here and in the
+ * console — a second definition of "valid copy" is a second thing to keep in step with the
+ * moderation policy, and the copy submitted through the shorter path is not held to a
+ * looser standard because the path is shorter.
+ *
+ * ## What is optional, and why that is the point
+ *
+ * Everything except the line, its destination, the budget and the consent. `bid_micros`
+ * defaults to a suggestion read off live inventory (see `@obrigado/internal/bidding`);
+ * `targeting` empty means every dependency set, the same deliberate choice it means in
+ * `CreateCampaignRequest`; `name` falls back to the click URL's host. An advertiser who
+ * wants to set all three still can, and everyone else pays without meeting them.
+ *
+ * `email` is optional and is only ever a prefill for Stripe Checkout. The address that
+ * actually creates the account is the one Stripe collected and signed for, never this one —
+ * a self-declared email in a form is a claim, and the account is bound to a payment.
+ */
+export const PublishDraftRequest = z.object({
+  body: AuthoredBody,
+  click_url: z.url(),
+  style: CreativeStyle.default("default"),
+  effect: CreativeEffect.default("none"),
+  budget_micros: WireMicros.positive(),
+  bid_micros: WireMicros.positive().optional(),
+  targeting: z.array(TargetingRule).max(1000).default([]),
+  name: z.string().trim().min(1).max(160).optional(),
+  email: z.email().optional(),
+  /**
+   * `literal(true)`, so an absent checkbox is a validation failure rather than a falsy
+   * default. Registration already takes this consent in prose (§14 Phase 5 requires the
+   * moderation policy be published AND binding); a funnel that skips the account must not
+   * also skip the agreement, or the shorter path becomes the one with no rules attached.
+   */
+  accepts_moderation_policy: z.literal(true),
+});
+export type PublishDraftRequest = z.infer<typeof PublishDraftRequest>;
+
 // ─────────────── Install-scoped reporting (§14 Phase 1) ───────────────
 
 /**
@@ -475,6 +581,108 @@ export const ShareResponse = z.object({
   revoked: z.boolean(),
 });
 export type ShareResponse = z.infer<typeof ShareResponse>;
+
+// ─────────────── POST /api/v1/link (email linking, feature-flagged) ───────────────
+
+/**
+ * An email a developer chooses to attach to this install.
+ *
+ * This is the ONE exception to "the developer side has no identity", and it is
+ * opt-in twice: verifying proves control of the inbox, and `consent_listing` is
+ * a separate explicit choice because being published is a different act than
+ * being verified. The server refuses the whole feature unless its flag is on,
+ * so a client talking to a server that has not launched it gets a clean
+ * `feature_disabled` error rather than a mystery 404.
+ */
+export const LinkEmail = z.email().max(254);
+
+/** Six digits, typed from an email. Entropy comes from the attempt cap and TTL
+ *  server-side, not from the code itself. */
+export const LinkCode = z.string().regex(/^\d{6}$/u);
+
+export const EmailLinkRequest = z.object({
+  email: LinkEmail,
+  /**
+   * Required, never defaulted. A default here would mean the CLI decided
+   * whether a person gets published; the person decides.
+   */
+  consent_listing: z.boolean(),
+  /**
+   * Individuals only (freemail domains). Control characters rejected for the
+   * same reason as creative copy: this string is published on a public page.
+   */
+  display_name: z
+    .string()
+    .min(1)
+    .max(80)
+    .refine((name) => !/\p{Cc}/u.test(name), {
+      message: "display name must not contain control characters",
+    })
+    .optional(),
+  /**
+   * Individuals only. http(s) enforced because this becomes an `href` on a
+   * public page — `z.url()` alone would accept `javascript:`.
+   */
+  url: z
+    .url()
+    .max(200)
+    .refine((value) => value.startsWith("https://") || value.startsWith("http://"), {
+      message: "url must be http(s)",
+    })
+    .optional(),
+});
+export type EmailLinkRequest = z.infer<typeof EmailLinkRequest>;
+
+export const EmailLinkCodeResponse = z.object({
+  status: z.literal("code_sent"),
+  entity_kind: z.enum(["company", "individual"]),
+  /**
+   * The exact sentence that will be published if the code is confirmed —
+   * authored server-side so the CLI shows the truth rather than its own
+   * paraphrase of it.
+   */
+  publishes: z.string().max(400),
+  expires_in_s: z.int().positive(),
+});
+export type EmailLinkCodeResponse = z.infer<typeof EmailLinkCodeResponse>;
+
+export const EmailLinkConfirmRequest = z.object({
+  email: LinkEmail,
+  code: LinkCode,
+});
+export type EmailLinkConfirmRequest = z.infer<typeof EmailLinkConfirmRequest>;
+
+export const LinkedEmailWire = z.object({
+  email: z.string(),
+  entity_kind: z.enum(["company", "individual"]),
+  verified: z.boolean(),
+  /** True when this email's entry is publicly visible right now. */
+  listed: z.boolean(),
+  /** Individuals are reviewed before publication, like every ad creative. */
+  pending_review: z.boolean(),
+  /** Whether this install's impressions have qualified the entry this period. */
+  qualified_this_period: z.boolean(),
+});
+export type LinkedEmailWire = z.infer<typeof LinkedEmailWire>;
+
+export const EmailLinkConfirmResponse = z.object({
+  linked: z.boolean(),
+  entry: LinkedEmailWire.optional(),
+});
+export type EmailLinkConfirmResponse = z.infer<typeof EmailLinkConfirmResponse>;
+
+export const EmailLinkStatusResponse = z.object({
+  /** `YYYY-MM-01`, the period qualification is being reported against. */
+  period: z.string(),
+  emails: z.array(LinkedEmailWire),
+});
+export type EmailLinkStatusResponse = z.infer<typeof EmailLinkStatusResponse>;
+
+export const EmailUnlinkRequest = z.object({ email: LinkEmail });
+export type EmailUnlinkRequest = z.infer<typeof EmailUnlinkRequest>;
+
+export const EmailUnlinkResponse = z.object({ unlinked: z.boolean() });
+export type EmailUnlinkResponse = z.infer<typeof EmailUnlinkResponse>;
 
 // ─────────────── Errors ───────────────
 

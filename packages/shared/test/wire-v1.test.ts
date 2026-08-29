@@ -26,7 +26,13 @@
  */
 import { describe, expect, test } from "bun:test";
 
-import { BeaconRequest, MAX_DURATION_S, SessionRequest } from "../src/contract.ts";
+import {
+  BeaconRequest,
+  EmailLinkConfirmRequest,
+  EmailLinkRequest,
+  MAX_DURATION_S,
+  SessionRequest,
+} from "../src/contract.ts";
 
 /**
  * The oldest session request shape that has ever shipped.
@@ -173,5 +179,36 @@ describe("every install can be identified", () => {
 
     expect(code).not.toMatch(/agent:\s*"claude-code"/u);
     expect(code).toMatch(/agent:\s*context\.agent/u);
+  });
+});
+
+describe("v1 email-link requests keep parsing", () => {
+  /** The minimal link request the first `obrigado link` ever sends: no name, no
+   *  url — a company-domain address needs neither. */
+  const V1_LINK_MINIMAL = {
+    email: "dev@acme.com",
+    consent_listing: true,
+  };
+
+  /** A full individual request from a current client. */
+  const V1_LINK_FULL = {
+    email: "ada@gmail.com",
+    consent_listing: true,
+    display_name: "Ada Lovelace",
+    url: "https://ada.dev",
+  };
+
+  const V1_LINK_CONFIRM = {
+    email: "dev@acme.com",
+    code: "123456",
+  };
+
+  test("minimal and full link requests parse", () => {
+    expect(EmailLinkRequest.safeParse(V1_LINK_MINIMAL).error?.message ?? "ok").toBe("ok");
+    expect(EmailLinkRequest.safeParse(V1_LINK_FULL).error?.message ?? "ok").toBe("ok");
+  });
+
+  test("the confirm shape parses", () => {
+    expect(EmailLinkConfirmRequest.safeParse(V1_LINK_CONFIRM).error?.message ?? "ok").toBe("ok");
   });
 });
