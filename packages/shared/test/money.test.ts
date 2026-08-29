@@ -6,6 +6,8 @@ import {
   formatUsd,
   MoneyError,
   micros,
+  microsFromDecimalString,
+  microsFromUsd,
   microsFromWire,
   microsToWire,
   subMicros,
@@ -113,5 +115,47 @@ describe("formatUsd", () => {
       }),
       { numRuns: 2000 },
     );
+  });
+});
+
+/**
+ * Human dollars, which is a different job from decoding a database numeric.
+ *
+ * The two are one character apart at a call site and a factor of a million apart in result, so
+ * the test that matters most is the one asserting they disagree.
+ */
+describe("microsFromUsd", () => {
+  test("dollars and cents become micros", () => {
+    expect(microsFromUsd("250")).toBe(micros(250_000_000n));
+    expect(microsFromUsd("3.40")).toBe(micros(3_400_000n));
+    expect(microsFromUsd("0.01")).toBe(micros(10_000n));
+  });
+
+  test("it reads a full micro of precision", () => {
+    expect(microsFromUsd("1.000001")).toBe(micros(1_000_001n));
+  });
+
+  test("it refuses precision finer than a micro rather than rounding it away", () => {
+    // The same refusal `toCents` makes at the Stripe end: an amount that cannot be represented
+    // must not be silently changed into one that can.
+    expect(() => microsFromUsd("1.0000001")).toThrow();
+  });
+
+  test("it refuses anything that is not a plain positive amount", () => {
+    expect(() => microsFromUsd("two hundred")).toThrow();
+    expect(() => microsFromUsd("-5")).toThrow();
+    expect(() => microsFromUsd("$250")).toThrow();
+    expect(() => microsFromUsd("1,000")).toThrow();
+    expect(() => microsFromUsd("")).toThrow();
+    // An absent field, which is what a browser sends for a control that was never filled in.
+    expect(() => microsFromUsd(null)).toThrow();
+  });
+
+  test("it is NOT microsFromDecimalString, and the difference is a million", () => {
+    // `microsFromDecimalString` decodes a Postgres numeric whose digits are already micros;
+    // this decodes what somebody typed. Reading a form field with the wrong one turns $3.40
+    // into three micros, silently, on a budget.
+    expect(microsFromUsd("3.40")).toBe(micros(3_400_000n));
+    expect(microsFromDecimalString("3.40")).toBe(micros(3n));
   });
 });
