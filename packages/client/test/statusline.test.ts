@@ -258,3 +258,44 @@ describe("recognising our own entry", () => {
     expect(isOurStatusLine({})).toBe(false);
   });
 });
+
+/*
+ * Recognition decides what gets CHAINED, which is why its boundaries matter more than they look.
+ * `chainableCommand` refuses to chain a command it recognises as ours; anything it fails to
+ * recognise becomes the thing we run before our own line. Miss one form, and the status line
+ * invokes us from inside our own chain — which is how a real install came to print its
+ * developer's line twice.
+ */
+describe("recognising our command wherever it is nested", () => {
+  const ours = [
+    ["plain, as the installer writes it", "obrigado statusline --agent claude-code"],
+    [
+      "a source checkout, followed by a flag",
+      "/bin/bun /x/client/packages/client/src/cli.ts statusline --agent claude-code",
+    ],
+    [
+      "quoted as a launcher's inner command, closing on the quote",
+      "RUNCOMMAND_BASE='/bin/bun /x/packages/client/src/cli.ts statusline' runcommand statusline",
+    ],
+    ["quoted, installed form", "WRAPPED='obrigado statusline' other statusline"],
+    ["followed by a semicolon", "obrigado statusline; something-else"],
+  ] as const;
+
+  for (const [name, command] of ours) {
+    test(`recognises ${name}`, () => {
+      expect(isOurStatusLine({ command })).toBe(true);
+    });
+  }
+
+  const theirs = [
+    ["another tool's own status line", "runcommand statusline"],
+    ["a longer word that merely starts the same", "mytool statuslines"],
+    ["a hyphenated sibling command", "obrigado statusline-preview"],
+  ] as const;
+
+  for (const [name, command] of theirs) {
+    test(`leaves ${name} alone`, () => {
+      expect(isOurStatusLine({ command })).toBe(false);
+    });
+  }
+});

@@ -72,8 +72,21 @@ export function isOurStatusLine(value?: unknown): boolean {
   if (typeof value !== "object" || value === null) return false;
   const command = (value as StatusLineEntry).command;
   if (typeof command !== "string") return false;
-  const installedCli = /(?:^|[/\s])obrigado\s+statusline(?:\s|$)/iu.test(command);
-  const sourceCli = /[/\\]packages[/\\]client[/\\]src[/\\]cli\.ts\s+statusline(?:\s|$)/iu.test(
+  /*
+   * The boundaries are "not a word character", not "whitespace or end of string".
+   *
+   * A real install got this wrong and paid for it. Our command was nested inside a launcher as
+   * a quoted environment value — `RUNCOMMAND_BASE='… /src/cli.ts statusline' runcommand …` —
+   * so what followed `statusline` was an apostrophe, and a boundary of `(?:\s|$)` did not match
+   * it. `chainableCommand` therefore judged our own command to be the developer's, recorded it
+   * as the thing to chain, and built a status line that invoked us from inside our own chain.
+   *
+   * A quote, a semicolon and a closing paren are all just as much the end of the token as a
+   * space is. What must still be rejected is a longer word, so `statusline-extra` and
+   * `statuslines` do not count as ours.
+   */
+  const installedCli = /(?<![\w-])obrigado\s+statusline(?![\w-])/iu.test(command);
+  const sourceCli = /[/\\]packages[/\\]client[/\\]src[/\\]cli\.ts\s+statusline(?![\w-])/iu.test(
     command,
   );
   return installedCli || sourceCli;

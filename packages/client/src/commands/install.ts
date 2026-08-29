@@ -1,8 +1,6 @@
-import { existsSync } from "node:fs";
-import { dirname } from "node:path";
-
 import {
   claudeIntegration,
+  piIntegration,
   CLAUDE_SETTINGS_PATH,
   codexIntegration,
   opencodeIntegration,
@@ -11,25 +9,28 @@ import {
   readConfig,
   writeConfig,
 } from "../config.ts";
-import type { ClaudeIntegrationConfig, ClientConfig, ClientIntegrations } from "../config.ts";
+import type { ClientConfig, ClientIntegrations, SponsoredPosition } from "../config.ts";
 import {
   CODEX_TRACKING_ISSUE,
   CodexUnsupportedError,
-  codexDetected,
   uninstallCodexStatusLine,
 } from "../codex-statusline.ts";
 import {
   installOpenCodePlugin,
   OPENCODE_PLUGIN_SPEC,
   OPENCODE_TUI_CONFIG_PATH,
-  opencodeDetected,
   uninstallOpenCodePlugin,
 } from "../opencode-plugin.ts";
 import { INSTALLABLE_AGENTS, type InstallableAgentId } from "@obrigado/shared/agents";
 
 import { installStatusLine, statusLineCommand, uninstallStatusLine } from "../statusline.ts";
 import type { InstallOutcome } from "../statusline.ts";
-import { apiOrigin, chainableCommand } from "./shared.ts";
+import { printTargetingOffer } from "./privacy.ts";
+import type { AdapterResult, Remover } from "./adapters.ts";
+import { installPiHosts, removePiHost } from "./install-pi.ts";
+import { positionFromArgv, resolveClaudeState } from "./claude-state.ts";
+import { detectInstalledAgents } from "./detect.ts";
+import { apiOrigin } from "./shared.ts";
 
 /**
  * Derived, not listed: an agent is installable here exactly when the shared table says this
@@ -58,23 +59,6 @@ export function requestedAgent(argv: readonly string[]): InstallAgent | null {
   return value;
 }
 
-/**
- * Hosts detected on PATH or by their documented user configuration home.
- *
- * Keyed so the compiler checks the set: an agent the shared table says this client installs,
- * with no detector here, would otherwise simply never be found by a bare `obrigado install`.
- * Order follows SUPPORTED_INSTALL_AGENTS, which is the table's own order.
- */
-const DETECTORS: Record<InstallAgent, () => boolean> = {
-  "claude-code": () => Bun.which("claude") !== null || existsSync(dirname(CLAUDE_SETTINGS_PATH)),
-  codex: codexDetected,
-  opencode: opencodeDetected,
-};
-
-function detectInstalledAgents(): InstallAgent[] {
-  return SUPPORTED_INSTALL_AGENTS.filter((agent) => DETECTORS[agent]());
-}
-
 function reportRefusal(existing: unknown): void {
   console.error(`Claude Code: ${CLAUDE_SETTINGS_PATH} already defines a statusLine:`);
   console.error(`  ${JSON.stringify(existing)}\n`);
@@ -100,21 +84,6 @@ function reportClaudeInstalled(
   if (outcome.backup !== null) console.log(`  Backup: ${outcome.backup}`);
 }
 
-function resolveClaudeState(
-  existing: ClaudeIntegrationConfig | null,
-  previous: unknown,
-  chain: boolean,
-): { previousToRecord: unknown; chainedCommand: string | undefined } {
-  const displaced = chainableCommand(previous);
-  const recorded = chainableCommand(existing?.previous_status_line);
-  return {
-    previousToRecord: displaced === undefined ? (existing?.previous_status_line ?? null) : previous,
-    chainedCommand: chain
-      ? (displaced ?? recorded ?? existing?.chained_command)
-      : existing?.chained_command,
-  };
-}
-
 function targetsForInstall(argv: readonly string[]): InstallAgent[] {
   const explicit = requestedAgent(argv);
   if (explicit !== null) return [explicit];
@@ -127,16 +96,12 @@ function targetsForInstall(argv: readonly string[]): InstallAgent[] {
   return detected;
 }
 
-interface AdapterResult {
-  readonly changed: boolean;
-  readonly failed: boolean;
-}
-
 async function installClaudeAdapter(
   existing: ClientConfig | null,
   integrations: ClientIntegrations,
   chain: boolean,
   replace: boolean,
+  position: SponsoredPosition,
 ): Promise<AdapterResult> {
   try {
     const { outcome, previous } = await installStatusLine(CLAUDE_SETTINGS_PATH, { replace });
@@ -152,6 +117,7 @@ async function installClaudeAdapter(
       installed_at: current?.installed_at ?? new Date().toISOString(),
       previous_status_line: previousToRecord,
       chained_command: chainedCommand,
+      sponsored_position: position,
     };
     if (outcome.status === "already-installed") {
       console.log("Claude Code already installed.");
@@ -221,13 +187,24 @@ export async function install(argv: readonly string[] = []): Promise<number> {
   if ((chain || replace) && !targets.includes("claude-code")) {
     throw new Error("--chain and --replace apply only to Claude Code's status line");
   }
+  if ((argv.includes("--above") || argv.includes("--below")) && !targets.includes("claude-code")) {
+    throw new Error("--above and --below apply only to Claude Code's status line");
+  }
 
   const existing = await readConfig();
   const integrations: ClientIntegrations = { ...existing?.integrations };
   const results: AdapterResult[] = [];
 
   if (targets.includes("claude-code")) {
-    results.push(await installClaudeAdapter(existing, integrations, chain, replace));
+    results.push(
+      await installClaudeAdapter(
+        existing,
+        integrations,
+        chain,
+        replace,
+        positionFromArgv(argv, claudeIntegration(existing)),
+      ),
+    );
   }
 
   if (targets.includes("codex")) {
@@ -238,6 +215,8 @@ export async function install(argv: readonly string[] = []): Promise<number> {
     results.push(await installOpenCodeAdapter(existing, integrations));
   }
 
+  results.push(...(await installPiHosts(targets, requestedAgent(argv), existing, integrations)));
+
   if (results.some((result) => result.changed)) {
     const next: ClientConfig = {
       ...existing,
@@ -246,10 +225,14 @@ export async function install(argv: readonly string[] = []): Promise<number> {
       integrations,
       installed_at: existing?.installed_at ?? new Date().toISOString(),
       session_summary: existing?.session_summary ?? true,
+      // Never defaulted on, and never silently carried forward as anything but what the
+      // developer last chose. An install that has said nothing has consented to nothing.
+      ...(existing?.sharing === undefined ? {} : { sharing: existing.sharing }),
     };
     await writeConfig(next);
     console.log(`\nShared install key stored in ${OBRIGADO_DIR}/config.json (mode 0600).`);
     console.log("70% of gross revenue goes to the packages your project depends on.");
+    printTargetingOffer(next.sharing);
   }
   return results.some((result) => result.failed) ? 1 : 0;
 }
@@ -266,6 +249,8 @@ const INSTALLED_CHECK: Record<InstallAgent, (config: ClientConfig) => boolean> =
   "claude-code": (config) => claudeIntegration(config)?.installed === true,
   codex: (config) => codexIntegration(config)?.installed === true,
   opencode: (config) => opencodeIntegration(config)?.installed === true,
+  pi: (config) => piIntegration(config, "pi")?.installed === true,
+  "oh-my-pi": (config) => piIntegration(config, "oh-my-pi")?.installed === true,
 };
 
 function installedTargets(config: ClientConfig | null): InstallAgent[] {
@@ -280,7 +265,6 @@ function installedTargets(config: ClientConfig | null): InstallAgent[] {
  * it found nothing of ours — Claude Code's "foreign" case deliberately does not touch the
  * record, because a statusline belonging to another tool is not ours to have removed.
  */
-type Remover = (config: ClientConfig | null, integrations: ClientIntegrations) => Promise<void>;
 
 async function removeClaudeCode(
   config: ClientConfig | null,
@@ -332,6 +316,8 @@ const REMOVERS: Record<InstallAgent, Remover> = {
   "claude-code": removeClaudeCode,
   codex: removeCodex,
   opencode: removeOpenCode,
+  pi: removePiHost("pi"),
+  "oh-my-pi": removePiHost("oh-my-pi"),
 };
 
 /**

@@ -115,6 +115,24 @@ export async function recordRead(path: string): Promise<void> {
 }
 
 /**
+ * Read everything queued WITHOUT clearing it.
+ *
+ * The session request needs the same ids the beacon reports, for a different purpose: the
+ * beacon weights a payout with them, the session lets them select an ad. If the session
+ * drained the queue the beacon would find it empty and §14 Phase 6's retrieval multiplier
+ * would quietly stop being applied — a revenue bug with no error attached to it.
+ *
+ * So exactly one caller consumes, and it is still the beacon. This one only looks.
+ */
+export async function peekRetrieval(): Promise<string[]> {
+  try {
+    return parseQueue(await readFile(RETRIEVAL_PATH, "utf8"));
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Take everything queued, and clear it.
  *
  * Read-then-truncate rather than read-then-delete: the status line calls this on every render,
@@ -135,6 +153,17 @@ export async function drainRetrieval(): Promise<string[]> {
     // (impression_id, event_time, package_id). Reporting twice is better than losing them.
   }
 
+  return parseQueue(text);
+}
+
+/**
+ * The queue file's contents as package ids.
+ *
+ * Shared by `peekRetrieval` and `drainRetrieval` so the two cannot disagree about what a
+ * queued line means — one of them selects an ad and the other pays a maintainer, and a
+ * divergence would be a silent mismatch between what was targeted and what was credited.
+ */
+function parseQueue(text: string): string[] {
   const seen = new Set<string>();
   for (const line of text.split("\n")) {
     if (line.length === 0) continue;
@@ -146,6 +175,5 @@ export async function drainRetrieval(): Promise<string[]> {
       // A truncated line from a concurrent append. Skipped.
     }
   }
-
   return [...seen].toSorted();
 }
