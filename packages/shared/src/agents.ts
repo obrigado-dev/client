@@ -124,6 +124,35 @@ export const AGENTS = [
     surface: null,
     inherits: null,
   },
+  {
+    id: "pi",
+    label: "Pi",
+    installs: "cli",
+    kind: "terminal",
+    // Verified against upstream's own `docs/extensions.md`, which documents the call and calls
+    // the target "Footer status". It is a KEYED entry the host composes into a line it owns,
+    // not a takeover: `setFooter` exists too and replaces the whole footer — model, thinking
+    // indicator, clock and all — which is the spinner-verb mistake in another costume.
+    surface:
+      "A keyed entry on the footer status line, added with the documented `ctx.ui.setStatus`.",
+    inherits: null,
+  },
+  {
+    id: "oh-my-pi",
+    label: "oh-my-pi",
+    installs: "cli",
+    kind: "terminal",
+    // A fork of Pi, and it inherits the surface rather than owning one: `ctx.ui.setStatus` is
+    // upstream's API, and oh-my-pi routes it to `statusLine.setHookStatus`. One extension runs
+    // on both unmodified.
+    //
+    // What does NOT carry across is where the extension is installed. oh-my-pi rebranded the
+    // namespace to `.omp/extensions` and `~/.omp/agent/extensions`, and states that `.pi`
+    // "is not a native root here" — so the installer needs a second target even though the
+    // plugin is one codebase. `--profile <name>` moves the user path again.
+    surface: null,
+    inherits: "pi",
+  },
 ] as const satisfies readonly AgentFacts[];
 
 /**
@@ -194,15 +223,34 @@ export function isKnownRenderer(reported: string): boolean {
 }
 
 /**
+ * Every host that renders a given surface, in the order they should be named.
+ *
+ * INHERITORS FIRST, then the owner: "Cursor / VS Code". The surface belongs to VS Code and the
+ * fork inherits it, so owner-first is the truer statement of the relationship — but the label
+ * is read by developers choosing their editor, not by anyone auditing the inheritance, and for
+ * that audience the fork is the more recognisable name. Ordering by mindshare rather than by
+ * lineage is a product decision, and it is taken here so that the label and the row of vendor
+ * marks beside it cannot drift apart.
+ *
+ * Composed from the facts, so adding another fork is a row rather than an edit to a label and
+ * an icon list somewhere else.
+ */
+export function surfaceAgents(id: AgentId): readonly AgentId[] {
+  const owner = AGENTS.find((agent) => agent.id === id);
+  if (owner === undefined) return [id];
+
+  const inheritors = AGENTS.filter((agent) => agent.inherits === id).map((agent) => agent.id);
+  return [...inheritors, owner.id];
+}
+
+/**
  * What to call a surface that more than one host renders.
  *
- * "VS Code / Cursor" rather than two tabs showing the same extension. Composed from the facts
- * so that adding another fork is a row, not an edit to a label somewhere else.
+ * "Cursor / VS Code" rather than two tabs showing the same extension. See `surfaceAgents` for
+ * why the fork is named first.
  */
 export function surfaceLabel(id: AgentId): string {
-  const owner = AGENTS.find((agent) => agent.id === id);
-  if (owner === undefined) return id;
-
-  const inheritors = AGENTS.filter((agent) => agent.inherits === id).map((agent) => agent.label);
-  return [owner.label, ...inheritors].join(" / ");
+  return surfaceAgents(id)
+    .map((agentId) => AGENTS.find((agent) => agent.id === agentId)?.label ?? agentId)
+    .join(" / ");
 }
