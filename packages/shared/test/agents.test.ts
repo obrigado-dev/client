@@ -16,6 +16,7 @@ import {
   INSTALLABLE_AGENTS,
   isAgentId,
   SURFACED_AGENTS,
+  surfaceAgents,
   surfaceLabel,
 } from "../src/agents.ts";
 
@@ -32,6 +33,8 @@ describe("the table", () => {
       "vscode",
       "cursor",
       "gemini-cli",
+      "pi",
+      "oh-my-pi",
     ]);
   });
 
@@ -74,11 +77,40 @@ describe("the derived views", () => {
       "claude-code",
       "codex",
       "opencode",
+      "pi",
+      "oh-my-pi",
     ]);
   });
 
   test("surfaced is what the landing page can honestly demo", () => {
-    expect(SURFACED_AGENTS.map((agent) => agent.id)).toEqual(["claude-code", "opencode", "vscode"]);
+    expect(SURFACED_AGENTS.map((agent) => agent.id)).toEqual([
+      "claude-code",
+      "opencode",
+      "vscode",
+      "pi",
+    ]);
+  });
+
+  /*
+   * oh-my-pi installs but is not surfaced, and that pair is the point of `inherits`.
+   *
+   * `surface` describes a HOST's UI, and oh-my-pi's is Pi's — one sentence, one demo panel, one
+   * tab reading "oh-my-pi / Pi". `installs` describes THIS CLIENT's reach, and the two hosts
+   * keep their extensions in different directories, so each needs its own install target. A
+   * table that collapsed them would either demo the same footer twice or write only one file.
+   */
+  test("oh-my-pi installs on its own but surfaces through Pi", () => {
+    const installable = INSTALLABLE_AGENTS.map((agent) => agent.id) as readonly string[];
+    const surfaced = SURFACED_AGENTS.map((agent) => agent.id) as readonly string[];
+
+    expect(installable).toContain("oh-my-pi");
+    expect(surfaced).not.toContain("oh-my-pi");
+    expect(surfaced).toContain("pi");
+  });
+
+  test("oh-my-pi inherits Pi's surface rather than owning one", () => {
+    expect(surfaceLabel("pi")).toBe("oh-my-pi / Pi");
+    expect(surfaceAgents("pi")).toEqual(["oh-my-pi", "pi"]);
   });
 
   /* A19: none of Codex's reachable surfaces is persistent and host-owned. */
@@ -102,7 +134,7 @@ describe("the derived views", () => {
 
 describe("surfaceLabel", () => {
   test("composes a shared surface from the hosts that share it", () => {
-    expect(surfaceLabel("vscode")).toBe("VS Code / Cursor");
+    expect(surfaceLabel("vscode")).toBe("Cursor / VS Code");
   });
 
   test("leaves a host that owns its surface alone", () => {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { runChained } from "../src/chain.ts";
+import { CHAIN_MARKER, isChainedRender, runChained } from "../src/chain.ts";
 
 const PAYLOAD = JSON.stringify({
   session_id: "abc",
@@ -60,5 +60,35 @@ describe("runChained", () => {
 
     expect(result).toBeNull();
     expect(elapsedMs).toBeLessThan(4_000);
+  });
+});
+
+/*
+ * The string guard in `runChained` catches a command that NAMES us. These are the routes it
+ * cannot see, and the reason the marker exists: a checkout in a directory not called
+ * "obrigado", and a launcher that reads the program it wraps from its own config rather than
+ * from the command line. Both reached us in a real install and duplicated the line.
+ */
+describe("re-entrancy, for a chain that comes back around", () => {
+  test("marks the environment of the command it runs", async () => {
+    const output = await runChained(`printf '%s' "$${CHAIN_MARKER}"`, "{}");
+
+    expect(output).toBe("1");
+  });
+
+  test("recognises a nested render", () => {
+    expect(isChainedRender({ [CHAIN_MARKER]: "1" })).toBe(true);
+    expect(isChainedRender({})).toBe(false);
+    expect(isChainedRender({ [CHAIN_MARKER]: "0" })).toBe(false);
+  });
+
+  /* The whole point: a command naming a path that never says "obrigado" still terminates. */
+  test("a chained command under a differently named path still gets the marker", async () => {
+    const output = await runChained(
+      `printf '%s' "$${CHAIN_MARKER}" # /Users/someone/Code/obliged-dev/packages/client/src/cli.ts`,
+      "{}",
+    );
+
+    expect(output).toBe("1");
   });
 });

@@ -8,8 +8,24 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 
-import { MAX_DURATION_S, SessionResponse, ShareResponse, StatsResponse } from "@obrigado/shared";
-import type { DepEntry, SessionSignals, TimingSignals } from "@obrigado/shared";
+import {
+  ApiError,
+  EmailLinkCodeResponse,
+  EmailLinkConfirmResponse,
+  EmailLinkStatusResponse,
+  EmailUnlinkResponse,
+  MAX_DURATION_S,
+  SessionResponse,
+  ShareResponse,
+  StatsResponse,
+} from "@obrigado/shared";
+import type {
+  DepEntry,
+  EmailLinkRequest,
+  SessionSignals,
+  SharingSettings,
+  TimingSignals,
+} from "@obrigado/shared";
 
 import { CLIENT_VERSION } from "./version.ts";
 
@@ -103,6 +119,87 @@ export async function changeShare(
 }
 
 /**
+ * Email linking (`obrigado link`), the wall's identity path.
+ *
+ * These deviate from the `null`-on-failure rule the rest of this file follows,
+ * deliberately: a status line that cannot be fetched should render nothing, but
+ * a person mid-verification needs to know WHICH thing went wrong — an expired
+ * code, an attempt cap, a disposable domain — because each has a different next
+ * step. So failures decode the server's `ApiError` body into a short error code
+ * the command maps to a sentence.
+ */
+export type LinkResult<T> =
+  | { readonly ok: true; readonly data: T }
+  | { readonly ok: false; readonly error: string };
+
+async function postLink<T>(
+  options: StatsOptions,
+  path: string,
+  body: unknown,
+  parse: (json: unknown) => T | null,
+): Promise<LinkResult<T>> {
+  try {
+    const response = await fetch(`${options.apiOrigin}/api/v1/link/${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Obrigado-Key": options.installKey },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(STATS_TIMEOUT_MS),
+    });
+
+    const json: unknown = await response.json().catch(() => null);
+    if (!response.ok) {
+      const parsed = ApiError.safeParse(json);
+      return { ok: false, error: parsed.success ? parsed.data.error : `http_${response.status}` };
+    }
+
+    const data = parse(json);
+    return data === null ? { ok: false, error: "bad_response" } : { ok: true, data };
+  } catch {
+    return { ok: false, error: "unreachable" };
+  }
+}
+
+function parsedOrNull<T>(result: { success: boolean; data?: T }): T | null {
+  return result.success && result.data !== undefined ? result.data : null;
+}
+
+export function requestEmailLink(
+  options: StatsOptions,
+  request: EmailLinkRequest,
+): Promise<LinkResult<EmailLinkCodeResponse>> {
+  return postLink(options, "request", request, (json) =>
+    parsedOrNull(EmailLinkCodeResponse.safeParse(json)),
+  );
+}
+
+export function confirmEmailLink(
+  options: StatsOptions,
+  email: string,
+  code: string,
+): Promise<LinkResult<EmailLinkConfirmResponse>> {
+  return postLink(options, "confirm", { email, code }, (json) =>
+    parsedOrNull(EmailLinkConfirmResponse.safeParse(json)),
+  );
+}
+
+export function emailLinkStatus(
+  options: StatsOptions,
+): Promise<LinkResult<EmailLinkStatusResponse>> {
+  return postLink(options, "status", {}, (json) =>
+    parsedOrNull(EmailLinkStatusResponse.safeParse(json)),
+  );
+}
+
+export function unlinkEmail(
+  options: StatsOptions,
+  email: string,
+): Promise<LinkResult<EmailUnlinkResponse>> {
+  return postLink(options, "unlink", { email }, (json) =>
+    parsedOrNull(EmailUnlinkResponse.safeParse(json)),
+  );
+}
+
+/**
  * CI environment variables, from `ci-info`'s list (§14 Phase 3).
  *
  * `CI` alone is not enough: GitHub Actions sets it, but several systems set only their
@@ -183,6 +280,18 @@ export interface SignalContext {
   readonly agent: string;
   /** The HOST's own version, if its payload reported one. */
   readonly agentVersion?: string | undefined;
+  /** What the developer agreed to be targeted on. Absent means none of it. */
+  readonly sharing?: SharingSettings | undefined;
+  /**
+   * Package ids the agent has been reading lately, for SELECTION.
+   *
+   * Sent only when `sharing.activity` is on. The same ids the beacon already carries for
+   * payout weighting — resolved to packages locally and with anything unresolvable dropped,
+   * because "the project is the private part" (see `retrieval.ts`). Passed in rather than read
+   * here so the caller decides, and so a config that says no produces a request with no field
+   * rather than a field the server is trusted to ignore.
+   */
+  readonly retrieved?: readonly string[] | undefined;
 }
 
 export function collectSignals(context: SignalContext): SessionSignals {
@@ -199,6 +308,12 @@ export function collectSignals(context: SignalContext): SessionSignals {
     ...(context.agentVersion === undefined ? {} : { agent_version: context.agentVersion }),
     client_version: CLIENT_VERSION,
     os: process.platform,
+    ...(context.sharing === undefined ? {} : { sharing: context.sharing }),
+    // Omitted entirely rather than sent empty when activity is not shared: a request that
+    // carries no field cannot be misread later as a developer who read nothing.
+    ...(context.sharing?.activity === true && context.retrieved !== undefined
+      ? { retrieved: [...context.retrieved] }
+      : {}),
     ...containerSignals(),
   };
 

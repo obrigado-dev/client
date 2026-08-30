@@ -20,6 +20,33 @@
 const CHAIN_TIMEOUT_MS = 1_500;
 
 /**
+ * Set in the chained command's environment, and checked on the way in.
+ *
+ * The string guard below is necessary and not sufficient. It can only see what is written in
+ * the command, and a wrapper is free to invoke us from somewhere it cannot: a launcher that
+ * reads the program it wraps from its OWN config file names us nowhere in the string. Nor does
+ * the string have to say "obrigado" — a checkout in a directory called anything else, or a
+ * shell alias, defeats it. This variable does not care: it rides the process tree, so it is
+ * true exactly when we are already running inside our own chain, whatever the route.
+ *
+ * Two failures are prevented, and the second is the expensive one. Without it a mutual chain
+ * forks once per render forever; and each nested render would rotate a creative and report an
+ * impression, billing an advertiser several times for one line the developer saw once.
+ */
+export const CHAIN_MARKER = "OBRIGADO_CHAINING";
+
+/**
+ * Whether this process is a nested render, spawned by our own chain.
+ *
+ * The correct behaviour when true is to print nothing at all rather than to print an unchained
+ * line: the outer process is already going to print ours, and a second copy is both a duplicate
+ * row and a second impression.
+ */
+export function isChainedRender(env: Record<string, string | undefined> = process.env): boolean {
+  return env[CHAIN_MARKER] === "1";
+}
+
+/**
  * Run the chained command, feeding it the same stdin payload Claude Code sent.
  *
  * Returns its stdout, or null on any failure. Failure is silent by design: a
@@ -41,8 +68,9 @@ export async function runChained(command: string, stdinPayload: string): Promise
       // open on Linux, so the read still hangs even after the shell exits.
       detached: true,
       // Inherit the environment so their command sees the same terminal it
-      // would have seen if Claude Code had invoked it directly.
-      env: process.env,
+      // would have seen if Claude Code had invoked it directly — plus the marker,
+      // so a route back to us through their command terminates.
+      env: { ...process.env, [CHAIN_MARKER]: "1" },
     });
 
     let timedOut = false;

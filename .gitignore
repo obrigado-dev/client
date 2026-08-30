@@ -7,3 +7,6 @@ dist/
 .env.*
 !.env.example
 .obrigado/
+
+# `bun build --compile` leaves these behind when a build is interrupted. 61MB each.
+.*.bun-build

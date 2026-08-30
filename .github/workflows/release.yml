@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and publish (e.g. v0.1.0)"
+        required: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  binaries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - run: bun install --frozen-lockfile
+
+      # The same gate CI runs. A tag is not a reason to publish something that does not pass —
+      # and this is the artifact people `curl | sh`, so it is the last place to find out.
+      - run: bun run check
+
+      # One runner builds every platform: `bun build --compile` cross-compiles, so there is no
+      # matrix and no chance of five jobs disagreeing about which commit they built.
+      - run: bun run build:binaries
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          gh release create "$TAG" \
+            --repo "${{ github.repository }}" \
+            --title "$TAG" \
+            --generate-notes \
+            --verify-tag \
+            dist/binaries/obrigado-* \
+            dist/binaries/SHA256SUMS
+
+      # Proof the published artifact is the one that was built. `install.sh` verifies the same
+      # file against the same list; this checks the list actually describes what went up.
+      - name: Verify what was published
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          mkdir -p verify && cd verify
+          gh release download "$TAG" --repo "${{ github.repository }}" --pattern 'obrigado-*' --pattern 'SHA256SUMS'
+          sha256sum -c SHA256SUMS

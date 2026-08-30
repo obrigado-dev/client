@@ -10,6 +10,8 @@
  */
 import { config, refresh } from "./commands/config.ts";
 import { install, uninstall } from "./commands/install.ts";
+import { link, unlink } from "./commands/link.ts";
+import { privacy } from "./commands/privacy.ts";
 import { printRetrievalHook, projects, read, share, summary } from "./commands/projects.ts";
 import { doctor, status } from "./commands/status.ts";
 import { statusline } from "./commands/statusline.ts";
@@ -19,13 +21,19 @@ const USAGE = `obrigado — sponsored status lines that fund your dependencies
   obrigado install             configure every detected supported agent
   obrigado install --agent claude-code|opencode|codex
   obrigado install --chain     keep your existing statusline, add ours beneath
+  obrigado install --above     put ours above your line instead (with --chain)
   obrigado install --replace   take over an existing statusline (reversible)
   obrigado uninstall [--agent claude-code|opencode|codex]
   obrigado status              this month, all time, and top funded packages
   obrigado projects            every package this install has funded, ranked
   obrigado share               a public page for what this install funds
   obrigado share create        issue a link; share revoke kills it
+  obrigado link                verify an email to appear on obrigado.dev/obrigado
+  obrigado link you@company.com  request a code; link --code 123456 confirms
+  obrigado unlink you@company.com  remove the email and its listing
   obrigado config              show settings; config <name> <value> to change one
+  obrigado privacy             what advertisers may target you on (all off by default)
+  obrigado privacy <name> on|off   region, network or activity
   obrigado refresh             discard the cached batch and fetch a new one
   obrigado statusline          render one line (called by the host)
   obrigado statusline --agent <host>  the same line, attributed to that host
@@ -54,6 +62,8 @@ const commands: Record<string, (argv: readonly string[]) => Promise<number>> = {
   status: () => status(),
   projects: () => projects(),
   share: (argv) => share(argv[0]),
+  link: (argv) => link(argv),
+  unlink: (argv) => unlink(argv),
   summary: (argv) => summary(argv.includes("--json"), argv.includes("--print-hook")),
   read: (argv) => {
     // §14 Phase 6. `--print-hook` explains the trade before a developer opts in.
@@ -63,6 +73,7 @@ const commands: Record<string, (argv: readonly string[]) => Promise<number>> = {
     }
     return read(argv[0]);
   },
+  privacy: (argv) => privacy(argv),
   statusline: (argv) => statusline(argv),
   doctor: () => doctor(),
 };

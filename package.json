@@ -18,6 +18,7 @@
     "check:fmt": "oxfmt --check .",
     "check:types": "tsc --build --force",
     "check:test": "bun test",
+    "build:binaries": "bun run scripts/build-binaries.ts",
     "build:vscode": "bun run --filter obrigado-vscode build",
     "package:vscode": "bun run --filter obrigado-vscode package"
   },

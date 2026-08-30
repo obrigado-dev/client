@@ -106,6 +106,39 @@ export function microsFromDecimalString(value: string | null | undefined): Micro
   return micros(BigInt(integerPart));
 }
 
+/**
+ * Decode a human-typed dollar amount into micros.
+ *
+ * The counterpart to `microsFromDecimalString`, and NOT the same function — that one decodes a
+ * Postgres `numeric`, whose digits are already micros with a fraction to truncate. This one
+ * decodes what somebody types into a form, where "3.40" means three dollars forty and not
+ * three micros. Mistaking one for the other is a factor of a million in the wrong direction,
+ * silently, on a budget.
+ *
+ * It REFUSES rather than rounds, for the reason `toCents` refuses at the Stripe end: an amount
+ * with more precision than a micro cannot be represented, and quietly dropping the remainder
+ * puts the ledger and whatever the person believed they typed permanently out of step. Six
+ * decimal places is exactly a micro, so nothing legitimate is lost by the refusal.
+ *
+ * This exists because a form is the first surface in the system where a human writes an
+ * amount. Every other money boundary here decodes a machine's output.
+ */
+export function microsFromUsd(value: string | null | undefined): Micros {
+  const trimmed = (value ?? "").trim();
+  if (!/^\d+(?:\.\d+)?$/u.test(trimmed)) {
+    throw new MoneyError(`cannot read "${value ?? ""}" as a dollar amount`);
+  }
+
+  const [whole = "0", fraction = ""] = trimmed.split(".");
+  if (fraction.length > 6) {
+    throw new MoneyError(
+      `"${trimmed}" is finer than a micro; rounding it would put the ledger out of step`,
+    );
+  }
+
+  return micros(BigInt(whole) * USD_MICROS + BigInt(fraction.padEnd(6, "0") || "0"));
+}
+
 // ─────────────── Arithmetic ───────────────
 
 export function addMicros(...values: readonly Micros[]): Micros {

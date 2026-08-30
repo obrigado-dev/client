@@ -22,9 +22,36 @@ export interface CachedBatch {
   shown_at: number;
   /** Impression ids already reported, so a re-render does not re-count. */
   reported: string[];
+  /**
+   * What the agent had been reading when this batch was chosen, as a stable digest.
+   *
+   * Activity targeting selects on recently-read packages, and a batch is rotated locally for
+   * `BATCH_TTL_SECONDS` — so without this, an agent that opened the Postgres docs one minute
+   * after fetching kept seeing the previous fifteen minutes' ads. The signal was live and the
+   * inventory was not.
+   *
+   * Absent on a batch fetched with activity sharing off, where retrieval is not sent and
+   * therefore cannot have influenced anything.
+   */
+  retrieval?: string | undefined;
 }
 
-export function cacheFromResponse(response: SessionResponse, now = Date.now()): CachedBatch {
+/**
+ * A stable digest of the packages an agent has been reading.
+ *
+ * Sorted and joined rather than hashed: the set is small, the comparison is for equality only,
+ * and a readable value in `~/.obrigado/batch.json` is worth more than eight saved bytes to
+ * somebody trying to work out why their line changed.
+ */
+export function retrievalDigest(packages: readonly string[] | undefined): string | undefined {
+  return packages === undefined ? undefined : packages.toSorted().join(",");
+}
+
+export function cacheFromResponse(
+  response: SessionResponse,
+  now = Date.now(),
+  retrieval?: string | undefined,
+): CachedBatch {
   return {
     fp: response.fp,
     batch: response.batch,
@@ -34,7 +61,39 @@ export function cacheFromResponse(response: SessionResponse, now = Date.now()): 
     cursor: 0,
     shown_at: now,
     reported: [],
+    ...(retrieval === undefined ? {} : { retrieval }),
   };
+}
+
+/**
+ * The shortest a batch may live before a changed activity signal can replace it.
+ *
+ * A status line renders many times a second while an agent works, and an agent reading files
+ * changes the retrieval set constantly — so "refetch whenever it changed" is a request per
+ * render. A minute bounds that to roughly one extra request per minute in the worst case,
+ * while still making the signal live in any sense a developer would notice.
+ */
+export const ACTIVITY_REFETCH_FLOOR_MS = 60_000;
+
+/**
+ * Whether what the agent is reading has moved on from what this batch was chosen for.
+ *
+ * The other half of `isExpired` and `isExhausted`, and the reason activity targeting is worth
+ * anything: those two ask whether the batch is old or used up, and this asks whether it is
+ * still ABOUT the right thing. Without it the ads a developer sees describe what they were
+ * doing up to fifteen minutes ago.
+ *
+ * Returns false when the batch carries no digest — a batch fetched with activity sharing off
+ * was not selected on retrieval, so retrieval changing cannot make it wrong.
+ */
+export function activityMoved(
+  batch: CachedBatch,
+  retrieval: string | undefined,
+  now = Date.now(),
+): boolean {
+  if (batch.retrieval === undefined || retrieval === undefined) return false;
+  if (retrieval === batch.retrieval) return false;
+  return now - batch.fetched_at >= ACTIVITY_REFETCH_FLOOR_MS;
 }
 
 export function isExpired(batch: CachedBatch, now = Date.now()): boolean {
