@@ -41,7 +41,17 @@ function context(hasUI: boolean, recorded: Recorded): unknown {
   };
 }
 
-/** A stand-in for the CLI: echoes one line, and reports the environment it was handed. */
+/**
+ * A stand-in for the CLI: echoes one line, and reports the environment it was handed.
+ *
+ * The body runs under whatever `/bin/sh` is, which is not the same program everywhere. A
+ * middle dot written as `printf 'a \xc2\xb7 b'` came back as the literal characters
+ * `\xc2\xb7` on the CI runner and as the character itself on macOS: `\x` escapes are a
+ * printf extension, not something every sh has. The assertion then failed only in CI.
+ *
+ * Non-ASCII goes in as itself now, passed through `%s`, which no shell reinterprets. `\n` in
+ * a format string is fine — that one is POSIX.
+ */
 async function stubCli(body: string): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "obrigado-stub-"));
   const path = join(dir, "stub.sh");
@@ -71,7 +81,7 @@ afterEach(() => {
 
 describe("the footer entry", () => {
   test("sets the line the CLI printed, under a stable key", async () => {
-    const cli = await stubCli(`printf 'sponsored \\xc2\\xb7 Neon\\n'`);
+    const cli = await stubCli(`printf '%s\\n' 'sponsored · Neon'`);
     process.env["OBRIGADO_STATUSLINE_COMMAND"] = cli;
     const { handlers, api } = harness();
     extension(api);
@@ -87,7 +97,7 @@ describe("the footer entry", () => {
    * nobody could see would be a billed impression nobody saw.
    */
   test("asks for nothing when the host has no UI", async () => {
-    const cli = await stubCli(`printf 'sponsored \\xc2\\xb7 Neon\\n'; touch "$0.ran"`);
+    const cli = await stubCli(`printf '%s\\n' 'sponsored · Neon'; touch "$0.ran"`);
     process.env["OBRIGADO_STATUSLINE_COMMAND"] = cli;
     const { handlers, api } = harness();
     extension(api);
