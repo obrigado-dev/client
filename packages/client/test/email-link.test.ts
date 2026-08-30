@@ -50,7 +50,9 @@ beforeEach(() => {
   logSpy = spyOn(console, "log").mockImplementation((...args: unknown[]) => {
     lines.push(args.map(String).join(" "));
   });
-  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+  // Typed off `fetch` itself rather than naming `RequestInfo`, which is a DOM lib type this
+  // package does not pull in — the client runs in Bun, not a browser.
+  globalThis.fetch = ((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
     const url = String(input);
     const path = url.replace("http://api.test/api/v1/link/", "");
     const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;

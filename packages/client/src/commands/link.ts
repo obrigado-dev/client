@@ -54,13 +54,19 @@ function explain(error: string, origin: string): string {
   return ERROR_TEXT[error] ?? `The server refused: ${error}.`;
 }
 
+/**
+ * `?: T | undefined` rather than `?: T`, because `exactOptionalPropertyTypes` makes those
+ * different types: the second says the key may be ABSENT, and the parser always sets every
+ * key — to `undefined` when the flag was not given. Absent and undefined mean the same thing
+ * to every reader here, so the type says so.
+ */
 interface LinkArgs {
-  readonly email?: string;
-  readonly code?: string;
-  readonly name?: string;
-  readonly url?: string;
+  readonly email?: string | undefined;
+  readonly code?: string | undefined;
+  readonly name?: string | undefined;
+  readonly url?: string | undefined;
   readonly noList: boolean;
-  readonly problem?: string;
+  readonly problem?: string | undefined;
 }
 
 /** Tiny by-hand parse, same trade as `cli.ts`: a parser dependency for five flags
