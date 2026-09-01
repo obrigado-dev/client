@@ -10,7 +10,7 @@
  * renders the parts, exactly as the OpenCode plugin does. Rotation, batching, beacons and
  * the disclosure stay in the one renderer Claude Code already drives.
  *
- * ── The open question, which is a PRODUCT question and not a technical one ──
+ * ── Why this surface bills differently, and where that rule lives ──
  *
  * Every other Obrigado surface lives inside an agent's own UI, so an impression implies an
  * agent was running: that is what §14's viewability rules are written against. A status
@@ -18,18 +18,16 @@
  * with no agent involved. Billing that as an agent impression would be counting inventory
  * we did not sell.
  *
- * So this extension DISPLAYS but does not yet BILL: it renders whatever the client hands
- * it and does not enqueue an impression of its own. Wiring the beacon up needs an answer
- * to "what counts as an agent session in an editor", and the honest candidates are:
+ * A21 settles it session-scoped: an editor impression counts only while the client's own
+ * per-agent session state shows a recent render. This extension therefore does nothing
+ * special. It runs `statusline` like every other host, and the gate there returns nothing
+ * when no agent is live — so the surface goes dark rather than rendering unbilled. The
+ * rule deliberately does NOT live here: one gate in the client governs every editor host,
+ * and no extension can opt itself into billing by forgetting to ask.
  *
- *   - only while an agent CLI is running in the integrated terminal, which is detectable
- *     but fragile;
- *   - only while the client's own per-agent session state shows a recent render, which is
- *     evidence we already collect and do not currently expose;
- *   - a separate, honestly-labelled editor placement, priced as its own inventory.
- *
- * Picking one is a spec decision. Guessing here would put revenue behind a definition
- * nobody wrote down.
+ * Ambient editor placement — earning whenever the window is visible, priced as its own
+ * inventory — stays available and unbuilt. Session-scoped is a strict subset of it, so
+ * that order only runs one way.
  */
 import { spawn } from "node:child_process";
 
