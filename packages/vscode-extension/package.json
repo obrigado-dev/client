@@ -20,7 +20,7 @@
   "publisher": "obrigado",
   "main": "./dist/extension.js",
   "scripts": {
-    "build": "bun --cwd ../surface run build && bun build ./src/extension.ts --outfile ./dist/extension.js --target node --format cjs --external vscode",
+    "build": "bun run --cwd ../surface build && bun build ./src/extension.ts --outfile ./dist/extension.js --target node --format cjs --external vscode",
     "package": "bun run build && vsce package --no-dependencies --out dist/obrigado-vscode.vsix",
     "install:code": "code --install-extension dist/obrigado-vscode.vsix --force",
     "install:cursor": "cursor --install-extension dist/obrigado-vscode.vsix --force"
