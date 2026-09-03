@@ -39,8 +39,7 @@
     }
   },
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "scripts": {
     "build": "bun build ./src/index.ts --outdir ./dist --target node --format esm --sourcemap=linked && tsc --build tsconfig.json --force",

@@ -26,15 +26,21 @@ bundles surface at build time and never touches the registry.
 ## The first version of a package
 
 By hand, from a laptop. npm's trusted publishing can only be configured on a package that
-already exists, so version one is a token publish:
+already exists, so version one is a token publish. Pack with bun and publish with npm:
+`bun publish` cannot complete npm's browser authentication step (Bun 1.3.10 polls
+`/-/v1/done`, gets a 404, reports the package as missing and exits 0 without publishing),
+and `npm publish` does not rewrite `workspace:*`, so each does the half it can.
 
 ```sh
 npm login                                  # once; writes ~/.npmrc
 cd packages/surface
-bun pm pack --dry-run                      # what will ship; nothing else
-bun publish --access public                # runs the gate-equivalent build via prepack
+bun pm pack --destination dist/npm         # runs prepack (the build); prints what ships
+npm publish dist/npm/*.tgz --access public # approve the URL it prints
 git tag surface-v0.1.0 && git push --tags  # the record of what went out
 ```
+
+Provenance is CI-only (`--provenance` in the workflow), so it is not in `publishConfig`;
+npm refuses to publish from a laptop when it is.
 
 Then, on npmjs.com, open the package → Settings → Trusted publishing, and add this repository
 (`obrigado-dev/client`) with workflow `publish.yml`. Every later version goes through CI.
