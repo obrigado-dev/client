@@ -85,22 +85,40 @@ jobs:
             echo "tag says $tagged but $manifest says $version" >&2
             exit 1
           fi
+          name="$(bun -e "console.log(JSON.parse(await Bun.file('$manifest').text()).name)")"
           echo "package=$package" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "dist_tag=$dist_tag" >> "$GITHUB_OUTPUT"
+
+      # A version that is already on the registry is done, not an error. The first version of
+      # a package is published by hand (see docs/PUBLISHING.md) and then tagged, and that tag
+      # must not fail this workflow; a re-run of a tag must not either.
+      - name: Already on the registry?
+        id: registry
+        env:
+          SPEC: ${{ steps.target.outputs.name }}@${{ steps.target.outputs.version }}
+        run: |
+          if npm view "$SPEC" version > /dev/null 2>&1; then
+            echo "$SPEC is already published; nothing to do"
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
 
       # Packed by bun, published by npm. bun rewrites `workspace:*` to the real version and
       # runs `prepack` (the build); npm is what signs the provenance attestation.
       - name: Pack
+        if: steps.registry.outputs.published != 'true'
         working-directory: packages/${{ steps.target.outputs.package }}
         run: |
           rm -rf ../../dist/npm && mkdir -p ../../dist/npm
           bun pm pack --destination ../../dist/npm
 
       - name: Publish
+        if: steps.registry.outputs.published != 'true'
         run: npm publish dist/npm/*.tgz --provenance --access public --tag "${{ steps.target.outputs.dist_tag }}"
 
       - name: Verify what was published
-        run: |
-          name="$(bun -e "console.log(JSON.parse(await Bun.file('packages/${{ steps.target.outputs.package }}/package.json').text()).name)")"
-          npm view "$name@${{ steps.target.outputs.version }}" version dist.tarball
+        if: steps.registry.outputs.published != 'true'
+        run: npm view "${{ steps.target.outputs.name }}@${{ steps.target.outputs.version }}" version dist.tarball
