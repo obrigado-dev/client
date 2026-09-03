@@ -43,14 +43,18 @@ Provenance is CI-only (`--provenance` in the workflow), so it is not in `publish
 npm refuses to publish from a laptop when it is.
 
 Then, on npmjs.com, open the package → Settings → Trusted publishing, and add this repository
-(`obrigado-dev/client`) with workflow `publish.yml`. Every later version goes through CI.
+(`obrigado-dev/client`) with workflow `publish.yml`. Leave "Allow `npm publish`" unchecked: the
+workflow only stages, and a person approves. Every later version goes through CI.
 
 ## Every later version
 
 1. Bump the manifest: `cd packages/<pkg> && bun pm version <version> --no-git-tag-version`.
 2. Commit, then tag `<pkg>-v<version>` on that commit and push the tag.
-3. `.github/workflows/publish.yml` runs the gate, packs with bun, publishes with npm and
-   `--provenance`, and refuses if the tag's version is not the manifest's.
+3. `.github/workflows/publish.yml` runs the gate, packs with bun, and STAGES the version with
+   `npm stage publish --provenance`. It refuses if the tag's version is not the manifest's.
+4. Approve it, with 2FA, from a laptop: `npm stage list @obrigado/<pkg>` then
+   `npm stage approve <stage-id>` (or the package page on npmjs.com). Nothing is public until
+   this step, so a compromised workflow or a stray tag cannot ship a release by itself.
 
 `workflow_dispatch` on the same workflow publishes a package by name, for a re-run or a
 `next` dist-tag.
