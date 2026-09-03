@@ -5,10 +5,19 @@
       "path": "./packages/shared"
     },
     {
+      "path": "./packages/surface"
+    },
+    {
+      "path": "./packages/surface/tsconfig.test.json"
+    },
+    {
       "path": "./packages/client"
     },
     {
       "path": "./packages/opencode-plugin"
+    },
+    {
+      "path": "./packages/pi-extension"
     },
     {
       "path": "./packages/vscode-extension"

@@ -28,6 +28,22 @@ export interface AgentSessionState {
   pending?: PendingCodexImpression;
   /** The last Stop turn emitted, including one later continued by another hook. */
   last_stop_turn?: string;
+  /**
+   * When the statusline last RENDERED for this session, as opposed to when the file was last
+   * written. The editor liveness gate reads this and only this: `updated_at` is stamped by
+   * every writer, including `obrigado refresh` clearing batches, and a maintenance write
+   * used to make every session file on the machine look like a running agent for five
+   * minutes. Absent on state written by an older client, which fails closed.
+   */
+  last_render_at?: number;
+  /**
+   * Do not ask the server for a batch before this instant.
+   *
+   * Set when a session request fails. Without it every render re-parsed the lockfiles and
+   * waited on the network again — up to four seconds per repaint while the server was down,
+   * which is precisely the stutter §3 says is a reason to uninstall.
+   */
+  retry_after?: number;
   updated_at: number;
 }
 
@@ -61,6 +77,31 @@ export function sessionStatePath(
   return join(rootOf(location), agent, `${sessionKey(sessionId)}.json`);
 }
 
+/**
+ * Whether a parsed file has the shape the render path relies on.
+ *
+ * Structural rather than a full schema, and enough for the failure that matters: valid JSON
+ * of the wrong shape — a hand edit, a version skew — used to be cast and then thrown on
+ * (`batch.batch.length` of a batch with no array), on every render, forever, because the
+ * sweep that would have removed it only runs on a cold start and a corrupt batch is not cold.
+ */
+function isSessionState(value: unknown): value is AgentSessionState {
+  if (typeof value !== "object" || value === null) return false;
+  const state = value as Record<string, unknown>;
+  if (typeof state["updated_at"] !== "number") return false;
+  const batch = state["batch"];
+  if (batch === null) return true;
+  if (typeof batch !== "object" || batch === null) return false;
+  const cached = batch as Record<string, unknown>;
+  return (
+    Array.isArray(cached["batch"]) &&
+    Array.isArray(cached["reported"]) &&
+    typeof cached["expires_at"] === "number" &&
+    typeof cached["cursor"] === "number" &&
+    typeof cached["serving"] === "boolean"
+  );
+}
+
 export async function readSessionState(
   agent: Agent,
   sessionId: string,
@@ -69,10 +110,8 @@ export async function readSessionState(
   const file = Bun.file(sessionStatePath(agent, sessionId, location));
   if (!(await file.exists())) return { batch: null, updated_at: Date.now() };
   try {
-    const parsed = (await file.json()) as AgentSessionState;
-    return typeof parsed === "object" && parsed !== null && "batch" in parsed
-      ? parsed
-      : { batch: null, updated_at: Date.now() };
+    const parsed: unknown = await file.json();
+    return isSessionState(parsed) ? parsed : { batch: null, updated_at: Date.now() };
   } catch {
     return { batch: null, updated_at: Date.now() };
   }
@@ -97,16 +136,29 @@ async function writeStatePath(path: string, state: AgentSessionState): Promise<v
   await rename(temporary, path);
 }
 
-async function stateFiles(root: string): Promise<string[]> {
+interface StateFile {
+  readonly agent: Agent;
+  readonly path: string;
+}
+
+/**
+ * Every state file, with the host it belongs to.
+ *
+ * The host travels with the path rather than being re-derived from it: `path.split("/")`
+ * against a path built by `join` returned nothing on Windows, where the separator is a
+ * backslash, so the liveness gate judged every file "not an agent" and the editor surface
+ * never rendered there.
+ */
+async function stateFiles(root: string): Promise<StateFile[]> {
   // Every known host, not a hardcoded pair. This listed only Claude and Codex, so once
   // OpenCode started writing state nothing swept or cleared it — a directory that grows
   // forever with no symptom anyone would notice.
   const byAgent = await Promise.all(
-    AGENTS.map(async (agent) => {
+    AGENTS.map(async (agent): Promise<StateFile[]> => {
       try {
         return (await readdir(join(root, agent)))
           .filter((name) => name.endsWith(".json"))
-          .map((name) => join(root, agent, name));
+          .map((name) => ({ agent, path: join(root, agent, name) }));
       } catch {
         return [];
       }
@@ -121,7 +173,7 @@ export async function pruneSessionState(
   location: StateLocation = {},
 ): Promise<number> {
   const results = await Promise.all(
-    (await stateFiles(rootOf(location))).map(async (path): Promise<number> => {
+    (await stateFiles(rootOf(location))).map(async ({ path }): Promise<number> => {
       let shouldRemove: boolean;
       try {
         const state = (await Bun.file(path).json()) as AgentSessionState;
@@ -143,10 +195,12 @@ export async function pruneSessionState(
 /** Invalidate batches while preserving displayed-but-unconfirmed Codex inventory. */
 export async function clearSessionBatches(location: StateLocation = {}): Promise<number> {
   const results = await Promise.all(
-    (await stateFiles(rootOf(location))).map(async (path): Promise<number> => {
+    (await stateFiles(rootOf(location))).map(async ({ path }): Promise<number> => {
       try {
         const state = (await Bun.file(path).json()) as AgentSessionState;
         if (state.batch === null) return 0;
+        // `last_render_at` is carried through untouched: this is a maintenance write, not a
+        // render, and must not make a dead session look live to an editor surface.
         await writeStatePath(path, { ...state, batch: null });
         return 1;
       } catch {
@@ -162,13 +216,15 @@ export async function sessionStateSummary(
   location: StateLocation = {},
 ): Promise<{ sessions: number; batches: number; pending: number }> {
   const states = await Promise.all(
-    (await stateFiles(rootOf(location))).map(async (path): Promise<AgentSessionState | null> => {
-      try {
-        return (await Bun.file(path).json()) as AgentSessionState;
-      } catch {
-        return null;
-      }
-    }),
+    (await stateFiles(rootOf(location))).map(
+      async ({ path }): Promise<AgentSessionState | null> => {
+        try {
+          return (await Bun.file(path).json()) as AgentSessionState;
+        } catch {
+          return null;
+        }
+      },
+    ),
   );
   return states.reduce(
     (summary, state) => {
@@ -215,6 +271,10 @@ export const AGENT_LIVE_MS = 5 * 60 * 1000;
  * Editor hosts are excluded from the evidence deliberately: an editor surface must not
  * count itself as proof that an agent is running, or the gate answers its own question and
  * every editor impression qualifies forever.
+ *
+ * Judged by `last_render_at`, which only the render path writes. `updated_at` is stamped by
+ * every writer — `obrigado refresh` clearing batches included — and reading it here made a
+ * maintenance command vouch for every session that had ever existed.
  */
 export async function agentSessionLive(
   now = Date.now(),
@@ -222,12 +282,12 @@ export async function agentSessionLive(
 ): Promise<boolean> {
   const files = await stateFiles(rootOf(location));
   const results = await Promise.all(
-    files.map(async (path): Promise<boolean> => {
-      const agent = path.split("/").at(-2);
-      if (agent === undefined || EDITOR_AGENTS.has(agent as Agent)) return false;
+    files.map(async ({ agent, path }): Promise<boolean> => {
+      if (EDITOR_AGENTS.has(agent)) return false;
       try {
         const state = (await Bun.file(path).json()) as AgentSessionState;
-        return now - state.updated_at <= AGENT_LIVE_MS;
+        const rendered = state.last_render_at;
+        return rendered !== undefined && now - rendered <= AGENT_LIVE_MS;
       } catch {
         return false;
       }

@@ -23,6 +23,8 @@
  * already drives. A second delivery path is how hosts begin to disagree about what was
  * shown and what was billed.
  */
+import { parseSponsored, statuslineArgv } from "@obrigado/surface";
+import type { Sponsored, SponsoredSpan } from "@obrigado/surface";
 import type { TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui";
 import type { JSX } from "@opentui/solid";
 import { createRoot, createSignal, onCleanup } from "solid-js";
@@ -94,38 +96,13 @@ function wordmarkEnabled(): boolean {
 /** A spawn that outlives its usefulness is a spawn holding up the UI. */
 const RENDER_TIMEOUT_MS = 2_000;
 
-interface SponsoredSpan {
-  readonly text: string;
-  readonly bold?: boolean;
-  readonly italic?: boolean;
-  readonly highlight?: boolean;
-  readonly color?: "cyan" | "blue" | "green" | "magenta";
-  readonly link?: boolean;
-}
-
-interface SponsoredBrand {
-  readonly name: string;
-  /** A PNG data URI. Nothing here renders it — a terminal has no place to put one. */
-  readonly logo: string | null;
-}
-
-interface Sponsored {
-  readonly label: string;
-  readonly copy: string;
-  readonly url: string;
-  readonly spans: readonly SponsoredSpan[];
-  readonly style: string;
-  readonly effect: string;
-  /**
-   * The advertiser, as they name themselves.
-   *
-   * This replaced a `guessBrand()` that read the trailing domain out of the ad copy, because
-   * there was no brand on the wire and every seeded creative happened to end with one. That
-   * worked on the fixtures and would eventually have rendered the wrong company's name, in a
-   * font three lines tall, in somebody's terminal.
-   */
-  readonly brand: SponsoredBrand | null;
-}
+/*
+ * The wire shape and its parser come from `@obrigado/surface`, shared with the VS Code
+ * extension. The brand on it replaced a `guessBrand()` that read the trailing domain out of
+ * the ad copy, because there was no brand on the wire and every seeded creative happened to
+ * end with one — which worked on the fixtures and would eventually have rendered the wrong
+ * company's name, in a font three lines tall, in somebody's terminal.
+ */
 
 /**
  * One run's attributes, in OpenTUI's vocabulary.
@@ -167,11 +144,7 @@ function runStyle(span: SponsoredSpan, ad: Sponsored, hovered = false): Record<s
  * source checkout, which is the only way to develop this before the client is published.
  */
 function statuslineCommand(): readonly string[] {
-  const override = process.env["OBRIGADO_STATUSLINE_COMMAND"];
-  if (override !== undefined && override.length > 0) {
-    return [...override.split(" "), "--agent", AGENT, "--json"];
-  }
-  return ["obrigado", "statusline", "--agent", AGENT, "--json"];
+  return statuslineArgv(AGENT, process.env["OBRIGADO_STATUSLINE_COMMAND"]);
 }
 
 /**
@@ -197,6 +170,7 @@ async function fetchSponsored(sessionId: string, cwd: string): Promise<Sponsored
   if (command === undefined) return null;
 
   let proc: Bun.Subprocess<"pipe", "pipe", "ignore"> | undefined;
+  let timedOut = false;
   try {
     proc = Bun.spawn({
       cmd: [command, ...args],
@@ -207,48 +181,60 @@ async function fetchSponsored(sessionId: string, cwd: string): Promise<Sponsored
     proc.stdin.write(payloadFor(sessionId, cwd));
     await proc.stdin.end();
 
-    const output = await Promise.race([
-      new Response(proc.stdout).text(),
+    // The FIRST line, not the whole stream. The renderer prints its line and then ships
+    // beacons before exiting, and waiting for exit meant the render budget and the beacon
+    // budget were one budget — a slow network made the host draw nothing for an impression
+    // that was already queued. The child keeps running after the line is read; only a child
+    // that never produces one is killed.
+    const line = await Promise.race([
+      firstLine(proc.stdout),
       new Promise<null>((resolve) => {
         setTimeout(() => {
+          timedOut = true;
           resolve(null);
         }, RENDER_TIMEOUT_MS);
       }),
     ]);
-    if (output === null) return null;
-
-    const line = output.split("\n").find((value) => value.trim().length > 0);
-    if (line === undefined) return null;
-
-    const parsed: unknown = JSON.parse(line);
-    if (typeof parsed !== "object" || parsed === null) return null;
-    const { label, copy, url, spans, style, effect, brand } = parsed as Partial<Sponsored>;
-    // Label, copy and URL or nothing. A creative without its label is an undisclosed
-    // advertisement, and one without its URL is an impression nobody can act on.
-    if (typeof label !== "string" || typeof copy !== "string" || typeof url !== "string") {
-      return null;
-    }
-    if (label.length === 0 || copy.length === 0 || url.length === 0) return null;
-    // Styling is optional on the wire. An older client that sends none still renders,
-    // as one unstyled link over the whole line — degraded, never broken.
-    return {
-      label,
-      copy,
-      url,
-      spans: Array.isArray(spans) && spans.length > 0 ? spans : [{ text: copy, link: true }],
-      style: typeof style === "string" ? style : "default",
-      effect: typeof effect === "string" ? effect : "none",
-      // A brand without a name is not a brand. The wordmark renders the name and nothing
-      // else, so a malformed one is dropped rather than rendered as an empty banner.
-      brand:
-        brand !== null && brand !== undefined && typeof brand.name === "string"
-          ? { name: brand.name, logo: typeof brand.logo === "string" ? brand.logo : null }
-          : null,
-    };
+    if (line === null) return null;
+    // Label, copy and URL or nothing; styling optional; a brand without a name is not a
+    // brand. The rules live in `@obrigado/surface` so this host and VS Code cannot disagree.
+    return parseSponsored(line);
   } catch {
     return null;
   } finally {
-    proc?.kill();
+    // Killed only when it produced nothing in time. A child that answered is still shipping
+    // the impression it just rendered, and killing it there would lose that beacon.
+    if (timedOut) proc?.kill();
+  }
+}
+
+/**
+ * The first non-empty line of a stream, or null at end of stream.
+ *
+ * Reads until a newline and then releases the stream without draining it: the child's
+ * remaining output is nothing this host needs, and holding the pipe open would keep the
+ * child blocked on writes that nobody reads.
+ */
+async function firstLine(stream: ReadableStream<Uint8Array>): Promise<string | null> {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let buffered = "";
+  try {
+    while (true) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- a stream is read one chunk at a time by definition
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffered += decoder.decode(value, { stream: true });
+      const newline = buffered.indexOf("\n");
+      if (newline === -1) continue;
+      const line = buffered.slice(0, newline).trim();
+      if (line.length > 0) return line;
+      buffered = buffered.slice(newline + 1);
+    }
+    const rest = buffered.trim();
+    return rest.length > 0 ? rest : null;
+  } finally {
+    reader.cancel().catch(() => null);
   }
 }
 

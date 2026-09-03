@@ -74,8 +74,55 @@ const COMMAND = "obrigado statusline";
 /** The environment override still wins, for running against a checkout without reinstalling. */
 function statuslineCommand(): readonly string[] {
   const override = process.env["OBRIGADO_STATUSLINE_COMMAND"];
-  const base = override !== undefined && override.length > 0 ? override : COMMAND;
-  return [...base.split(" ").filter((part) => part.length > 0), "--agent", AGENT];
+  const base = override !== undefined && override.trim().length > 0 ? override : COMMAND;
+  return [...splitCommand(base), "--agent", AGENT];
+}
+
+/**
+ * A command, split the way a shell would split it — quotes and all.
+ *
+ * A deliberate COPY of `@obrigado/surface`'s `splitCommand`: this file is copied into a
+ * developer's extensions directory and must stand alone, so it cannot import the package the
+ * other hosts share. `test/extension.test.ts` holds the two to the same behaviour. Exported for
+ * that test and nothing else.
+ */
+export function splitCommand(text: string): string[] {
+  const out: string[] = [];
+  let current = "";
+  let inToken = false;
+  let quote: '"' | "'" | null = null;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index] ?? "";
+    if (quote !== null) {
+      if (character === quote) {
+        quote = null;
+      } else if (character === "\\" && quote === '"' && index + 1 < text.length) {
+        index += 1;
+        current += text[index] ?? "";
+      } else {
+        current += character;
+      }
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+      inToken = true;
+    } else if (character === "\\" && index + 1 < text.length) {
+      index += 1;
+      current += text[index] ?? "";
+      inToken = true;
+    } else if (/\s/u.test(character)) {
+      if (inToken) out.push(current);
+      current = "";
+      inToken = false;
+    } else {
+      current += character;
+      inToken = true;
+    }
+  }
+  if (inToken) out.push(current);
+  return out;
 }
 
 /**
@@ -140,15 +187,29 @@ async function fetchLine(sessionId: string, cwd: string): Promise<string | null>
       stdio: ["pipe", "pipe", "ignore"],
       env: spawnEnvironment(),
     });
+    // Fires only when the child has produced no line in time. A child that answered is still
+    // shipping the impression it just rendered, and must not be killed for it.
     const timer = setTimeout(() => {
       child.kill();
       finish(null);
     }, TIMEOUT_MS);
 
+    // The FIRST complete line settles the render. The renderer prints its line and then ships
+    // beacons before exiting, and waiting for `close` made the render budget and the beacon
+    // budget one budget: a slow network meant the footer drew nothing for an impression that
+    // was already queued.
     let out = "";
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
       out += chunk;
+      const newline = out.indexOf("\n");
+      if (newline === -1) return;
+      const line = out.slice(0, newline);
+      if (line.trim().length === 0) {
+        out = out.slice(newline + 1);
+        return;
+      }
+      finish(line.trimEnd());
     });
     child.on("error", () => {
       finish(null);

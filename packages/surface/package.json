@@ -1,0 +1,49 @@
+{
+  "name": "@obrigado/surface",
+  "version": "0.1.0",
+  "description": "What an Obrigado host composes: the `obrigado statusline --json` shape, its parser, and how to invoke the renderer.",
+  "keywords": [
+    "coding-agent",
+    "obrigado",
+    "opencode",
+    "sponsored",
+    "statusline",
+    "vscode"
+  ],
+  "homepage": "https://obrigado.dev",
+  "bugs": {
+    "url": "https://github.com/obrigado-dev/client/issues"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/obrigado-dev/client.git",
+    "directory": "packages/surface"
+  },
+  "files": [
+    "LICENSE",
+    "dist/index.js",
+    "dist/index.js.map",
+    "dist/index.d.ts",
+    "dist/index.d.ts.map",
+    "src/index.ts"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "bun": "./src/index.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir ./dist --target node --format esm --sourcemap=linked && tsc --build tsconfig.json --force",
+    "prepack": "bun run build"
+  }
+}

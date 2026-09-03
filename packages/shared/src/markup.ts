@@ -89,9 +89,37 @@ interface Active {
   color: SpanColor | undefined;
 }
 
-function isControl(character: string): boolean {
+/**
+ * Whether a character can move or erase what is drawn around it.
+ *
+ * Two families. C0/C1 control characters, which a terminal executes — `ESC [ 2K` erases the
+ * line the `sponsored` label was just written on. And the Unicode bidirectional controls,
+ * which a terminal RENDERS: an RLO or an isolate inside the copy reorders the row visually,
+ * so the label can be made to read after the copy, or inside it, without a single control
+ * byte. The `\p{Cc}` check every layer used to make caught the first family only. Zero-width
+ * joiners are deliberately not here — emoji sequences need them and they reorder nothing.
+ */
+export function isControlCharacter(character: string): boolean {
   const code = character.codePointAt(0) ?? 0;
-  return code <= 0x1f || (code >= 0x7f && code <= 0x9f);
+  if (code <= 0x1f || (code >= 0x7f && code <= 0x9f)) return true;
+  // Bidi: ALM, LRM/RLM, LRE/RLE/PDF/LRO/RLO, LRI/RLI/FSI/PDI.
+  return (
+    code === 0x06_1c ||
+    code === 0x20_0e ||
+    code === 0x20_0f ||
+    (code >= 0x20_2a && code <= 0x20_2e) ||
+    (code >= 0x20_66 && code <= 0x20_69)
+  );
+}
+
+/** True when any character in `text` is one `isControlCharacter` names. */
+export function hasControlCharacters(text: string): boolean {
+  for (const character of text) if (isControlCharacter(character)) return true;
+  return false;
+}
+
+function isControl(character: string): boolean {
+  return isControlCharacter(character);
 }
 
 /**

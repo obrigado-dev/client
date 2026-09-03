@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    // `src` rather than `.`, so the declaration lands at `dist/index.d.ts` — the path the
+    // manifest's `types` export names, for the workspace and for the published package alike.
+    // The tests are their own project (`tsconfig.test.json`) for that reason.
+    "rootDir": "./src"
+  },
+  "include": ["src/**/*.ts"],
+  "references": []
+}

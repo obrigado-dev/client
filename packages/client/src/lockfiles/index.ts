@@ -91,7 +91,15 @@ export async function readLockfiles(cwd: string): Promise<ResolvedDeps> {
         : // oxlint-disable-next-line eslint/no-await-in-loop -- only read when the lockfile matched
           await readIfPresent(join(cwd, parser.manifest));
 
-    const parsed = parser.parse({ lockfile, manifest });
+    // A parser that throws — a v1 npm tree deep enough to overflow the stack, a lockfile that
+    // is not what its name says — costs that ecosystem, not the render. Uncaught, it used to
+    // propagate to the CLI's top level and exit 0 with no line and no explanation.
+    let parsed: DepEntry[];
+    try {
+      parsed = parser.parse({ lockfile, manifest });
+    } catch {
+      continue;
+    }
     if (parsed.length === 0) continue;
 
     covered.add(parser.ecosystem);

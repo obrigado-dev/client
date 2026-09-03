@@ -20,12 +20,13 @@
  * and an absolute path into `node_modules` breaks the moment the package is reinstalled.
  */
 import { existsSync } from "node:fs";
-import { readFile, rename, writeFile } from "node:fs/promises";
+import { readFile, realpath, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { BACKUP_DIR, ensureDir } from "./config.ts";
+import { rendererCommand } from "./renderer-command.ts";
 
 /** The two hosts that load this extension unmodified. */
 export type PiHost = "pi" | "oh-my-pi";
@@ -138,12 +139,6 @@ function rewrite(source: string, marker: string, replacement: string): string {
  * spawns a missing command renders nothing and says nothing about why. `process.execPath` is
  * the Bun running this installer, which is by definition one that can run the CLI.
  */
-export function rendererCommand(): string {
-  if (Bun.which("obrigado") !== null) return "obrigado statusline";
-  const cli = join(dirname(import.meta.dir), "src", "cli.ts");
-  return `${process.execPath} ${cli} statusline`;
-}
-
 export function sourceForHost(source: string, host: PiHost, command = rendererCommand()): string {
   const withCommand = rewrite(
     source,
@@ -165,10 +160,12 @@ async function backup(path: string, backupDir: string): Promise<string | null> {
 }
 
 async function writeAtomic(path: string, contents: string): Promise<void> {
-  await ensureDir(dirname(path));
-  const temporary = `${path}.obrigado-${process.pid}.tmp`;
+  // Onto the resolved file, so a symlinked extension directory keeps its link.
+  const target = await realpath(path).catch(() => path);
+  await ensureDir(dirname(target));
+  const temporary = `${target}.obrigado-${process.pid}.tmp`;
   await writeFile(temporary, contents, { mode: 0o600 });
-  await rename(temporary, path);
+  await rename(temporary, target);
 }
 
 export type PiInstallOutcome =

@@ -25,6 +25,9 @@
     "packages/opencode-plugin": {
       "name": "@obrigado/opencode-plugin",
       "version": "0.0.0",
+      "dependencies": {
+        "@obrigado/surface": "workspace:*",
+      },
       "devDependencies": {
         "@opentui/core": "0.4.5",
       },
@@ -37,6 +40,9 @@
     "packages/pi-extension": {
       "name": "@obrigado/pi-extension",
       "version": "0.0.0",
+      "devDependencies": {
+        "@obrigado/surface": "workspace:*",
+      },
     },
     "packages/shared": {
       "name": "@obrigado/shared",
@@ -48,9 +54,16 @@
         "fast-check": "catalog:",
       },
     },
+    "packages/surface": {
+      "name": "@obrigado/surface",
+      "version": "0.0.0",
+    },
     "packages/vscode-extension": {
       "name": "obrigado-vscode",
       "version": "0.0.0",
+      "dependencies": {
+        "@obrigado/surface": "workspace:*",
+      },
       "devDependencies": {
         "@types/vscode": "1.94.0",
         "@vscode/vsce": "3.9.2",
@@ -187,6 +200,8 @@
     "@obrigado/pi-extension": ["@obrigado/pi-extension@workspace:packages/pi-extension"],
 
     "@obrigado/shared": ["@obrigado/shared@workspace:packages/shared"],
+
+    "@obrigado/surface": ["@obrigado/surface@workspace:packages/surface"],
 
     "@opencode-ai/plugin": ["@opencode-ai/plugin@1.18.10", "", { "dependencies": { "@ai-sdk/provider": "3.0.8", "@opencode-ai/sdk": "1.18.10", "effect": "4.0.0-beta.83", "zod": "4.1.8" }, "peerDependencies": { "@opentui/core": ">=0.4.5", "@opentui/keymap": ">=0.4.5", "@opentui/solid": ">=0.4.5" }, "optionalPeers": ["@opentui/core", "@opentui/keymap", "@opentui/solid"] }, "sha512-l4R1ulu5wtA0+cCinzdSPkEO8ZCdIgb/ZjltzstIWQqRqeH3H880OabNaeje/ZCkSoAT8c/o9oT3tdjyFP7o7g=="],
 

@@ -3,6 +3,8 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { BEACON_MAX_EVENTS } from "@obrigado/shared";
+
 import { droppedEvents, enqueue, flushQueue, queueDepth } from "../src/beacon.ts";
 
 /**
@@ -228,5 +230,137 @@ describe("a batch the server will never accept", () => {
     const result = await flushQueue({ apiOrigin: origin(), installKey: "k".repeat(32), queuePath });
 
     expect(result).toEqual({ sent: 0, kept: 1, dropped: 0 });
+  });
+});
+
+describe("a queue larger than one request", () => {
+  test("is sent in chunks the server accepts, not refused as a whole", async () => {
+    // The server validates the whole request and caps it at BEACON_MAX_EVENTS. A queue past
+    // that used to go in one piece, be 400'd, and — because a 400 is permanent — be dropped
+    // in full. Every impression of a long outage, lost at the moment connectivity returned.
+    const lines = Array.from({ length: BEACON_MAX_EVENTS + 1 }, (_, n) =>
+      JSON.stringify({ event: impression(n % 10), queued_at: Date.now(), attempts: 0 }),
+    );
+    await Bun.write(queuePath, `${lines.join("\n")}\n`);
+
+    const result = await flushQueue({ apiOrigin: origin(), installKey: "k".repeat(32), queuePath });
+
+    expect(result).toEqual({ sent: BEACON_MAX_EVENTS + 1, kept: 0, dropped: 0 });
+    expect(received).toHaveLength(2);
+    expect(received[0]?.events).toHaveLength(BEACON_MAX_EVENTS);
+    expect(received[1]?.events).toHaveLength(1);
+  });
+
+  test("stops at the first transient failure rather than hammering a dead server", async () => {
+    respondWith = 503;
+    const lines = Array.from({ length: BEACON_MAX_EVENTS + 1 }, (_, n) =>
+      JSON.stringify({ event: impression(n % 10), queued_at: Date.now(), attempts: 0 }),
+    );
+    await Bun.write(queuePath, `${lines.join("\n")}\n`);
+
+    const result = await flushQueue({ apiOrigin: origin(), installKey: "k".repeat(32), queuePath });
+
+    expect(received).toHaveLength(1);
+    expect(result).toEqual({ sent: 0, kept: BEACON_MAX_EVENTS + 1, dropped: 0 });
+  });
+});
+
+describe("backoff", () => {
+  test("is measured from the last attempt, so a failed event is not retried on the next render", async () => {
+    // It used to be measured from when the event was queued. Once an event was five minutes
+    // old the wait was satisfied forever, and an offline laptop made a full-timeout request on
+    // every repaint of the status line.
+    respondWith = 503;
+    await enqueue(impression(1), { queuePath });
+    await flushQueue({ apiOrigin: origin(), installKey: "k".repeat(32), queuePath });
+    expect(received).toHaveLength(1);
+
+    respondWith = 200;
+    const again = await flushQueue({ apiOrigin: origin(), installKey: "k".repeat(32), queuePath });
+
+    // Not ready yet: one attempt means a two-second wait, and no time has passed.
+    expect(again).toEqual({ sent: 0, kept: 1, dropped: 0 });
+    expect(received).toHaveLength(1);
+  });
+
+  test("widens with each attempt", async () => {
+    // An event queued long ago that has already failed several times must still wait.
+    const line = JSON.stringify({
+      event: impression(2),
+      queued_at: Date.now() - 60 * 60 * 1000,
+      attempts: 6,
+      last_attempt_at: Date.now() - 30 * 1000,
+    });
+    await Bun.write(queuePath, `${line}\n`);
+
+    const result = await flushQueue({ apiOrigin: origin(), installKey: "k".repeat(32), queuePath });
+
+    // 2^6 = 64 seconds since the last attempt, and only 30 have passed.
+    expect(result).toEqual({ sent: 0, kept: 1, dropped: 0 });
+    expect(received).toHaveLength(0);
+  });
+});
+
+describe("two renders flushing at once", () => {
+  test("an event appended during another process's flush is not lost", async () => {
+    // The lost-write race: a flush read the queue, sent, and rewrote the file in place, so
+    // an append that landed between the read and the rewrite was destroyed. Renaming the
+    // queue before reading it means the append lands in a fresh file instead.
+    await enqueue(impression(1), { queuePath });
+
+    // A server that holds the request open long enough for a second process to append.
+    const { promise: held, resolve: release } = Promise.withResolvers<void>();
+    server.stop(true);
+    server = Bun.serve({
+      port: 0,
+      fetch: async (request) => {
+        received.push((await request.json()) as { events: unknown[] });
+        await held;
+        return new Response(JSON.stringify({ accepted: 1, rejected: 0 }), { status: 200 });
+      },
+    });
+
+    const flushing = flushQueue({ apiOrigin: origin(), installKey: "k".repeat(32), queuePath });
+    // Give the flush time to claim the queue and start its request.
+    await Bun.sleep(50);
+    await enqueue(impression(2), { queuePath });
+    release();
+    const result = await flushing;
+
+    expect(result.sent).toBe(1);
+    // The second event is still queued for the next flush, in the fresh file.
+    expect(await queueDepth({ queuePath })).toBe(1);
+  });
+
+  test("a flushing file left by a dead process is adopted, not orphaned", async () => {
+    const orphan = `${queuePath}.flushing-99999-1-0`;
+    await Bun.write(
+      orphan,
+      `${JSON.stringify({ event: impression(3), queued_at: Date.now(), attempts: 0 })}\n`,
+    );
+    // Old enough to be considered abandoned.
+    const { utimes } = await import("node:fs/promises");
+    const old = new Date(Date.now() - 5 * 60 * 1000);
+    await utimes(orphan, old, old);
+
+    const result = await flushQueue({ apiOrigin: origin(), installKey: "k".repeat(32), queuePath });
+
+    expect(result.sent).toBe(1);
+    expect(await Bun.file(orphan).exists()).toBe(false);
+  });
+
+  test("a flushing file another process is still using is left alone", async () => {
+    const live = `${queuePath}.flushing-99998-1-0`;
+    await Bun.write(
+      live,
+      `${JSON.stringify({ event: impression(4), queued_at: Date.now(), attempts: 0 })}\n`,
+    );
+
+    const result = await flushQueue({ apiOrigin: origin(), installKey: "k".repeat(32), queuePath });
+
+    expect(result.sent).toBe(0);
+    expect(await Bun.file(live).exists()).toBe(true);
+    // Still counted, because it has not been sent by anyone yet.
+    expect(await queueDepth({ queuePath })).toBe(1);
   });
 });

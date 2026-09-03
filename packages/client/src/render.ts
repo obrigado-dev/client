@@ -117,9 +117,14 @@ export function copyParts(item: BatchItem): SponsoredParts {
   const source: readonly WireSpan[] =
     item.spans.length > 0 ? item.spans : [{ text: item.body, link: true }];
 
-  const spans = source
-    .map((span) => Object.assign(span, { text: stripControlCharacters(span.text) }))
-    .filter((span) => span.text.length > 0);
+  // A copy, never `Object.assign` onto the wire span: that wrote the sanitised text back
+  // into the cached batch, which only stayed harmless while the batch happened to be
+  // persisted before this ran.
+  const spans: WireSpan[] = [];
+  for (const span of source) {
+    const text = stripControlCharacters(span.text);
+    if (text.length > 0) spans.push({ ...span, text });
+  }
 
   return { spans, style: item.style, effect: item.effect, brand: item.brand };
 }

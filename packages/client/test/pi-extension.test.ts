@@ -6,11 +6,11 @@ import { describe, expect, test } from "bun:test";
 
 import {
   installPiExtension,
-  rendererCommand,
   piExtensionTargets,
   sourceForHost,
   uninstallPiExtension,
 } from "../src/pi-extension.ts";
+import { rendererCommand } from "../src/renderer-command.ts";
 
 function scratch(): Promise<string> {
   return mkdtemp(join(tmpdir(), "obrigado-pi-"));

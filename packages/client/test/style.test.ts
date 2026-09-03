@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
+import { CreativeEffect as WireEffect, CreativeStyle as WireStyle } from "@obrigado/shared";
+
 import {
   applyStyle,
   CREATIVE_EFFECTS,
@@ -21,6 +23,32 @@ describe("the palette", () => {
     // escape bytes, reached through a channel we would have sanctioned.
     for (const banned of ["red", "yellow", "orange", "bright-red"]) {
       expect(isCreativeStyle(banned)).toBe(false);
+    }
+  });
+
+  test("is the wire contract's palette, exactly", () => {
+    // `render.ts` casts the wire's style string to this module's union. If the two lists
+    // ever drifted, `applyStyle` would print the literal string `undefined` into the
+    // developer's terminal — so the lists are pinned to each other here.
+    expect([...CREATIVE_STYLES]).toEqual([...WireStyle.options]);
+    expect([...CREATIVE_EFFECTS]).toEqual([...WireEffect.options]);
+  });
+
+  test("the surface package names the same colours", async () => {
+    // The host packages may not import `@obrigado/shared` (INVARIANT 13). What they share
+    // instead is `@obrigado/surface`, which carries the one copy of the colours a span may
+    // ask for. A source scan is the cheapest way to keep that copy honest: a colour added
+    // to the contract and not to the surface renders as nothing in every host, silently.
+    const sources = await Promise.all(
+      ["../../surface/src/index.ts"].map((relative) =>
+        Bun.file(new URL(relative, import.meta.url)).text(),
+      ),
+    );
+    const colours = WireStyle.options.filter((style) => style !== "default");
+    expect(colours.length).toBeGreaterThan(0);
+    for (const source of sources) {
+      for (const colour of colours) expect(source).toContain(`"${colour}"`);
+      expect(source).toContain('"italic"');
     }
   });
 

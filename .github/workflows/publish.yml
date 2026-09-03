@@ -1,0 +1,106 @@
+name: Publish
+
+# Publishes one workspace package to npm.
+#
+# Triggered by a per-package tag — `surface-v0.1.0` publishes `packages/surface` at 0.1.0 —
+# or by hand. The binaries have their own `v*` tags and their own workflow; a package
+# version is not a CLI version, so the two are not made to share a number.
+#
+# Auth is npm trusted publishing (OIDC), not a token: `id-token: write` below lets npm
+# verify that this workflow, in this repository, produced the tarball, and `--provenance`
+# records that on the package page. It needs a trusted publisher configured on npmjs.com
+# for each package (repository `obrigado-dev/client`, workflow `publish.yml`). A package
+# that does not exist yet cannot have one, so the first version of each package is
+# published by hand — see docs/PUBLISHING.md.
+
+on:
+  push:
+    tags: ["*-v*"]
+  workflow_dispatch:
+    inputs:
+      package:
+        description: "Directory under packages/ (e.g. surface)"
+        required: true
+        default: "surface"
+      tag:
+        description: "npm dist-tag"
+        required: false
+        default: "latest"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      # npm ≥ 11.5 speaks trusted publishing; the runner's Node ships an older one.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: npm install -g npm@latest
+
+      - run: bun install --frozen-lockfile
+
+      # The same gate CI runs. A tag is not a reason to publish something that does not pass.
+      - run: bun run check
+
+      - name: Resolve the package and version
+        id: target
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_PACKAGE: ${{ inputs.package }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -eu
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # `<package>-v<version>`; the version must be the manifest's, so a tag cannot
+            # publish a number nobody committed.
+            package="${REF_NAME%-v*}"
+            tagged="${REF_NAME##*-v}"
+            dist_tag="latest"
+          else
+            package="$INPUT_PACKAGE"
+            tagged=""
+            dist_tag="${INPUT_TAG:-latest}"
+          fi
+          manifest="packages/$package/package.json"
+          [ -f "$manifest" ] || { echo "no such package: $package" >&2; exit 1; }
+          version="$(bun -e "console.log(JSON.parse(await Bun.file('$manifest').text()).version)")"
+          if [ -n "$tagged" ] && [ "$tagged" != "$version" ]; then
+            echo "tag says $tagged but $manifest says $version" >&2
+            exit 1
+          fi
+          echo "package=$package" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "dist_tag=$dist_tag" >> "$GITHUB_OUTPUT"
+
+      # Packed by bun, published by npm. bun rewrites `workspace:*` to the real version and
+      # runs `prepack` (the build); npm is what signs the provenance attestation.
+      - name: Pack
+        working-directory: packages/${{ steps.target.outputs.package }}
+        run: |
+          rm -rf ../../dist/npm && mkdir -p ../../dist/npm
+          bun pm pack --destination ../../dist/npm
+
+      - name: Publish
+        run: npm publish dist/npm/*.tgz --provenance --access public --tag "${{ steps.target.outputs.dist_tag }}"
+
+      - name: Verify what was published
+        run: |
+          name="$(bun -e "console.log(JSON.parse(await Bun.file('packages/${{ steps.target.outputs.package }}/package.json').text()).name)")"
+          npm view "$name@${{ steps.target.outputs.version }}" version dist.tarball

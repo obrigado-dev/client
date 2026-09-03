@@ -14,6 +14,7 @@
  * escape bytes as visible garbage in the developer's status line. That is worse
  * than an unclickable ad, so support is opt-in by detection, never assumed.
  */
+import { isControlCharacter } from "@obrigado/shared";
 
 /**
  * Terminals with known OSC 8 support.
@@ -94,8 +95,9 @@ const BEL = "\u0007";
 export function stripControlCharacters(text: string): string {
   let out = "";
   for (const character of text) {
-    const code = character.codePointAt(0) ?? 0;
-    if (code <= 0x1f || (code >= 0x7f && code <= 0x9f)) continue;
+    // The same set the contract refuses at ingest: C0/C1 controls, which a terminal executes,
+    // and the bidirectional controls, which reorder the row the label shares with the copy.
+    if (isControlCharacter(character)) continue;
     out += character;
   }
   return out;

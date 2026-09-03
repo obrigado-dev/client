@@ -8,20 +8,30 @@
  * a package is DROPPED rather than reported as "something in the project", because the
  * project is the private part.
  */
-import { afterEach, describe, expect, test } from "bun:test";
-import { rm } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import {
-  drainRetrieval,
-  MAX_QUEUED,
-  packageOfPath,
-  RETRIEVAL_PATH,
-  recordRead,
-} from "../src/retrieval.ts";
+import { drainRetrieval, MAX_QUEUED, packageOfPath, recordRead } from "../src/retrieval.ts";
+import type { RetrievalLocation } from "../src/retrieval.ts";
+
+/**
+ * A temporary queue per test. These used to read and delete `RETRIEVAL_PATH` itself — the
+ * developer's real queue under `~/.obrigado` — on every run of the suite.
+ */
+let dir: string;
+let location: RetrievalLocation;
+let queuePath: string;
+
+beforeEach(async () => {
+  dir = await mkdtemp(join(tmpdir(), "obrigado-retrieval-"));
+  queuePath = join(dir, "retrieval.jsonl");
+  location = { retrievalPath: queuePath };
+});
 
 afterEach(async () => {
-  await rm(RETRIEVAL_PATH, { force: true });
+  await rm(dir, { recursive: true, force: true });
 });
 
 describe("path resolution", () => {
@@ -107,9 +117,9 @@ describe("the developer's own code is never reported", () => {
 
 describe("the queue", () => {
   test("a read is recorded as a package id and nothing else", async () => {
-    await recordRead(join("proj", "node_modules", "react", "index.js"));
+    await recordRead(join("proj", "node_modules", "react", "index.js"), location);
 
-    const text = await Bun.file(RETRIEVAL_PATH).text();
+    const text = await Bun.file(queuePath).text();
     expect(text.trim()).toBe(JSON.stringify({ p: "npm:react" }));
     // The path is nowhere in the file.
     expect(text).not.toContain("index.js");
@@ -117,40 +127,40 @@ describe("the queue", () => {
   });
 
   test("an unresolvable path writes nothing at all", async () => {
-    await recordRead(join("Users", "amir", "Code", "secret-project", "main.ts"));
-    expect(await Bun.file(RETRIEVAL_PATH).exists()).toBe(false);
+    await recordRead(join("Users", "amir", "Code", "secret-project", "main.ts"), location);
+    expect(await Bun.file(queuePath).exists()).toBe(false);
   });
 
   test("draining returns each package once, sorted", async () => {
-    await recordRead(join("node_modules", "react", "a.js"));
-    await recordRead(join("node_modules", "react", "b.js"));
-    await recordRead(join("node_modules", "axios", "c.js"));
+    await recordRead(join("node_modules", "react", "a.js"), location);
+    await recordRead(join("node_modules", "react", "b.js"), location);
+    await recordRead(join("node_modules", "axios", "c.js"), location);
 
-    expect(await drainRetrieval()).toEqual(["npm:axios", "npm:react"]);
+    expect(await drainRetrieval(location)).toEqual(["npm:axios", "npm:react"]);
   });
 
   test("draining clears the queue", async () => {
     // Otherwise the same reads would be reported against every subsequent impression,
     // inflating the multiplier for whatever the agent happened to open once.
-    await recordRead(join("node_modules", "react", "a.js"));
-    expect(await drainRetrieval()).toHaveLength(1);
-    expect(await drainRetrieval()).toEqual([]);
+    await recordRead(join("node_modules", "react", "a.js"), location);
+    expect(await drainRetrieval(location)).toHaveLength(1);
+    expect(await drainRetrieval(location)).toEqual([]);
   });
 
   test("draining an absent queue is empty rather than an error", async () => {
-    expect(await drainRetrieval()).toEqual([]);
+    expect(await drainRetrieval(location)).toEqual([]);
   });
 
   test("a truncated line from a concurrent append is skipped, not fatal", async () => {
-    await recordRead(join("node_modules", "react", "a.js"));
-    await Bun.write(RETRIEVAL_PATH, `${await Bun.file(RETRIEVAL_PATH).text()}{"p":"npm:half`);
+    await recordRead(join("node_modules", "react", "a.js"), location);
+    await Bun.write(queuePath, `${await Bun.file(queuePath).text()}{"p":"npm:half`);
 
-    expect(await drainRetrieval()).toEqual(["npm:react"]);
+    expect(await drainRetrieval(location)).toEqual(["npm:react"]);
   });
 
   test("a malformed entry without a namespace is rejected", async () => {
-    await Bun.write(RETRIEVAL_PATH, `${JSON.stringify({ p: "not-a-package-id" })}\n`);
-    expect(await drainRetrieval()).toEqual([]);
+    await Bun.write(queuePath, `${JSON.stringify({ p: "not-a-package-id" })}\n`);
+    expect(await drainRetrieval(location)).toEqual([]);
   });
 
   test("a pathological burst is capped rather than growing without limit", async () => {
@@ -159,8 +169,26 @@ describe("the queue", () => {
     const lines = Array.from({ length: MAX_QUEUED + 50 }, (_entry, index) =>
       JSON.stringify({ p: `npm:burst-${index}` }),
     ).join("\n");
-    await Bun.write(RETRIEVAL_PATH, `${lines}\n`);
+    await Bun.write(queuePath, `${lines}\n`);
 
-    expect((await drainRetrieval()).length).toBe(MAX_QUEUED);
+    expect((await drainRetrieval(location)).length).toBe(MAX_QUEUED);
+  });
+
+  test("an append that lands mid-drain is kept for the next drain", async () => {
+    // The drain renames the file before reading it, so a hook appending at the same moment
+    // writes into a fresh queue rather than into the one being consumed and truncated.
+    await recordRead(join("node_modules", "react", "a.js"), location);
+    const draining = drainRetrieval(location);
+    await recordRead(join("node_modules", "axios", "c.js"), location);
+    const first = await draining;
+    const second = await drainRetrieval(location);
+    expect([...first, ...second].toSorted()).toEqual(["npm:axios", "npm:react"]);
+  });
+
+  test("a queue nobody drains is reset rather than grown forever", async () => {
+    const big = `${JSON.stringify({ p: "npm:filler" })}\n`.repeat(20_000);
+    await Bun.write(queuePath, big);
+    await recordRead(join("node_modules", "react", "a.js"), location);
+    expect(await drainRetrieval(location)).toEqual(["npm:react"]);
   });
 });

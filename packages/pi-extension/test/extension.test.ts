@@ -12,13 +12,19 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import extension from "../src/obrigado.ts";
+import { splitCommand as sharedSplitCommand } from "@obrigado/surface";
 
-type Handler = (event: unknown, ctx: unknown) => Promise<void> | void;
+import extension, { splitCommand } from "../src/obrigado.ts";
+
+// The host's API, as the extension declares it — the file exports no types because it is
+// copied into an extensions directory, so the shapes are read back off the default export.
+type Api = Parameters<typeof extension>[0];
+type Handler = Parameters<Api["on"]>[1];
+type Context = Parameters<Handler>[1];
 
 function harness(): {
   handlers: Map<string, Handler>;
-  api: { on: (e: string, h: Handler) => void };
+  api: Api;
 } {
   const handlers = new Map<string, Handler>();
   return { handlers, api: { on: (event, handler) => void handlers.set(event, handler) } };
@@ -28,7 +34,7 @@ interface Recorded {
   readonly statuses: [string, string | undefined][];
 }
 
-function context(hasUI: boolean, recorded: Recorded): unknown {
+function context(hasUI: boolean, recorded: Recorded): Context {
   return {
     hasUI,
     cwd: "/tmp/project",
@@ -161,5 +167,37 @@ describe("the footer entry", () => {
     await handlers.get("turn_end")?.({}, context(true, recorded));
 
     expect(recorded.statuses).toEqual([["obrigado", "sponsored"]]);
+  });
+});
+
+/**
+ * The extension is copied into a developer's extensions directory and must stand alone, so
+ * it carries its own copy of `splitCommand` rather than importing `@obrigado/surface`. A copy
+ * drifts; this holds the two to the same answers, by relative path because the package
+ * deliberately has no dependency on the one it is being compared with.
+ */
+describe("splitCommand matches @obrigado/surface", () => {
+  const inputs = [
+    "",
+    "   ",
+    "obrigado statusline",
+    "obrigado  statusline\t--agent pi",
+    'bun "/Users/Jane Doe/obrigado/cli.ts" statusline',
+    "bun '/Users/Jane Doe/cli.ts' statusline",
+    "bun /Users/Jane\\ Doe/cli.ts statusline",
+    'bun "a \\"quoted\\" path" statusline',
+    'bun "unterminated path',
+  ];
+
+  test.each(inputs)("%j", (input) => {
+    expect(splitCommand(input)).toEqual(sharedSplitCommand(input));
+  });
+
+  test("a quoted path with a space stays one argument", () => {
+    expect(splitCommand('bun "/Users/Jane Doe/cli.ts" statusline')).toEqual([
+      "bun",
+      "/Users/Jane Doe/cli.ts",
+      "statusline",
+    ]);
   });
 });

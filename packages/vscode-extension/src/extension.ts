@@ -31,9 +31,10 @@
  */
 import { spawn } from "node:child_process";
 
+import { parseSponsored, statuslineArgv, type Sponsored } from "@obrigado/surface";
 import * as vscode from "vscode";
 
-import { statusText, tooltipMarkdown, type Sponsored } from "./creative.ts";
+import { statusText, tooltipMarkdown } from "./creative.ts";
 
 /** Matches the other hosts. The batch behind this is cached for far longer. */
 const REFRESH_MS = 30_000;
@@ -63,13 +64,9 @@ function command(): readonly string[] {
   const configured = vscode.workspace.getConfiguration("obrigado").get<string>("statuslineCommand");
   const override =
     configured !== undefined && configured.trim().length > 0
-      ? configured.trim()
+      ? configured
       : process.env["OBRIGADO_STATUSLINE_COMMAND"];
-  const base =
-    override !== undefined && override.length > 0
-      ? override.split(" ")
-      : ["obrigado", "statusline"];
-  return [...base, "--agent", host(), "--json"];
+  return statuslineArgv(host(), override);
 }
 
 /**
@@ -92,53 +89,48 @@ function fetchSponsored(cwd: string): Promise<Sponsored | null> {
     };
 
     const child = spawn(bin, args, { cwd, stdio: ["pipe", "pipe", "ignore"] });
+    // Fires only when the child has produced no line in time. A child that answered is
+    // still shipping the impression it just rendered, and must not be killed for it.
     const timer = setTimeout(() => {
       child.kill();
       done(null);
     }, RENDER_TIMEOUT_MS);
 
+    // The FIRST complete line settles the render. The renderer prints its line and then
+    // ships beacons before exiting, and waiting for `close` made the render budget and the
+    // beacon budget one budget: a slow network meant the status bar drew nothing for an
+    // impression that was already queued.
     let out = "";
-    child.stdout.on("data", (chunk: Buffer) => (out += chunk.toString()));
+    child.stdout.on("data", (chunk: Buffer) => {
+      out += chunk.toString();
+      const newline = out.indexOf("\n");
+      if (newline === -1) return;
+      const line = out.slice(0, newline).trim();
+      if (line.length === 0) {
+        out = out.slice(newline + 1);
+        return;
+      }
+      clearTimeout(timer);
+      done(parseSponsored(line));
+    });
     child.on("error", () => {
       clearTimeout(timer);
       done(null);
     });
     child.on("close", () => {
       clearTimeout(timer);
-      try {
-        const line = out.split("\n").find((value) => value.trim().length > 0);
-        if (line === undefined) return done(null);
-        const parsed = JSON.parse(line) as Partial<Sponsored>;
-        const { label, copy, url } = parsed;
-        // All three or nothing: copy without its label is an undisclosed advertisement,
-        // and copy without a URL is an impression nobody can act on.
-        if (typeof label !== "string" || typeof copy !== "string" || typeof url !== "string") {
-          return done(null);
-        }
-        if (label.length === 0 || copy.length === 0 || url.length === 0) return done(null);
-        const { spans, style, effect, brand } = parsed as Partial<Sponsored>;
-        done({
-          label,
-          copy,
-          url,
-          // A brand needs a name to be a brand. A malformed one is dropped rather than
-          // rendered half-way, because the alt text for the logo IS the name.
-          brand:
-            brand !== null && brand !== undefined && typeof brand.name === "string"
-              ? { name: brand.name, logo: typeof brand.logo === "string" ? brand.logo : null }
-              : null,
-          // Styling is optional on the wire: an older client that sends none still renders,
-          // as one unstyled link over the whole line.
-          spans: Array.isArray(spans) && spans.length > 0 ? spans : [{ text: copy, link: true }],
-          style: typeof style === "string" ? style : "default",
-          effect: typeof effect === "string" ? effect : "none",
-        });
-      } catch {
-        done(null);
-      }
+      const line = out.split("\n").find((value) => value.trim().length > 0);
+      done(line === undefined ? null : parseSponsored(line.trim()));
     });
 
-    child.stdin.end(JSON.stringify({ session_id: `${host()}-window`, cwd }));
+    // One session per window per workspace, not one per machine. A constant id made every
+    // window share a single cached batch: the first window's dependencies decided the
+    // fingerprint and the ads, and every other window reported impressions against it, so
+    // its own dependencies were never funded. `env.sessionId` is unique to this editor
+    // process; the workspace path tells two windows of one process apart.
+    child.stdin.end(
+      JSON.stringify({ session_id: `${host()}-${vscode.env.sessionId}-${cwd}`, cwd }),
+    );
   });
 }
 

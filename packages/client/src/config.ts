@@ -8,19 +8,43 @@
  */
 import type { SharingSettings } from "@obrigado/shared";
 
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { isAbsolute, join } from "node:path";
 import { chmod, mkdir } from "node:fs/promises";
 
-export const OBRIGADO_DIR = join(homedir(), ".obrigado");
+/**
+ * The home directory, or somewhere absolute when there is none.
+ *
+ * `os.homedir()` returns an empty string in a container with no `HOME` and no passwd entry —
+ * routine for distroless images — and `join("", ".obrigado")` is then `.obrigado`, relative
+ * to the working directory. On the statusline path the working directory is the developer's
+ * repository, so every queue and state file would have landed inside it: a write outside the
+ * declared file set, made silently. State goes to `XDG_STATE_HOME` if set, else the temp
+ * directory, and every path below is asserted absolute.
+ */
+function stateRoot(): string {
+  const home = homedir();
+  if (home.length > 0 && isAbsolute(home)) return home;
+  const xdg = process.env["XDG_STATE_HOME"];
+  return xdg !== undefined && isAbsolute(xdg) ? xdg : tmpdir();
+}
+
+function absolute(path: string): string {
+  if (!isAbsolute(path)) throw new Error(`obrigado: refusing a relative state path: ${path}`);
+  return path;
+}
+
+const HOME = stateRoot();
+
+export const OBRIGADO_DIR = absolute(join(HOME, ".obrigado"));
 const CONFIG_PATH = join(OBRIGADO_DIR, "config.json");
 export const BATCH_PATH = join(OBRIGADO_DIR, "batch.json");
 export const QUEUE_PATH = join(OBRIGADO_DIR, "queue.jsonl");
 export const BACKUP_DIR = join(OBRIGADO_DIR, "backups");
 export const SESSION_STATE_DIR = join(OBRIGADO_DIR, "sessions");
 
-export const CLAUDE_SETTINGS_PATH = join(homedir(), ".claude", "settings.json");
-export const CODEX_HOME = process.env["CODEX_HOME"] ?? join(homedir(), ".codex");
+export const CLAUDE_SETTINGS_PATH = absolute(join(HOME, ".claude", "settings.json"));
+export const CODEX_HOME = absolute(process.env["CODEX_HOME"] ?? join(HOME, ".codex"));
 
 export interface ClaudeIntegrationConfig {
   readonly installed: boolean;

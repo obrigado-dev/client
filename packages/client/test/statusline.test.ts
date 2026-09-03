@@ -138,6 +138,17 @@ describe("uninstalling", () => {
     expect((await readSettings(settingsPath))?.["statusLine"]).toEqual(previous);
   });
 
+  test("never restores Obrigado's own command as the developer's", async () => {
+    // Some installs recorded OUR command as the thing to put back — an older installer's
+    // narrower recogniser judged the quoted-launcher form to be the developer's. Restoring
+    // it would report "restored" and leave the ad exactly where it was.
+    await installStatusLine(settingsPath);
+    const ours = { type: "command", command: "obrigado statusline --agent claude-code" };
+    expect(await uninstallStatusLine(ours, settingsPath)).toBe("removed");
+    const settings = JSON.parse(await Bun.file(settingsPath).text()) as Record<string, unknown>;
+    expect(settings["statusLine"]).toBeUndefined();
+  });
+
   test("leaves a foreign statusline alone", async () => {
     const foreign = { type: "command", command: "other-tool" };
     await write({ statusLine: foreign });

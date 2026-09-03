@@ -9,12 +9,14 @@
 import { existsSync, readFileSync } from "node:fs";
 
 import {
+  API_VERSION,
   ApiError,
   EmailLinkCodeResponse,
   EmailLinkConfirmResponse,
   EmailLinkStatusResponse,
   EmailUnlinkResponse,
   MAX_DURATION_S,
+  PackageId,
   SessionResponse,
   ShareResponse,
   StatsResponse,
@@ -39,16 +41,38 @@ export interface SessionOptions {
   readonly signals: SessionSignals;
 }
 
+/** The most dependencies a session may carry — the contract's own cap. */
+const MAX_DEPS = 20_000;
+
+/**
+ * The dependency set as the contract will accept it.
+ *
+ * Lockfile parsers lift names verbatim from text formats, and the contract refuses an
+ * identifier with a control character or over 512 characters, and a set over twenty thousand.
+ * One such entry — a `pom.xml` whose groupId spanned lines was enough — made the whole request
+ * a 400, which `startSession` reports as null, which renders nothing: that repository was
+ * silently dark forever. Dropping the entry costs one package's attribution; dropping the
+ * request cost all of them.
+ */
+export function sanitizeDeps(deps: readonly DepEntry[]): DepEntry[] {
+  const kept: DepEntry[] = [];
+  for (const dep of deps) {
+    if (kept.length >= MAX_DEPS) break;
+    if (PackageId.safeParse(dep.p).success) kept.push(dep);
+  }
+  return kept;
+}
+
 export async function startSession(options: SessionOptions): Promise<SessionResponse | null> {
   try {
-    const response = await fetch(`${options.apiOrigin}/api/v1/session`, {
+    const response = await fetch(`${options.apiOrigin}/api/${API_VERSION}/session`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-Obrigado-Key": options.installKey,
       },
       body: JSON.stringify({
-        deps: options.deps,
+        deps: sanitizeDeps(options.deps),
         private_repo: options.privateRepo,
         signals: options.signals,
       }),
@@ -83,7 +107,7 @@ export async function fetchStats(options: StatsOptions): Promise<StatsResponse |
   try {
     // POST, not GET: the install key is a bearer credential and a GET invites it
     // into a query string, where it reaches access logs and shell history.
-    const response = await fetch(`${options.apiOrigin}/api/v1/stats`, {
+    const response = await fetch(`${options.apiOrigin}/api/${API_VERSION}/stats`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Obrigado-Key": options.installKey },
       body: "{}",
@@ -103,7 +127,7 @@ export async function changeShare(
   action: "issue" | "revoke",
 ): Promise<ShareResponse | null> {
   try {
-    const response = await fetch(`${options.apiOrigin}/api/v1/share`, {
+    const response = await fetch(`${options.apiOrigin}/api/${API_VERSION}/share`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Obrigado-Key": options.installKey },
       body: JSON.stringify({ action }),
@@ -139,7 +163,7 @@ async function postLink<T>(
   parse: (json: unknown) => T | null,
 ): Promise<LinkResult<T>> {
   try {
-    const response = await fetch(`${options.apiOrigin}/api/v1/link/${path}`, {
+    const response = await fetch(`${options.apiOrigin}/api/${API_VERSION}/link/${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Obrigado-Key": options.installKey },
       body: JSON.stringify(body),
@@ -229,6 +253,19 @@ const CI_VARIABLES = [
 ] as const;
 
 /**
+ * Whether this process is running under a CI system.
+ *
+ * Asked before anything else on the render path: §7 says "don't serve, don't count, don't
+ * bill, don't accrue", and the first of those is the client's to keep. A CI runner that
+ * requested a batch would be handed nothing by the server anyway — but not asking is cheaper,
+ * and it means no lockfile is parsed and no request leaves the build for a line nobody is
+ * looking at.
+ */
+export function isCiEnvironment(env: NodeJS.ProcessEnv = process.env): boolean {
+  return CI_VARIABLES.some((name) => env[name] !== undefined);
+}
+
+/**
  * Is this process in a container? (§14 Phase 3: `/.dockerenv`, cgroup patterns.)
  *
  * Two probes because they fail in opposite directions. `/.dockerenv` exists under
@@ -298,7 +335,7 @@ export function collectSignals(context: SignalContext): SessionSignals {
   const env = process.env;
 
   const signals: SessionSignals = {
-    ci: CI_VARIABLES.some((name) => env[name] !== undefined),
+    ci: isCiEnvironment(env),
     tty: process.stderr.isTTY === true || (env["TERM"] !== undefined && env["TERM"] !== "dumb"),
     display: env["DISPLAY"] !== undefined || env["WAYLAND_DISPLAY"] !== undefined,
     // Passed in rather than hardcoded. This was the literal string "claude-code" until a

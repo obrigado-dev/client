@@ -10,33 +10,15 @@
  * a stripped status string, and never a construct the host will interpret.
  */
 
-export interface SponsoredSpan {
-  readonly text: string;
-  readonly bold?: boolean;
-  readonly italic?: boolean;
-  // On the wire and deliberately not rendered here. The status bar has one colour for the
-  // whole item and markdown has none, so a per-run palette has nowhere to land in an editor.
-  // Kept because this type describes what ARRIVES, not what this host happens to use.
-  readonly highlight?: boolean;
-  readonly color?: "cyan" | "blue" | "green" | "magenta";
-  readonly link?: boolean;
-}
+/**
+ * The wire shape comes from `@obrigado/surface`, which every host that draws its own UI
+ * shares. `color` and `highlight` arrive and are deliberately not rendered here: the status
+ * bar has one colour for the whole item and markdown has none, so a per-run palette has
+ * nowhere to land in an editor.
+ */
+import type { Sponsored, SponsoredBrand, SponsoredSpan } from "@obrigado/surface";
 
-interface SponsoredBrand {
-  readonly name: string;
-  /** `data:image/png;base64,…`, built server-side from validated bytes. Never a URL. */
-  readonly logo: string | null;
-}
-
-export interface Sponsored {
-  readonly label: string;
-  readonly copy: string;
-  readonly url: string;
-  readonly spans: readonly SponsoredSpan[];
-  readonly style: string;
-  readonly effect: string;
-  readonly brand: SponsoredBrand | null;
-}
+export type { Sponsored, SponsoredSpan };
 
 /** Said once, rendered in the hover. */
 const FOOTER = "70% of revenue funds the packages you depend on.";

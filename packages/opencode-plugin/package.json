@@ -16,6 +16,9 @@
   "exports": {
     "./tui": "./src/tui.tsx"
   },
+  "dependencies": {
+    "@obrigado/surface": "workspace:*"
+  },
   "devDependencies": {
     "@opentui/core": "0.4.5"
   },

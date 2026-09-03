@@ -39,9 +39,10 @@
  */
 import { existsSync } from "node:fs";
 
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
 import { CODEX_HOME } from "./config.ts";
+import { rendererCommand } from "./renderer-command.ts";
 
 /** Codex's user-level config. The `[tui]` table lives here. */
 const CODEX_CONFIG_PATH = join(CODEX_HOME, "config.toml");
@@ -64,11 +65,7 @@ export const CODEX_TRACKING_ISSUE = "https://github.com/openai/codex/issues/1782
 export function codexStatusLineCommand(): string {
   const override = process.env["OBRIGADO_CODEX_STATUSLINE_COMMAND"];
   if (override !== undefined && override.length > 0) return override;
-
-  const cli = join(dirname(import.meta.path), "cli.ts");
-  return Bun.which("obrigado") === null
-    ? `${process.execPath} ${cli} statusline --agent codex`
-    : "obrigado statusline --agent codex";
+  return rendererCommand("codex");
 }
 
 /**

@@ -10,5 +10,6 @@
     "jsxImportSource": "@opentui/solid",
     "composite": true
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"]
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "references": [{ "path": "../surface" }]
 }

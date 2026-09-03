@@ -7,6 +7,7 @@ import { describe, expect, test } from "bun:test";
 import {
   AGENT_LIVE_MS,
   agentSessionLive,
+  clearSessionBatches,
   isEditorAgent,
   writeSessionState,
 } from "../src/session-state.ts";
@@ -16,12 +17,16 @@ function scratch(): Promise<string> {
   return mkdtemp(join(tmpdir(), "obrigado-live-"));
 }
 
-/** A state file for `agent`, last updated `ageMs` ago. */
+/** A state file for `agent`, last RENDERED `ageMs` ago. */
 async function seed(dir: string, agent: Agent, ageMs: number): Promise<void> {
   await mkdir(join(dir, agent), { recursive: true });
   await Bun.write(
     join(dir, agent, `${agent}-session.json`),
-    JSON.stringify({ batch: null, updated_at: Date.now() - ageMs }),
+    JSON.stringify({
+      batch: null,
+      last_render_at: Date.now() - ageMs,
+      updated_at: Date.now() - ageMs,
+    }),
   );
 }
 
@@ -88,11 +93,62 @@ describe("is an agent session live", () => {
     await writeSessionState(
       "claude-code",
       "a-session",
-      { batch: null, updated_at: Date.now() },
+      { batch: null, last_render_at: Date.now(), updated_at: Date.now() },
       {
         stateDir: dir,
       },
     );
     expect(await agentSessionLive(Date.now(), { stateDir: dir })).toBe(true);
+  });
+
+  test("a write that is not a render does not count", async () => {
+    // `updated_at` is stamped by every writer. Reading it made a file touched by a
+    // maintenance write look like a running agent, and an editor surface then billed for
+    // five minutes with nothing running.
+    const dir = await scratch();
+    await writeSessionState(
+      "claude-code",
+      "a-session",
+      { batch: null, updated_at: Date.now() },
+      { stateDir: dir },
+    );
+    expect(await agentSessionLive(Date.now(), { stateDir: dir })).toBe(false);
+  });
+
+  test("`obrigado refresh` clearing a dead session's batch does not revive it", async () => {
+    const dir = await scratch();
+    const stale = Date.now() - AGENT_LIVE_MS - 60_000;
+    await writeSessionState(
+      "claude-code",
+      "old-session",
+      {
+        batch: {
+          fp: "f".repeat(32),
+          batch: [],
+          serving: true,
+          fetched_at: stale,
+          expires_at: stale,
+          cursor: 0,
+          shown_at: stale,
+          reported: [],
+        },
+        last_render_at: stale,
+        updated_at: stale,
+      },
+      { stateDir: dir },
+    );
+
+    expect(await clearSessionBatches({ stateDir: dir })).toBe(1);
+    expect(await agentSessionLive(Date.now(), { stateDir: dir })).toBe(false);
+  });
+
+  test("state written by an older client, with no render stamp, fails closed", async () => {
+    const dir = await scratch();
+    await mkdir(join(dir, "claude-code"), { recursive: true });
+    await Bun.write(
+      join(dir, "claude-code", "legacy.json"),
+      JSON.stringify({ batch: null, updated_at: Date.now() }),
+    );
+    expect(await agentSessionLive(Date.now(), { stateDir: dir })).toBe(false);
   });
 });

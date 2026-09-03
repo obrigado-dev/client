@@ -89,7 +89,7 @@ export async function status(): Promise<number> {
     const lifetime = formatUsd(microsFromWire(stats.lifetime_micros));
     console.log(`  This month    ${period}  (${stats.period}, accrued)`);
     console.log(`  All time      ${lifetime}  to ${stats.package_count} packages`);
-    console.log(`  Sessions      ${stats.sessions}`);
+    console.log(`  Impressions   ${stats.impressions}`);
   }
 
   console.log(`  Workspace     ${workspace.deps.length} packages (from ${workspace.source})`);
@@ -157,10 +157,15 @@ export function describeServing(payload: unknown): string {
 }
 
 export async function doctor(): Promise<number> {
+  // Non-zero when something a person would want to fix was found. `doctor` exists to detect
+  // an unreadable settings file and an unreachable server, and it used to exit 0 for both —
+  // so a script wrapping it could not tell a healthy install from a broken one.
+  let healthy = true;
   const config = await readConfig();
   const tuiConfig = await readTuiConfig().catch(() => null);
   const settings = await readSettings().catch((error: unknown) => {
     console.log(`  settings.json  UNREADABLE — ${error instanceof Error ? error.message : error}`);
+    healthy = false;
     return null;
   });
 
@@ -206,13 +211,14 @@ export async function doctor(): Promise<number> {
     const response = await fetch(`${origin}/health`, { signal: AbortSignal.timeout(2000) });
     if (!response.ok) {
       console.log(`  server         HTTP ${response.status} at ${origin}`);
-      return 0;
+      return 1;
     }
     console.log(`  server         reachable at ${origin}`);
     const payload: unknown = await response.json().catch(() => null);
     console.log(`  serving        ${describeServing(payload)}`);
   } catch {
     console.log(`  server         unreachable at ${origin}`);
+    healthy = false;
   }
-  return 0;
+  return healthy ? 0 : 1;
 }

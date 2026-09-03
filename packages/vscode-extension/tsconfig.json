@@ -6,5 +6,6 @@
     "composite": true,
     "types": ["vscode", "bun"]
   },
-  "include": ["src/**/*.ts", "test/**/*.ts"]
+  "include": ["src/**/*.ts", "test/**/*.ts"],
+  "references": [{ "path": "../surface" }]
 }

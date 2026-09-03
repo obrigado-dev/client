@@ -19,10 +19,11 @@
  *   6. No auto-update, no background mutation. Install and uninstall are the
  *      only two operations that write, and both are explicit user commands.
  */
-import { rename, writeFile } from "node:fs/promises";
+import { realpath, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import { BACKUP_DIR, CLAUDE_SETTINGS_PATH, ensureDir } from "./config.ts";
+import { rendererCommand } from "./renderer-command.ts";
 
 /**
  * The command Obrigado installs.
@@ -36,18 +37,9 @@ import { BACKUP_DIR, CLAUDE_SETTINGS_PATH, ensureDir } from "./config.ts";
 export function statusLineCommand(): string {
   const override = process.env["OBRIGADO_STATUSLINE_COMMAND"];
   if (override !== undefined && override.length > 0) return override;
-
-  // `import.meta.path` is this module; the CLI entry sits beside it.
-  //
-  // The host is named explicitly rather than left to the renderer's default, so
-  // every installed command states which agent it attributes to. A default that
-  // some callers rely on and others override is a default that eventually
-  // mis-attributes revenue.
-  const cli = join(dirname(import.meta.path), "cli.ts");
-  const onPath = Bun.which("obrigado");
-  return onPath === null
-    ? `${process.execPath} ${cli} statusline --agent claude-code`
-    : "obrigado statusline --agent claude-code";
+  // The three cases — PATH, compiled binary, source checkout — are decided once, in
+  // `renderer-command.ts`, for every installer.
+  return rendererCommand("claude-code");
 }
 
 interface StatusLineEntry {
@@ -126,10 +118,14 @@ async function backupSettings(path = CLAUDE_SETTINGS_PATH): Promise<string | nul
  * either the old one or the new one.
  */
 async function writeSettingsAtomically(path: string, settings: SettingsObject): Promise<void> {
-  await ensureDir(dirname(path));
-  const temporary = `${path}.obrigado-${process.pid}.tmp`;
+  // Onto the file the path RESOLVES to. Under chezmoi, stow or a hand-rolled dotfiles repo
+  // `settings.json` is a symlink, and renaming over the link replaced it with a plain file —
+  // detaching the developer's managed config, which uninstall then could not put back.
+  const target = await realpath(path).catch(() => path);
+  await ensureDir(dirname(target));
+  const temporary = `${target}.obrigado-${process.pid}.tmp`;
   await writeFile(temporary, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
-  await rename(temporary, path);
+  await rename(temporary, target);
 }
 
 export type InstallOutcome =
@@ -205,7 +201,11 @@ export async function uninstallStatusLine(
   await backupSettings(path);
 
   const next: SettingsObject = { ...settings };
-  if (previous !== undefined && previous !== null) {
+  // Never restore OUR OWN command as "what was there before". An older installer's narrower
+  // idea of what counted as ours recorded it as the developer's in some configs — the case
+  // `claude-state.ts` already repairs on install — and restoring it here would tell the
+  // developer their line was put back while leaving the ad in place.
+  if (previous !== undefined && previous !== null && !isOurStatusLine(previous)) {
     next["statusLine"] = previous;
     await writeSettingsAtomically(path, next);
     return "restored";

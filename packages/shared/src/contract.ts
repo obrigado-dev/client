@@ -9,7 +9,7 @@
  */
 import { z } from "zod";
 
-import { parseMarkup } from "./markup.ts";
+import { hasControlCharacters, parseMarkup } from "./markup.ts";
 
 export const API_VERSION = "v1";
 
@@ -351,8 +351,17 @@ export const BeaconEvent = z.discriminatedUnion("type", [
 ]);
 export type BeaconEvent = z.infer<typeof BeaconEvent>;
 
+/**
+ * The most events one beacon request may carry.
+ *
+ * Exported because the client's queue has to chunk to it: the server validates the whole
+ * request, so a queue that had grown past this and was sent in one piece was 400'd in full —
+ * and a 400 is a permanent rejection, so every one of those impressions was dropped.
+ */
+export const BEACON_MAX_EVENTS = 500;
+
 export const BeaconRequest = z.object({
-  events: z.array(BeaconEvent).max(500),
+  events: z.array(BeaconEvent).max(BEACON_MAX_EVENTS),
 });
 export type BeaconRequest = z.infer<typeof BeaconRequest>;
 
@@ -430,9 +439,10 @@ export const AuthoredBody = z
   .string()
   .min(1)
   .max(400)
-  .refine((body) => !/\p{Cc}/u.test(body), {
+  .refine((body) => !hasControlCharacters(body), {
     message:
-      "creative copy must not contain control characters — they can erase the sponsored label",
+      "creative copy must not contain control or bidirectional characters — they can erase " +
+      "or reorder the sponsored label",
   })
   .superRefine((body, ctx) => {
     const { problems, plain } = parseMarkup(body);
@@ -472,9 +482,25 @@ export const UpdateCampaignRequest = z.object({
 });
 export type UpdateCampaignRequest = z.infer<typeof UpdateCampaignRequest>;
 
+/**
+ * Where a click lands. http(s) only.
+ *
+ * `z.url()` accepts `javascript:` and `data:`, and this value becomes an `href` on `/ads`, in
+ * the review queue and on the advertiser's own campaign page. The click redirect already
+ * refuses other schemes; the ingest should not accept what the redirect would then throw
+ * away, and a page that renders the stored value must not be one CSP misconfiguration from
+ * running it. The wall's URL field has carried this rule since it existed.
+ */
+export const ClickUrl = z
+  .url()
+  .max(2048)
+  .refine((value) => value.startsWith("https://") || value.startsWith("http://"), {
+    message: "click_url must be http(s)",
+  });
+
 export const CreateCreativeRequest = z.object({
   body: AuthoredBody,
-  click_url: z.url(),
+  click_url: ClickUrl,
   style: CreativeStyle.default("default"),
   effect: CreativeEffect.default("none"),
 });
@@ -509,7 +535,7 @@ export type CreateCreativeRequest = z.infer<typeof CreateCreativeRequest>;
  */
 export const PublishDraftRequest = z.object({
   body: AuthoredBody,
-  click_url: z.url(),
+  click_url: ClickUrl,
   style: CreativeStyle.default("default"),
   effect: CreativeEffect.default("none"),
   budget_micros: WireMicros.positive(),
@@ -552,7 +578,8 @@ export type FundedPackageWire = z.infer<typeof FundedPackageWire>;
  */
 export const StatsResponse = z.object({
   period: z.string(),
-  sessions: z.int().min(0),
+  /** Confirmed impressions. Not sessions — the money path carries no session key. */
+  impressions: z.int().min(0),
   period_micros: WireMicros,
   lifetime_micros: WireMicros,
   package_count: z.int().min(0),
@@ -615,8 +642,8 @@ export const EmailLinkRequest = z.object({
     .string()
     .min(1)
     .max(80)
-    .refine((name) => !/\p{Cc}/u.test(name), {
-      message: "display name must not contain control characters",
+    .refine((name) => !hasControlCharacters(name), {
+      message: "display name must not contain control or bidirectional characters",
     })
     .optional(),
   /**

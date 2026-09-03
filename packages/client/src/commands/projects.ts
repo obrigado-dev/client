@@ -68,7 +68,7 @@ export async function projects(): Promise<number> {
 
   console.log(
     `\n  ${formatUsd(microsFromWire(stats.lifetime_micros))} total, across ` +
-      `${stats.sessions} ${stats.sessions === 1 ? "session" : "sessions"}.`,
+      `${stats.impressions} ${stats.impressions === 1 ? "impression" : "impressions"}.`,
   );
   console.log("  Amounts are each package's share of the 70% pool, weighted by dependency depth.");
   if (stats.share_url !== undefined) console.log(`  Shareable page: ${stats.share_url}`);

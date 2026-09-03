@@ -15,5 +15,8 @@
   "type": "module",
   "exports": {
     "./extension": "./src/obrigado.ts"
+  },
+  "devDependencies": {
+    "@obrigado/surface": "workspace:*"
   }
 }

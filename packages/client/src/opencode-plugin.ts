@@ -16,7 +16,7 @@
  *   6. A file we cannot parse is a file we refuse to rewrite.
  */
 import { existsSync } from "node:fs";
-import { rename, writeFile } from "node:fs/promises";
+import { realpath, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -101,10 +101,12 @@ async function backup(path: string, backupDir: string): Promise<string | null> {
 }
 
 async function writeAtomic(path: string, document: JsonObject): Promise<void> {
-  await ensureDir(dirname(path));
-  const temporary = `${path}.obrigado-${process.pid}.tmp`;
+  // Onto the resolved file, so a symlinked `tui.json` keeps its link. See `statusline.ts`.
+  const target = await realpath(path).catch(() => path);
+  await ensureDir(dirname(target));
+  const temporary = `${target}.obrigado-${process.pid}.tmp`;
   await writeFile(temporary, `${JSON.stringify(document, null, 2)}\n`, { mode: 0o600 });
-  await rename(temporary, path);
+  await rename(temporary, target);
 }
 
 export type OpenCodeInstallOutcome =

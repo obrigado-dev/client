@@ -1,4 +1,10 @@
-import { collectSignals, hostVersionFromPayload, startSession, timingFromPayload } from "../api.ts";
+import {
+  collectSignals,
+  hostVersionFromPayload,
+  isCiEnvironment,
+  startSession,
+  timingFromPayload,
+} from "../api.ts";
 import { sharingSettings } from "../config.ts";
 import { peekRetrieval } from "../retrieval.ts";
 import { enqueue, flushQueue } from "../beacon.ts";
@@ -10,6 +16,7 @@ import {
   nextCreative,
   retrievalDigest,
 } from "@obrigado/shared/rotation";
+import type { BatchItem } from "@obrigado/shared";
 import type { CachedBatch } from "@obrigado/shared/rotation";
 import { isChainedRender, readStdinPayload, runChained } from "../chain.ts";
 import { claudeIntegration, readConfig, sponsoredPosition } from "../config.ts";
@@ -26,6 +33,7 @@ import {
   sessionIdFromPayload,
   writeSessionState,
 } from "../session-state.ts";
+import type { AgentSessionState } from "../session-state.ts";
 import { DEFAULT_AGENT, isAgent } from "../version.ts";
 import type { Agent } from "../version.ts";
 import { apiOrigin } from "./shared.ts";
@@ -52,14 +60,30 @@ export function agentFromArgv(argv: readonly string[]): Agent {
   return isAgent(value) ? value : DEFAULT_AGENT;
 }
 
+/**
+ * How long a failed session request keeps the render from trying again.
+ *
+ * Without this every repaint re-parsed the lockfiles and waited on the network — up to four
+ * seconds each — for as long as the server was down. A minute is long enough that an outage
+ * costs one request per session per minute, short enough that recovery is felt promptly.
+ */
+const RETRY_AFTER_MS = 60_000;
+
+interface BatchOutcome {
+  readonly batch: CachedBatch | null;
+  /** Set when there is no batch and the next render should not ask before this instant. */
+  readonly retryAfter?: number | undefined;
+}
+
 /** Fetch a fresh batch when the cache is cold or expired. */
 async function ensureBatch(
   config: ClientConfig,
   origin: string,
   payload: string,
-  cached: CachedBatch | null,
+  state: AgentSessionState,
   agent: Agent,
-): Promise<CachedBatch | null> {
+): Promise<BatchOutcome> {
+  const cached = state.batch;
   // Peeked, never drained: the beacon still consumes this queue to weight the payout, and
   // taking it here would leave that empty.
   const retrieved = config.sharing?.activity === true ? await peekRetrieval() : undefined;
@@ -75,7 +99,12 @@ async function ensureBatch(
     !isExhausted(cached) &&
     !activityMoved(cached, retrieval)
   ) {
-    return cached;
+    return { batch: cached };
+  }
+
+  const now = Date.now();
+  if (state.retry_after !== undefined && now < state.retry_after) {
+    return { batch: null, retryAfter: state.retry_after };
   }
 
   const { deps } = await resolveDeps();
@@ -91,7 +120,34 @@ async function ensureBatch(
       ...(retrieved === undefined ? {} : { retrieved }),
     }),
   });
-  return response === null ? null : cacheFromResponse(response, Date.now(), retrieval);
+  return response === null
+    ? { batch: null, retryAfter: now + RETRY_AFTER_MS }
+    : { batch: cacheFromResponse(response, now, retrieval) };
+}
+
+/**
+ * Persist what this render decided.
+ *
+ * `last_render_at` is what the editor liveness gate reads, and this is the one place it is
+ * set: a render by an agent host, whether or not a line came out of it. `retry_after` is
+ * carried while a failed fetch is being backed off and cleared the moment one succeeds.
+ */
+async function persistRender(
+  agent: Agent,
+  sessionId: string,
+  state: AgentSessionState,
+  outcome: BatchOutcome,
+): Promise<void> {
+  const now = Date.now();
+  const next: AgentSessionState = {
+    ...state,
+    batch: outcome.batch,
+    last_render_at: now,
+    updated_at: now,
+  };
+  if (outcome.retryAfter === undefined) delete next.retry_after;
+  else next.retry_after = outcome.retryAfter;
+  await writeSessionState(agent, sessionId, next);
 }
 
 /**
@@ -117,6 +173,30 @@ function pendingLine(text: string | null): () => void {
   };
 }
 
+/** Queue the impression for a creative that has just taken the surface. */
+async function reportImpression(item: BatchItem, payload: string): Promise<void> {
+  // §14 Phase 3: timing travels with the impression, not the session, because
+  // interactivity accumulates as the session runs. The first render of a session has
+  // almost no history and would classify as unattended on its own; the tenth has
+  // enough. Classification happens server-side at ingest from whatever this carries.
+  const timing = timingFromPayload(payload);
+  // §14 Phase 6. Drained rather than read: the queue is per-session state written by a
+  // hook, and leaving entries behind would report the same reads against every subsequent
+  // impression, inflating the multiplier for whatever the agent happened to open once.
+  const retrieved = await drainRetrieval();
+
+  const signals: { timing?: typeof timing; retrieved?: string[] } = {};
+  if (Object.keys(timing).length > 0) signals.timing = timing;
+  if (retrieved.length > 0) signals.retrieved = retrieved;
+
+  await enqueue({
+    type: "impression",
+    impression_id: item.impression_id,
+    nonce: item.nonce,
+    ...(Object.keys(signals).length === 0 ? {} : { signals }),
+  });
+}
+
 export async function statusline(argv: readonly string[] = []): Promise<number> {
   /*
    * A nested render prints nothing.
@@ -127,6 +207,17 @@ export async function statusline(argv: readonly string[] = []): Promise<number> 
    * reported for one line that was seen once.
    */
   if (isChainedRender()) return 0;
+
+  /*
+   * A build is not an audience.
+   *
+   * §7: "don't serve, don't count, don't bill, don't accrue." The server refuses a session
+   * that says `ci: true` and the classifier would never bill one, but the cheapest place to
+   * honour the first rule is here, before a lockfile is parsed or a request leaves the runner.
+   * The developer's own chained line still prints — see `finally` below — because their
+   * tooling is not what is being withheld.
+   */
+  if (isCiEnvironment()) return 0;
 
   const config = await readConfig();
   if (config === null) return 0;
@@ -178,35 +269,22 @@ export async function statusline(argv: readonly string[] = []): Promise<number> 
     // because the write below makes every later render look identical — and it is
     // the one moment per session cheap enough to sweep abandoned state on.
     const coldStart = state.batch === null;
-    const batch = await ensureBatch(config, origin, payload, state.batch, agent);
-    if (batch === null) return 0;
+    const outcome = await ensureBatch(config, origin, payload, state, agent);
+    const rotation = outcome.batch === null ? null : nextCreative(outcome.batch);
 
-    const rotation = nextCreative(batch);
-    await writeSessionState(agent, sessionId, { ...state, batch, updated_at: Date.now() });
+    /*
+     * Enqueue BEFORE persisting the rotation.
+     *
+     * `nextCreative` has marked this nonce reported in the cached batch. Persist that first
+     * and anything that fails between the write and the enqueue — a full disk, the host's
+     * kill timer — leaves an impression that is locally "reported" and never queued: lost,
+     * with no trace. The other order has a strictly better failure mode, because INVARIANT 5
+     * makes re-queuing an impression that already landed harmless.
+     */
+    if (rotation?.fresh === true) await reportImpression(rotation.item, payload);
+
+    await persistRender(agent, sessionId, state, outcome);
     if (rotation === null) return 0;
-
-    if (rotation.fresh) {
-      // §14 Phase 3: timing travels with the impression, not the session, because
-      // interactivity accumulates as the session runs. The first render of a session has
-      // almost no history and would classify as unattended on its own; the tenth has
-      // enough. Classification happens server-side at ingest from whatever this carries.
-      const timing = timingFromPayload(payload);
-      // §14 Phase 6. Drained rather than read: the queue is per-session state written by a
-      // hook, and leaving entries behind would report the same reads against every subsequent
-      // impression, inflating the multiplier for whatever the agent happened to open once.
-      const retrieved = await drainRetrieval();
-
-      const signals: { timing?: typeof timing; retrieved?: string[] } = {};
-      if (Object.keys(timing).length > 0) signals.timing = timing;
-      if (retrieved.length > 0) signals.retrieved = retrieved;
-
-      await enqueue({
-        type: "impression",
-        impression_id: rotation.item.impression_id,
-        nonce: rotation.item.nonce,
-        ...(Object.keys(signals).length === 0 ? {} : { signals }),
-      });
-    }
 
     if (structured) {
       // A host that draws its own UI cannot use an ANSI string. OpenCode's TUI has a

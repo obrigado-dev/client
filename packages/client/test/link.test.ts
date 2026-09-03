@@ -122,6 +122,19 @@ describe('stripControlCharacters — §3 "always labeled" must survive the ad co
     }
   });
 
+  test("removes the bidirectional controls that reorder the row", () => {
+    // Trojan Source, through the sanctioned channel: U+202E inside the copy makes a
+    // terminal draw the rest of the row right-to-left, so the label can be made to read
+    // after the copy — or inside it — with no control byte at all. `\p{Cc}` misses every
+    // one of these, which is what every layer used to check.
+    for (const code of [0x06_1c, 0x20_0e, 0x20_0f, 0x20_2a, 0x20_2d, 0x20_2e, 0x20_66, 0x20_69]) {
+      const text = `a${String.fromCodePoint(code)}b`;
+      expect(stripControlCharacters(text)).toBe("ab");
+    }
+    // Zero-width joiners stay: emoji sequences need them and they reorder nothing.
+    expect(stripControlCharacters("👨‍💻")).toBe("👨‍💻");
+  });
+
   test("leaves legitimate copy untouched, including punctuation and emoji", () => {
     for (const body of [
       "Postgres, but you never think about it — neon.tech",

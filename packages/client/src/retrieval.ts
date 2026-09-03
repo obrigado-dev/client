@@ -17,13 +17,34 @@
  * dropped entirely rather than reported as "something in the project" — because "the project"
  * is the private part.
  */
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, rename, stat, unlink } from "node:fs/promises";
 import { dirname, join, sep } from "node:path";
 
 import { OBRIGADO_DIR } from "./config.ts";
 
 /** Where retrieval sits until the next status-line render ships it. */
-export const RETRIEVAL_PATH = join(OBRIGADO_DIR, "retrieval.jsonl");
+const RETRIEVAL_PATH = join(OBRIGADO_DIR, "retrieval.jsonl");
+
+/**
+ * Where the queue lives. Injectable, like the beacon queue's `QueueLocation`, so a test can
+ * point at a temporary file rather than at the developer's real one — which the tests used
+ * to write into and delete on every run.
+ */
+export interface RetrievalLocation {
+  readonly retrievalPath?: string | undefined;
+}
+
+const pathOf = (location: RetrievalLocation): string => location.retrievalPath ?? RETRIEVAL_PATH;
+
+/**
+ * Past this size the queue is started again from empty.
+ *
+ * "The queue is drained on every render" holds only while a status line is rendering. A
+ * developer who installed the retrieval hook and not a working status line would otherwise
+ * grow this file for as long as their agent read files — the outcome the cap on parsing
+ * below promises to prevent and, on its own, does not.
+ */
+const MAX_FILE_BYTES = 256 * 1024;
 
 /**
  * How many entries are kept.
@@ -102,13 +123,16 @@ export function packageOfPath(path: string): string | null {
  * Silent on every failure: this runs inside the agent's tool loop, and a retrieval hook that
  * prints an error has broken something far more important than a payout multiplier.
  */
-export async function recordRead(path: string): Promise<void> {
+export async function recordRead(path: string, location: RetrievalLocation = {}): Promise<void> {
   const packageId = packageOfPath(path);
   if (packageId === null) return;
+  const queue = pathOf(location);
 
   try {
-    await mkdir(dirname(RETRIEVAL_PATH), { recursive: true });
-    await appendFile(RETRIEVAL_PATH, `${JSON.stringify({ p: packageId })}\n`, { mode: 0o600 });
+    await mkdir(dirname(queue), { recursive: true });
+    const info = await stat(queue).catch(() => null);
+    if (info !== null && info.size > MAX_FILE_BYTES) await unlink(queue).catch(() => null);
+    await appendFile(queue, `${JSON.stringify({ p: packageId })}\n`, { mode: 0o600 });
   } catch {
     // Nothing. See above.
   }
@@ -124,9 +148,9 @@ export async function recordRead(path: string): Promise<void> {
  *
  * So exactly one caller consumes, and it is still the beacon. This one only looks.
  */
-export async function peekRetrieval(): Promise<string[]> {
+export async function peekRetrieval(location: RetrievalLocation = {}): Promise<string[]> {
   try {
-    return parseQueue(await readFile(RETRIEVAL_PATH, "utf8"));
+    return parseQueue(await readFile(pathOf(location), "utf8"));
   } catch {
     return [];
   }
@@ -135,25 +159,30 @@ export async function peekRetrieval(): Promise<string[]> {
 /**
  * Take everything queued, and clear it.
  *
- * Read-then-truncate rather than read-then-delete: the status line calls this on every render,
- * and a deleted file would be recreated by the next hook with different permissions.
+ * By RENAMING the file first, then reading the renamed copy. Read-then-truncate had a window:
+ * a hook appending between the read and the truncate lost its entry silently, and the hook
+ * runs inside the agent's tool loop, exactly when files are being read. After the rename an
+ * append lands in a fresh queue, which the next hook creates with the right permissions
+ * (`recordRead` sets the mode). Two concurrent drains cannot both win the rename, so nothing
+ * is reported twice either.
  */
-export async function drainRetrieval(): Promise<string[]> {
-  let text: string;
+export async function drainRetrieval(location: RetrievalLocation = {}): Promise<string[]> {
+  const queue = pathOf(location);
+  const taken = `${queue}.draining-${process.pid}-${Date.now()}`;
   try {
-    text = await readFile(RETRIEVAL_PATH, "utf8");
+    await rename(queue, taken);
   } catch {
+    // Nothing queued, or another render took it a moment ago.
     return [];
   }
 
   try {
-    await writeFile(RETRIEVAL_PATH, "", { mode: 0o600 });
+    return parseQueue(await readFile(taken, "utf8"));
   } catch {
-    // If truncation fails the entries are reported twice, which the server deduplicates on
-    // (impression_id, event_time, package_id). Reporting twice is better than losing them.
+    return [];
+  } finally {
+    await unlink(taken).catch(() => null);
   }
-
-  return parseQueue(text);
 }
 
 /**
