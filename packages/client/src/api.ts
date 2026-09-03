@@ -230,7 +230,7 @@ export function unlinkEmail(
  * own variable, and a false negative here bills an advertiser for a build. Vendor
  * variables are checked alongside the generic ones for that reason.
  */
-const CI_VARIABLES = [
+export const CI_VARIABLES = [
   "CI",
   "CONTINUOUS_INTEGRATION",
   "BUILD_NUMBER",

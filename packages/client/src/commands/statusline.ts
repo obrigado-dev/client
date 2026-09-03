@@ -208,17 +208,6 @@ export async function statusline(argv: readonly string[] = []): Promise<number> 
    */
   if (isChainedRender()) return 0;
 
-  /*
-   * A build is not an audience.
-   *
-   * §7: "don't serve, don't count, don't bill, don't accrue." The server refuses a session
-   * that says `ci: true` and the classifier would never bill one, but the cheapest place to
-   * honour the first rule is here, before a lockfile is parsed or a request leaves the runner.
-   * The developer's own chained line still prints — see `finally` below — because their
-   * tooling is not what is being withheld.
-   */
-  if (isCiEnvironment()) return 0;
-
   const config = await readConfig();
   if (config === null) return 0;
 
@@ -253,6 +242,18 @@ export async function statusline(argv: readonly string[] = []): Promise<number> 
   if (sponsoredPosition(config) === "below") emitChained();
 
   try {
+    /*
+     * A build is not an audience.
+     *
+     * §7: "don't serve, don't count, don't bill, don't accrue." The server refuses a session
+     * that says `ci: true` and the classifier would never bill one, but the cheapest place to
+     * honour the first rule is here, before a lockfile is parsed or a request leaves the
+     * runner. It sits inside the `try`, after the developer's own command has run, because
+     * their tooling is not what is being withheld: a CI job that uses their status line still
+     * gets it, above or below, and it was returning before either when this check came first.
+     */
+    if (isCiEnvironment()) return 0;
+
     // An editor surface is a COMPANION to a running agent, not independent inventory (A21).
     // The gate lives here rather than in each extension so one rule governs every editor
     // host, and so an extension cannot opt itself into billing by forgetting to ask.

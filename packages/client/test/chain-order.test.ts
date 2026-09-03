@@ -16,11 +16,29 @@ import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
+import { CI_VARIABLES } from "../src/api.ts";
+
 const CLI = new URL("../src/cli.ts", import.meta.url).pathname;
 const THEIRS = "THEIR OWN LINE";
 
 let home: string;
 let server: ReturnType<typeof Bun.serve> | null = null;
+
+/**
+ * The child's environment, with no CI system in it.
+ *
+ * These tests run under GitHub Actions, which sets `CI` and `GITHUB_ACTIONS`, and the renderer
+ * withholds the sponsored line in CI by design. The subject here is row order, so the child
+ * gets a developer's environment unless a test asks for the CI one. Without this the tests
+ * passed on every laptop and failed on every runner.
+ */
+function childEnvironment(overrides: Record<string, string> = {}): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value !== undefined && !(CI_VARIABLES as readonly string[]).includes(key)) env[key] = value;
+  }
+  return { ...env, HOME: home, NO_COLOR: "1", OBRIGADO_HYPERLINKS: "0", ...overrides };
+}
 
 /** One creative, in the shape the contract actually clears. */
 function batchResponse(): unknown {
@@ -64,12 +82,12 @@ async function writeConfig(position: "above" | "below", origin: string): Promise
 }
 
 /** Runs the CLI the way Claude Code does: payload on stdin, one line per row on stdout. */
-async function render(): Promise<string[]> {
+async function render(overrides: Record<string, string> = {}): Promise<string[]> {
   const proc = Bun.spawn([process.execPath, CLI, "statusline", "--agent", "claude-code"], {
     stdin: new TextEncoder().encode(JSON.stringify({ session_id: "s-1", cwd: home })),
     stdout: "pipe",
     stderr: "ignore",
-    env: { ...process.env, HOME: home, NO_COLOR: "1", OBRIGADO_HYPERLINKS: "0" },
+    env: childEnvironment(overrides),
   });
   const [out] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
   return out.split("\n").filter((line) => line.trim().length > 0);
@@ -136,5 +154,39 @@ describe("when our half fails", () => {
     const lines = await render();
 
     expect(lines).toEqual([THEIRS]);
+  });
+});
+
+/*
+ * A build is not an audience, but it may well use the developer's status line. The sponsored
+ * half is withheld in CI; theirs is not, whichever row it was given.
+ */
+describe("in CI", () => {
+  let requests = 0;
+
+  beforeEach(() => {
+    requests = 0;
+    server = Bun.serve({
+      port: 0,
+      fetch: () => {
+        requests += 1;
+        return Response.json(batchResponse());
+      },
+    });
+  });
+
+  test("above prints the developer's line alone, and asks the server for nothing", async () => {
+    await writeConfig("above", `http://localhost:${server?.port}`);
+
+    const lines = await render({ CI: "true" });
+
+    expect(lines).toEqual([THEIRS]);
+    expect(requests).toBe(0);
+  });
+
+  test("below prints the developer's line alone", async () => {
+    await writeConfig("below", `http://localhost:${server?.port}`);
+
+    expect(await render({ GITHUB_ACTIONS: "true" })).toEqual([THEIRS]);
   });
 });
