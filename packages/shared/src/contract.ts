@@ -381,7 +381,7 @@ export type BeaconResponse = z.infer<typeof BeaconResponse>;
  *
  * The first two describe the PROJECT — they match the dependency set the developer already
  * sends, so they need no further consent and are the only two that existed until targeting
- * opened up. The last three describe the DEVELOPER, and each serves only to installs that
+ * opened up. The next three describe the DEVELOPER, and each serves only to installs that
  * opted into that dimension (`SharingSettings`):
  *
  *   - `region`    ISO-3166 alpha-2, matched against the install's stored country.
@@ -390,8 +390,22 @@ export type BeaconResponse = z.infer<typeof BeaconResponse>;
  *                 mapping; an advertiser wanting account targeting brings their own ranges.
  *   - `retrieval` a package the agent has been reading lately (§14 Phase 6's signal, reused
  *                 for selection rather than only for payout weighting).
+ *
+ * The last describes the SURFACE, and needs no consent because it is not a fact about a
+ * person: every session already names the host that will render the line.
+ *
+ *   - `agent`     the host id from `SessionSignals.agent` — `claude-code`, `opencode`, `pi`,
+ *                 `vscode`… — so an advertiser can buy one editor's status bar and not
+ *                 another's. Matched per request, never against the fingerprint.
  */
-export const TargetingRuleType = z.enum(["package", "ecosystem", "region", "cidr", "retrieval"]);
+export const TargetingRuleType = z.enum([
+  "package",
+  "ecosystem",
+  "region",
+  "cidr",
+  "retrieval",
+  "agent",
+]);
 export type TargetingRuleType = z.infer<typeof TargetingRuleType>;
 
 export const TargetingRule = z.object({
@@ -468,7 +482,8 @@ export const UpdateCampaignRequest = z.object({
   status: z.enum(["active", "paused", "ended"]).optional(),
   bid_micros: WireMicros.positive().optional(),
   total_budget_micros: WireMicros.positive().optional(),
-  daily_budget_micros: WireMicros.positive().optional(),
+  /** Absent means unchanged; `null` removes the cap, which a plain optional could not say. */
+  daily_budget_micros: WireMicros.positive().nullable().optional(),
   /**
    * Replaces the whole rule set when present; leaves it alone when absent.
    *
@@ -540,6 +555,8 @@ export const PublishDraftRequest = z.object({
   effect: CreativeEffect.default("none"),
   budget_micros: WireMicros.positive(),
   bid_micros: WireMicros.positive().optional(),
+  /** A per-UTC-day cap. Absent means the total budget is the only limit. */
+  daily_budget_micros: WireMicros.positive().optional(),
   targeting: z.array(TargetingRule).max(1000).default([]),
   name: z.string().trim().min(1).max(160).optional(),
   email: z.email().optional(),
