@@ -63,13 +63,13 @@ export const PackageId = z
     message: "package identifier must not contain control characters",
   });
 
-export const DepEntry = z.object({
+export const DepEntrySchema = z.object({
   /** `${ecosystem}:${name}`, e.g. `npm:react`. */
   p: PackageId,
   /** Depth in the dependency tree; 0 is a direct dependency. */
   d: z.int().min(0).max(64),
 });
-export type DepEntry = z.infer<typeof DepEntry>;
+export type DepEntry = z.infer<typeof DepEntrySchema>;
 
 /**
  * What this developer agreed to be targeted on.
@@ -87,7 +87,7 @@ export type DepEntry = z.infer<typeof DepEntry>;
  * that better-targeted inventory clears higher CPMs and 70% of that lands in the packages
  * already in their own lockfile.
  */
-export const SharingSettings = z.object({
+export const SharingSettingsSchema = z.object({
   /** Country, derived from the connecting address and stored on the install. */
   region: z.boolean().default(false),
   /** Whether the connecting address may be matched against advertiser-supplied ranges. */
@@ -95,7 +95,7 @@ export const SharingSettings = z.object({
   /** Whether recently-read package ids may select an ad, not merely weight a payout. */
   activity: z.boolean().default(false),
 });
-export type SharingSettings = z.infer<typeof SharingSettings>;
+export type SharingSettings = z.infer<typeof SharingSettingsSchema>;
 
 /**
  * Client-reported environment signals.
@@ -106,10 +106,10 @@ export type SharingSettings = z.infer<typeof SharingSettings>;
  * cannot determine a signal must be able to say so — an absent signal and a
  * false signal are different facts, and §7 requires erring toward not billing.
  */
-export const SessionSignals = z.object({
+export const SessionSignalsSchema = z.object({
   ci: z.boolean().optional(),
   /** Absent from an older client, which has consented to nothing. */
-  sharing: SharingSettings.optional(),
+  sharing: SharingSettingsSchema.optional(),
   /**
    * Packages the agent has been reading lately, for SELECTION (opt-in, `sharing.activity`).
    *
@@ -162,7 +162,7 @@ export const SessionSignals = z.object({
   client_version: z.string().max(32).optional(),
   os: z.string().max(64).optional(),
 });
-export type SessionSignals = z.infer<typeof SessionSignals>;
+export type SessionSignals = z.infer<typeof SessionSignalsSchema>;
 
 /**
  * Session timing, reported per beacon (§14 Phase 3: "interactivity (post-start human
@@ -206,13 +206,13 @@ export type SessionSignals = z.infer<typeof SessionSignals>;
  */
 export const MAX_DURATION_S = 30 * 24 * 60 * 60;
 
-export const TimingSignals = z.object({
+export const TimingSignalsSchema = z.object({
   /** Whole seconds of wall clock since the session started. */
   session_s: z.int().min(0).max(MAX_DURATION_S).optional(),
   /** Whole seconds of it spent waiting on the API. */
   api_s: z.int().min(0).max(MAX_DURATION_S).optional(),
 });
-export type TimingSignals = z.infer<typeof TimingSignals>;
+export type TimingSignals = z.infer<typeof TimingSignalsSchema>;
 
 /**
  * The styling an advertiser may request.
@@ -226,8 +226,8 @@ export type TimingSignals = z.infer<typeof TimingSignals>;
  * The client maps these to the basic 8 ANSI slots, which the developer's own
  * terminal theme remaps — so "cyan" means whatever their cyan is.
  */
-export const CreativeStyle = z.enum(["default", "cyan", "blue", "green", "magenta"]);
-export type CreativeStyle = z.infer<typeof CreativeStyle>;
+export const CreativeStyleSchema = z.enum(["default", "cyan", "blue", "green", "magenta"]);
+export type CreativeStyle = z.infer<typeof CreativeStyleSchema>;
 
 /**
  * A text effect, distinct from colour.
@@ -238,19 +238,19 @@ export type CreativeStyle = z.infer<typeof CreativeStyle>;
  * AMPLIFIES the copy, making it louder than the `sponsored` label that discloses
  * it. Reverse, blink and backgrounds are excluded for the same reason as bold.
  */
-export const CreativeEffect = z.enum(["none", "italic"]);
-export type CreativeEffect = z.infer<typeof CreativeEffect>;
+export const CreativeEffectSchema = z.enum(["none", "italic"]);
+export type CreativeEffect = z.infer<typeof CreativeEffectSchema>;
 
 // ─────────────── POST /api/v1/session ───────────────
 
-export const SessionRequest = z.object({
-  deps: z.array(DepEntry).max(20_000),
+export const SessionRequestSchema = z.object({
+  deps: z.array(DepEntrySchema).max(20_000),
   private_repo: z.boolean().default(false),
   // Required, not defaulted. Signals carry the host, and a session that will not
   // say which agent it is cannot have its impressions attributed to one.
-  signals: SessionSignals,
+  signals: SessionSignalsSchema,
 });
-export type SessionRequest = z.infer<typeof SessionRequest>;
+export type SessionRequest = z.infer<typeof SessionRequestSchema>;
 
 /**
  * A styled run of text, as the client receives it.
@@ -260,7 +260,7 @@ export type SessionRequest = z.infer<typeof SessionRequest>;
  * renderer. `link` marks part of the single tracking link, whose URL is
  * `click_url` — an advertiser never supplies per-span URLs.
  */
-export const WireSpan = z.object({
+export const WireSpanSchema = z.object({
   text: z.string().max(160),
   bold: z.boolean().optional(),
   italic: z.boolean().optional(),
@@ -268,7 +268,7 @@ export const WireSpan = z.object({
   color: z.enum(["cyan", "blue", "green", "magenta"]).optional(),
   link: z.boolean().optional(),
 });
-export type WireSpan = z.infer<typeof WireSpan>;
+export type WireSpan = z.infer<typeof WireSpanSchema>;
 
 /**
  * Who is paying for the line.
@@ -282,44 +282,44 @@ export type WireSpan = z.infer<typeof WireSpan>;
  * a developer's editor, handing them an IP address and an activity signal they did not buy.
  * Surfaces that cannot show an image ignore this; nothing depends on it rendering.
  */
-export const BatchBrand = z.object({
+export const BatchBrandSchema = z.object({
   name: z.string().min(1).max(40),
   logo: z.string().startsWith("data:image/png;base64,").max(6000).nullable().default(null),
 });
-export type BatchBrand = z.infer<typeof BatchBrand>;
+export type BatchBrand = z.infer<typeof BatchBrandSchema>;
 
-export const BatchItem = z.object({
+export const BatchItemSchema = z.object({
   impression_id: z.uuid(),
   /** Base64. An impression counts only if the beacon returns this value. */
   nonce: z.base64(),
   /** Visible text, markup removed — the accessible fallback and log form. */
   body: z.string().max(160),
   click_url: z.url(),
-  style: CreativeStyle.default("default"),
-  effect: CreativeEffect.default("none"),
+  style: CreativeStyleSchema.default("default"),
+  effect: CreativeEffectSchema.default("none"),
   /** Per-run styling. Empty means render `body` plainly. */
-  spans: z.array(WireSpan).max(48).default([]),
+  spans: z.array(WireSpanSchema).max(48).default([]),
   /** Nullable so a renderer never has to assume one exists; the server always sends it. */
-  brand: BatchBrand.nullable().default(null),
+  brand: BatchBrandSchema.nullable().default(null),
   rev_micros: WireMicros,
 });
-export type BatchItem = z.infer<typeof BatchItem>;
+export type BatchItem = z.infer<typeof BatchItemSchema>;
 
-export const SessionResponse = z.object({
+export const SessionResponseSchema = z.object({
   /** Computed server-side from `deps`. INVARIANT 8: a client-supplied
    *  fingerprint is never read. */
   fp: z.string().length(32),
-  batch: z.array(BatchItem),
+  batch: z.array(BatchItemSchema),
   ttl_seconds: z.int().positive(),
   /** INVARIANT 6: false when the killswitch is engaged. The client renders
    *  nothing at all in that case. */
   serving: z.boolean(),
 });
-export type SessionResponse = z.infer<typeof SessionResponse>;
+export type SessionResponse = z.infer<typeof SessionResponseSchema>;
 
 // ─────────────── POST /api/v1/beacon ───────────────
 
-export const BeaconEvent = z.discriminatedUnion("type", [
+export const BeaconEventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("impression"),
     impression_id: z.uuid(),
@@ -331,7 +331,7 @@ export const BeaconEvent = z.discriminatedUnion("type", [
         /** A later, explicit human action confirming an ephemeral hook surface. */
         interaction: z.enum(["user_prompt"]).optional(),
         /** Session timing at the moment this impression was shown (§14 Phase 3). */
-        timing: TimingSignals.optional(),
+        timing: TimingSignalsSchema.optional(),
         /**
          * Packages the agent actually read (§14 Phase 6).
          *
@@ -349,7 +349,7 @@ export const BeaconEvent = z.discriminatedUnion("type", [
     nonce: z.base64(),
   }),
 ]);
-export type BeaconEvent = z.infer<typeof BeaconEvent>;
+export type BeaconEvent = z.infer<typeof BeaconEventSchema>;
 
 /**
  * The most events one beacon request may carry.
@@ -360,19 +360,19 @@ export type BeaconEvent = z.infer<typeof BeaconEvent>;
  */
 export const BEACON_MAX_EVENTS = 500;
 
-export const BeaconRequest = z.object({
-  events: z.array(BeaconEvent).max(BEACON_MAX_EVENTS),
+export const BeaconRequestSchema = z.object({
+  events: z.array(BeaconEventSchema).max(BEACON_MAX_EVENTS),
 });
-export type BeaconRequest = z.infer<typeof BeaconRequest>;
+export type BeaconRequest = z.infer<typeof BeaconRequestSchema>;
 
-export const BeaconResponse = z.object({
+export const BeaconResponseSchema = z.object({
   accepted: z.int().min(0),
   /** Unknown, already-consumed, or expired nonces. Reported rather than
    *  silently dropped so a client bug is visible instead of looking like low
    *  engagement. */
   rejected: z.int().min(0),
 });
-export type BeaconResponse = z.infer<typeof BeaconResponse>;
+export type BeaconResponse = z.infer<typeof BeaconResponseSchema>;
 
 // ─────────────── Advertiser ───────────────
 
@@ -398,7 +398,7 @@ export type BeaconResponse = z.infer<typeof BeaconResponse>;
  *                 `vscode`… — so an advertiser can buy one editor's status bar and not
  *                 another's. Matched per request, never against the fingerprint.
  */
-export const TargetingRuleType = z.enum([
+export const TargetingRuleTypeSchema = z.enum([
   "package",
   "ecosystem",
   "region",
@@ -406,23 +406,23 @@ export const TargetingRuleType = z.enum([
   "retrieval",
   "agent",
 ]);
-export type TargetingRuleType = z.infer<typeof TargetingRuleType>;
+export type TargetingRuleType = z.infer<typeof TargetingRuleTypeSchema>;
 
-export const TargetingRule = z.object({
-  rule_type: TargetingRuleType,
+export const TargetingRuleSchema = z.object({
+  rule_type: TargetingRuleTypeSchema,
   rule_value: z.string().min(1).max(512),
 });
-export type TargetingRule = z.infer<typeof TargetingRule>;
+export type TargetingRule = z.infer<typeof TargetingRuleSchema>;
 
-export const CreateCampaignRequest = z.object({
+export const CreateCampaignRequestSchema = z.object({
   name: z.string().min(1).max(120),
   bid_micros: WireMicros.positive(),
   total_budget_micros: WireMicros.positive(),
   daily_budget_micros: WireMicros.positive().optional(),
   /** Empty = match all (§11). */
-  targeting: z.array(TargetingRule).max(1000).default([]),
+  targeting: z.array(TargetingRuleSchema).max(1000).default([]),
 });
-export type CreateCampaignRequest = z.infer<typeof CreateCampaignRequest>;
+export type CreateCampaignRequest = z.infer<typeof CreateCampaignRequestSchema>;
 
 /**
  * Creative copy, as an advertiser submits it.
@@ -478,7 +478,7 @@ export const AuthoredBody = z
  * serving path derives from spend, not a state an advertiser asserts, and
  * letting one claim it would make budget enforcement advisory.
  */
-export const UpdateCampaignRequest = z.object({
+export const UpdateCampaignRequestSchema = z.object({
   status: z.enum(["active", "paused", "ended"]).optional(),
   bid_micros: WireMicros.positive().optional(),
   total_budget_micros: WireMicros.positive().optional(),
@@ -493,9 +493,9 @@ export const UpdateCampaignRequest = z.object({
    * a deliberate, high-consequence choice (serve to every dependency tree), not
    * the same thing as not mentioning targeting.
    */
-  targeting: z.array(TargetingRule).max(1000).optional(),
+  targeting: z.array(TargetingRuleSchema).max(1000).optional(),
 });
-export type UpdateCampaignRequest = z.infer<typeof UpdateCampaignRequest>;
+export type UpdateCampaignRequest = z.infer<typeof UpdateCampaignRequestSchema>;
 
 /**
  * Where a click lands. http(s) only.
@@ -513,13 +513,13 @@ export const ClickUrl = z
     message: "click_url must be http(s)",
   });
 
-export const CreateCreativeRequest = z.object({
+export const CreateCreativeRequestSchema = z.object({
   body: AuthoredBody,
   click_url: ClickUrl,
-  style: CreativeStyle.default("default"),
-  effect: CreativeEffect.default("none"),
+  style: CreativeStyleSchema.default("default"),
+  effect: CreativeEffectSchema.default("none"),
 });
-export type CreateCreativeRequest = z.infer<typeof CreateCreativeRequest>;
+export type CreateCreativeRequest = z.infer<typeof CreateCreativeRequestSchema>;
 
 /**
  * One ad, composed and paid for in a single step.
@@ -548,16 +548,16 @@ export type CreateCreativeRequest = z.infer<typeof CreateCreativeRequest>;
  * actually creates the account is the one Stripe collected and signed for, never this one —
  * a self-declared email in a form is a claim, and the account is bound to a payment.
  */
-export const PublishDraftRequest = z.object({
+export const PublishDraftRequestSchema = z.object({
   body: AuthoredBody,
   click_url: ClickUrl,
-  style: CreativeStyle.default("default"),
-  effect: CreativeEffect.default("none"),
+  style: CreativeStyleSchema.default("default"),
+  effect: CreativeEffectSchema.default("none"),
   budget_micros: WireMicros.positive(),
   bid_micros: WireMicros.positive().optional(),
   /** A per-UTC-day cap. Absent means the total budget is the only limit. */
   daily_budget_micros: WireMicros.positive().optional(),
-  targeting: z.array(TargetingRule).max(1000).default([]),
+  targeting: z.array(TargetingRuleSchema).max(1000).default([]),
   name: z.string().trim().min(1).max(160).optional(),
   email: z.email().optional(),
   /**
@@ -568,7 +568,7 @@ export const PublishDraftRequest = z.object({
    */
   accepts_moderation_policy: z.literal(true),
 });
-export type PublishDraftRequest = z.infer<typeof PublishDraftRequest>;
+export type PublishDraftRequest = z.infer<typeof PublishDraftRequestSchema>;
 
 // ─────────────── Install-scoped reporting (§14 Phase 1) ───────────────
 
@@ -579,12 +579,12 @@ export type PublishDraftRequest = z.infer<typeof PublishDraftRequest>;
  * Reporting gross would overstate what a developer's sessions actually sent to
  * open source by 30/70, on the surface whose entire job is being believed.
  */
-export const FundedPackageWire = z.object({
+export const FundedPackageWireSchema = z.object({
   package_id: z.string(),
   share_micros: WireMicros,
   depth: z.int().min(0),
 });
-export type FundedPackageWire = z.infer<typeof FundedPackageWire>;
+export type FundedPackageWire = z.infer<typeof FundedPackageWireSchema>;
 
 /**
  * What `obrigado status` and `obrigado projects` render.
@@ -593,19 +593,19 @@ export type FundedPackageWire = z.infer<typeof FundedPackageWire>;
  * session count, lifetime total" — plus the share link state, so `status` can tell
  * a developer whether a public page for their install exists.
  */
-export const StatsResponse = z.object({
+export const StatsResponseSchema = z.object({
   period: z.string(),
   /** Confirmed impressions. Not sessions — the money path carries no session key. */
   impressions: z.int().min(0),
   period_micros: WireMicros,
   lifetime_micros: WireMicros,
   package_count: z.int().min(0),
-  funded: z.array(FundedPackageWire),
+  funded: z.array(FundedPackageWireSchema),
   first_seen: z.string(),
   /** Absent when the install has never been shared. */
   share_url: z.string().optional(),
 });
-export type StatsResponse = z.infer<typeof StatsResponse>;
+export type StatsResponse = z.infer<typeof StatsResponseSchema>;
 
 /**
  * Issue or revoke the share link.
@@ -614,17 +614,17 @@ export type StatsResponse = z.infer<typeof StatsResponse>;
  * has to be able to keep deliberately, and a toggle whose current state the client
  * has cached wrong would revoke when they meant to reissue.
  */
-export const ShareRequest = z.object({
+export const ShareRequestSchema = z.object({
   action: z.enum(["issue", "revoke"]),
 });
-export type ShareRequest = z.infer<typeof ShareRequest>;
+export type ShareRequest = z.infer<typeof ShareRequestSchema>;
 
-export const ShareResponse = z.object({
+export const ShareResponseSchema = z.object({
   /** Absent after a revoke. */
   share_url: z.string().optional(),
   revoked: z.boolean(),
 });
-export type ShareResponse = z.infer<typeof ShareResponse>;
+export type ShareResponse = z.infer<typeof ShareResponseSchema>;
 
 // ─────────────── POST /api/v1/link (email linking, feature-flagged) ───────────────
 
@@ -644,7 +644,7 @@ export const LinkEmail = z.email().max(254);
  *  server-side, not from the code itself. */
 export const LinkCode = z.string().regex(/^\d{6}$/u);
 
-export const EmailLinkRequest = z.object({
+export const EmailLinkRequestSchema = z.object({
   email: LinkEmail,
   /**
    * Required, never defaulted. A default here would mean the CLI decided
@@ -675,9 +675,9 @@ export const EmailLinkRequest = z.object({
     })
     .optional(),
 });
-export type EmailLinkRequest = z.infer<typeof EmailLinkRequest>;
+export type EmailLinkRequest = z.infer<typeof EmailLinkRequestSchema>;
 
-export const EmailLinkCodeResponse = z.object({
+export const EmailLinkCodeResponseSchema = z.object({
   status: z.literal("code_sent"),
   entity_kind: z.enum(["company", "individual"]),
   /**
@@ -688,15 +688,15 @@ export const EmailLinkCodeResponse = z.object({
   publishes: z.string().max(400),
   expires_in_s: z.int().positive(),
 });
-export type EmailLinkCodeResponse = z.infer<typeof EmailLinkCodeResponse>;
+export type EmailLinkCodeResponse = z.infer<typeof EmailLinkCodeResponseSchema>;
 
-export const EmailLinkConfirmRequest = z.object({
+export const EmailLinkConfirmRequestSchema = z.object({
   email: LinkEmail,
   code: LinkCode,
 });
-export type EmailLinkConfirmRequest = z.infer<typeof EmailLinkConfirmRequest>;
+export type EmailLinkConfirmRequest = z.infer<typeof EmailLinkConfirmRequestSchema>;
 
-export const LinkedEmailWire = z.object({
+export const LinkedEmailWireSchema = z.object({
   email: z.string(),
   entity_kind: z.enum(["company", "individual"]),
   verified: z.boolean(),
@@ -707,31 +707,31 @@ export const LinkedEmailWire = z.object({
   /** Whether this install's impressions have qualified the entry this period. */
   qualified_this_period: z.boolean(),
 });
-export type LinkedEmailWire = z.infer<typeof LinkedEmailWire>;
+export type LinkedEmailWire = z.infer<typeof LinkedEmailWireSchema>;
 
-export const EmailLinkConfirmResponse = z.object({
+export const EmailLinkConfirmResponseSchema = z.object({
   linked: z.boolean(),
-  entry: LinkedEmailWire.optional(),
+  entry: LinkedEmailWireSchema.optional(),
 });
-export type EmailLinkConfirmResponse = z.infer<typeof EmailLinkConfirmResponse>;
+export type EmailLinkConfirmResponse = z.infer<typeof EmailLinkConfirmResponseSchema>;
 
-export const EmailLinkStatusResponse = z.object({
+export const EmailLinkStatusResponseSchema = z.object({
   /** `YYYY-MM-01`, the period qualification is being reported against. */
   period: z.string(),
-  emails: z.array(LinkedEmailWire),
+  emails: z.array(LinkedEmailWireSchema),
 });
-export type EmailLinkStatusResponse = z.infer<typeof EmailLinkStatusResponse>;
+export type EmailLinkStatusResponse = z.infer<typeof EmailLinkStatusResponseSchema>;
 
-export const EmailUnlinkRequest = z.object({ email: LinkEmail });
-export type EmailUnlinkRequest = z.infer<typeof EmailUnlinkRequest>;
+export const EmailUnlinkRequestSchema = z.object({ email: LinkEmail });
+export type EmailUnlinkRequest = z.infer<typeof EmailUnlinkRequestSchema>;
 
-export const EmailUnlinkResponse = z.object({ unlinked: z.boolean() });
-export type EmailUnlinkResponse = z.infer<typeof EmailUnlinkResponse>;
+export const EmailUnlinkResponseSchema = z.object({ unlinked: z.boolean() });
+export type EmailUnlinkResponse = z.infer<typeof EmailUnlinkResponseSchema>;
 
 // ─────────────── Errors ───────────────
 
-export const ApiError = z.object({
+export const ApiErrorSchema = z.object({
   error: z.string(),
   detail: z.string().optional(),
 });
-export type ApiError = z.infer<typeof ApiError>;
+export type ApiError = z.infer<typeof ApiErrorSchema>;

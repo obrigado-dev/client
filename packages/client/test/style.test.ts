@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
-import { CreativeEffect as WireEffect, CreativeStyle as WireStyle } from "@obrigado/shared";
+import {
+  CreativeEffectSchema as WireEffect,
+  CreativeStyleSchema as WireStyle,
+} from "@obrigado/shared";
 
 import {
   applyStyle,

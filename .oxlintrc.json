@@ -30,26 +30,6 @@
   },
   "overrides": [
     {
-      // The wire contract is 33 Zod schemas in the `export const X` /
-      // `export type X = z.infer<typeof X>` shape. A value and a type may share a
-      // name — they are separate declaration spaces — and this is the idiom the
-      // whole contract is built on.
-      //
-      // oxlint 1.79.0 changed `no-redeclare` to run in ES modules and stopped
-      // exempting that merge, so every schema in this file reports. Upstream closed
-      // both reports (oxc #25906, #25936) as `not_planned`, so this is the rule's
-      // intended behaviour now, not a bug that a later version lifts. There is no
-      // `ignoreDeclarationMerge` option as typescript-eslint has; `builtinGlobals`
-      // is the rule's only knob.
-      //
-      // Scoped to this one file rather than switched off repo-wide: a real
-      // redeclaration anywhere else still reports, and `tsc` catches the genuine
-      // article ("Cannot redeclare block-scoped variable") in the gate's next stage
-      // regardless.
-      "files": ["packages/shared/src/contract.ts"],
-      "rules": { "eslint/no-redeclare": "off" }
-    },
-    {
       "files": ["packages/shared/src/money.ts"],
       "rules": {
         "eslint/no-restricted-globals": [

@@ -10,22 +10,29 @@ import { existsSync, readFileSync } from "node:fs";
 
 import {
   API_VERSION,
-  ApiError,
-  EmailLinkCodeResponse,
-  EmailLinkConfirmResponse,
-  EmailLinkStatusResponse,
-  EmailUnlinkResponse,
+  ApiErrorSchema,
+  EmailLinkCodeResponseSchema,
+  EmailLinkConfirmResponseSchema,
+  EmailLinkStatusResponseSchema,
+  EmailUnlinkResponseSchema,
   MAX_DURATION_S,
   PackageId,
-  SessionResponse,
-  ShareResponse,
-  StatsResponse,
+  SessionResponseSchema,
+  ShareResponseSchema,
+  StatsResponseSchema,
 } from "@obrigado/shared";
 import type {
   DepEntry,
+  EmailLinkCodeResponse,
+  EmailLinkConfirmResponse,
   EmailLinkRequest,
+  EmailLinkStatusResponse,
+  EmailUnlinkResponse,
+  SessionResponse,
   SessionSignals,
   SharingSettings,
+  ShareResponse,
+  StatsResponse,
   TimingSignals,
 } from "@obrigado/shared";
 
@@ -81,7 +88,7 @@ export async function startSession(options: SessionOptions): Promise<SessionResp
 
     if (!response.ok) return null;
 
-    const parsed = SessionResponse.safeParse(await response.json());
+    const parsed = SessionResponseSchema.safeParse(await response.json());
     return parsed.success ? parsed.data : null;
   } catch {
     // Offline, timed out, or unreachable. The status line renders nothing.
@@ -115,7 +122,7 @@ export async function fetchStats(options: StatsOptions): Promise<StatsResponse |
     });
     if (!response.ok) return null;
 
-    const parsed = StatsResponse.safeParse(await response.json());
+    const parsed = StatsResponseSchema.safeParse(await response.json());
     return parsed.success ? parsed.data : null;
   } catch {
     return null;
@@ -135,7 +142,7 @@ export async function changeShare(
     });
     if (!response.ok) return null;
 
-    const parsed = ShareResponse.safeParse(await response.json());
+    const parsed = ShareResponseSchema.safeParse(await response.json());
     return parsed.success ? parsed.data : null;
   } catch {
     return null;
@@ -172,7 +179,7 @@ async function postLink<T>(
 
     const json: unknown = await response.json().catch(() => null);
     if (!response.ok) {
-      const parsed = ApiError.safeParse(json);
+      const parsed = ApiErrorSchema.safeParse(json);
       return { ok: false, error: parsed.success ? parsed.data.error : `http_${response.status}` };
     }
 
@@ -192,7 +199,7 @@ export function requestEmailLink(
   request: EmailLinkRequest,
 ): Promise<LinkResult<EmailLinkCodeResponse>> {
   return postLink(options, "request", request, (json) =>
-    parsedOrNull(EmailLinkCodeResponse.safeParse(json)),
+    parsedOrNull(EmailLinkCodeResponseSchema.safeParse(json)),
   );
 }
 
@@ -202,7 +209,7 @@ export function confirmEmailLink(
   code: string,
 ): Promise<LinkResult<EmailLinkConfirmResponse>> {
   return postLink(options, "confirm", { email, code }, (json) =>
-    parsedOrNull(EmailLinkConfirmResponse.safeParse(json)),
+    parsedOrNull(EmailLinkConfirmResponseSchema.safeParse(json)),
   );
 }
 
@@ -210,7 +217,7 @@ export function emailLinkStatus(
   options: StatsOptions,
 ): Promise<LinkResult<EmailLinkStatusResponse>> {
   return postLink(options, "status", {}, (json) =>
-    parsedOrNull(EmailLinkStatusResponse.safeParse(json)),
+    parsedOrNull(EmailLinkStatusResponseSchema.safeParse(json)),
   );
 }
 
@@ -219,7 +226,7 @@ export function unlinkEmail(
   email: string,
 ): Promise<LinkResult<EmailUnlinkResponse>> {
   return postLink(options, "unlink", { email }, (json) =>
-    parsedOrNull(EmailUnlinkResponse.safeParse(json)),
+    parsedOrNull(EmailUnlinkResponseSchema.safeParse(json)),
   );
 }
 

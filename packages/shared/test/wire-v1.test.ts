@@ -27,13 +27,12 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  BeaconRequest,
-  EmailLinkConfirmRequest,
-  EmailLinkRequest,
+  BeaconRequestSchema,
+  EmailLinkConfirmRequestSchema,
+  EmailLinkRequestSchema,
   MAX_DURATION_S,
-  SessionRequest,
+  SessionRequestSchema,
 } from "../src/contract.ts";
-
 /**
  * The oldest session request shape that has ever shipped.
  *
@@ -101,19 +100,19 @@ const V1_BEACON_FULL = {
 
 describe("a v1 client's session request still parses", () => {
   test("the minimal shape, from before the signals existed", () => {
-    const parsed = SessionRequest.safeParse(V1_SESSION_MINIMAL);
+    const parsed = SessionRequestSchema.safeParse(V1_SESSION_MINIMAL);
     expect(parsed.error?.message ?? "ok").toBe("ok");
   });
 
   test("the full shape, from a current client", () => {
-    const parsed = SessionRequest.safeParse(V1_SESSION_FULL);
+    const parsed = SessionRequestSchema.safeParse(V1_SESSION_FULL);
     expect(parsed.error?.message ?? "ok").toBe("ok");
   });
 
   test("a signal the client has never heard of does not break it", () => {
     // Forward compatibility in the other direction: a server that adds an optional signal
     // must not require it, or every install stops working the moment it deploys.
-    const parsed = SessionRequest.safeParse({
+    const parsed = SessionRequestSchema.safeParse({
       ...V1_SESSION_MINIMAL,
       signals: { ...V1_SESSION_MINIMAL.signals, some_future_signal: true },
     });
@@ -123,12 +122,12 @@ describe("a v1 client's session request still parses", () => {
 
 describe("a v1 client's beacon still parses", () => {
   test("the minimal shape", () => {
-    const parsed = BeaconRequest.safeParse(V1_BEACON_MINIMAL);
+    const parsed = BeaconRequestSchema.safeParse(V1_BEACON_MINIMAL);
     expect(parsed.error?.message ?? "ok").toBe("ok");
   });
 
   test("the full shape, impression and click together", () => {
-    const parsed = BeaconRequest.safeParse(V1_BEACON_FULL);
+    const parsed = BeaconRequestSchema.safeParse(V1_BEACON_FULL);
     expect(parsed.error?.message ?? "ok").toBe("ok");
   });
 });
@@ -141,7 +140,7 @@ describe("the bounds a client can actually hit", () => {
     const twoDays = 2 * 24 * 60 * 60;
     expect(twoDays).toBeLessThanOrEqual(MAX_DURATION_S);
 
-    const parsed = BeaconRequest.safeParse({
+    const parsed = BeaconRequestSchema.safeParse({
       events: [
         {
           ...V1_BEACON_MINIMAL.events[0],
@@ -165,7 +164,7 @@ describe("every install can be identified", () => {
     // `agent_version` is the HOST's. Without a separate field there is no way to ask what
     // Obrigado version is deployed — which is the question every incident starts with once
     // the backend ships separately from the extensions.
-    const parsed = SessionRequest.parse(V1_SESSION_FULL);
+    const parsed = SessionRequestSchema.parse(V1_SESSION_FULL);
     expect(parsed.signals.client_version).toBe("0.0.0");
     expect(parsed.signals.agent_version).toBe("2.1.4");
     expect(parsed.signals.client_version).not.toBe(parsed.signals.agent_version);
@@ -204,11 +203,13 @@ describe("v1 email-link requests keep parsing", () => {
   };
 
   test("minimal and full link requests parse", () => {
-    expect(EmailLinkRequest.safeParse(V1_LINK_MINIMAL).error?.message ?? "ok").toBe("ok");
-    expect(EmailLinkRequest.safeParse(V1_LINK_FULL).error?.message ?? "ok").toBe("ok");
+    expect(EmailLinkRequestSchema.safeParse(V1_LINK_MINIMAL).error?.message ?? "ok").toBe("ok");
+    expect(EmailLinkRequestSchema.safeParse(V1_LINK_FULL).error?.message ?? "ok").toBe("ok");
   });
 
   test("the confirm shape parses", () => {
-    expect(EmailLinkConfirmRequest.safeParse(V1_LINK_CONFIRM).error?.message ?? "ok").toBe("ok");
+    expect(EmailLinkConfirmRequestSchema.safeParse(V1_LINK_CONFIRM).error?.message ?? "ok").toBe(
+      "ok",
+    );
   });
 });
