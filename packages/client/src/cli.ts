@@ -23,6 +23,7 @@ const USAGE = `obrigado — sponsored status lines that fund your dependencies
   obrigado install --chain     keep your existing statusline, add ours beneath
   obrigado install --above     put ours above your line instead (with --chain)
   obrigado install --replace   take over an existing statusline (reversible)
+  obrigado install --no-input  skip the targeting questions; everything stays off
   obrigado uninstall [--agent claude-code|opencode|codex]
   obrigado status              this month, all time, and top funded packages
   obrigado projects            every package this install has funded, ranked
@@ -33,7 +34,7 @@ const USAGE = `obrigado — sponsored status lines that fund your dependencies
   obrigado unlink you@company.com  remove the email and its listing
   obrigado config              show settings; config <name> <value> to change one
   obrigado privacy             what advertisers may target you on (all off by default)
-  obrigado privacy <name> on|off   region, network or activity
+  obrigado privacy <name> on|off   packages, region, network or activity
   obrigado refresh             discard the cached batch and fetch a new one
   obrigado statusline          render one line (called by the host)
   obrigado statusline --agent <host>  the same line, attributed to that host

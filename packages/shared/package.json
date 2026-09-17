@@ -19,7 +19,8 @@
     "./money": "./src/money.ts",
     "./contract": "./src/contract.ts",
     "./markup": "./src/markup.ts",
-    "./rotation": "./src/rotation.ts"
+    "./rotation": "./src/rotation.ts",
+    "./socials": "./src/socials.ts"
   },
   "dependencies": {
     "zod": "catalog:"

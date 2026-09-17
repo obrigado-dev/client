@@ -25,7 +25,7 @@ import { INSTALLABLE_AGENTS, type InstallableAgentId } from "@obrigado/shared/ag
 
 import { installStatusLine, statusLineCommand, uninstallStatusLine } from "../statusline.ts";
 import type { InstallOutcome } from "../statusline.ts";
-import { printTargetingOffer } from "./privacy.ts";
+import { decideSharing, reportStored } from "./privacy-prompt.ts";
 import type { AdapterResult, Remover } from "./adapters.ts";
 import { installPiHosts, removePiHost } from "./install-pi.ts";
 import { positionFromArgv, resolveClaudeState } from "./claude-state.ts";
@@ -218,6 +218,7 @@ export async function install(argv: readonly string[] = []): Promise<number> {
   results.push(...(await installPiHosts(targets, requestedAgent(argv), existing, integrations)));
 
   if (results.some((result) => result.changed)) {
+    const decision = await decideSharing(existing, argv);
     const next: ClientConfig = {
       ...existing,
       install_key: existing?.install_key ?? generateInstallKey(),
@@ -227,12 +228,10 @@ export async function install(argv: readonly string[] = []): Promise<number> {
       session_summary: existing?.session_summary ?? true,
       // Never defaulted on, and never silently carried forward as anything but what the
       // developer last chose. An install that has said nothing has consented to nothing.
-      ...(existing?.sharing === undefined ? {} : { sharing: existing.sharing }),
+      ...(decision.sharing === undefined ? {} : { sharing: decision.sharing }),
     };
     await writeConfig(next);
-    console.log(`\nShared install key stored in ${OBRIGADO_DIR}/config.json (mode 0600).`);
-    console.log("70% of gross revenue goes to the packages your project depends on.");
-    printTargetingOffer(next.sharing);
+    reportStored(decision);
   }
   return results.some((result) => result.failed) ? 1 : 0;
 }

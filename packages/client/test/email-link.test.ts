@@ -109,6 +109,48 @@ describe("requesting a code", () => {
     expect(requests[0]?.body["url"]).toBe("https://ada.dev");
   });
 
+  test("--url and platform handles ride along for a company too, handles without the @", async () => {
+    respond = () => Response.json(CODE_SENT);
+
+    const exit = await link([
+      "dev@acme.com",
+      "--url",
+      "https://acme.dev/blog",
+      "--github",
+      "@acme",
+      "--x",
+      "acme_hq",
+    ]);
+
+    expect(exit).toBe(0);
+    expect(requests[0]?.body["url"]).toBe("https://acme.dev/blog");
+    expect(requests[0]?.body["socials"]).toEqual({ github: "acme", x: "acme_hq" });
+  });
+
+  test("a second account on one platform is refused before any request", async () => {
+    const exit = await link(["dev@acme.com", "--github", "acme", "--github", "acme-labs"]);
+
+    expect(exit).toBe(1);
+    expect(requests).toHaveLength(0);
+    expect(output()).toContain("--github given twice");
+  });
+
+  test("something that is not a handle is refused locally, with the platform named", async () => {
+    const exit = await link(["dev@acme.com", "--x", "https://x.com/acme"]);
+
+    expect(exit).toBe(1);
+    expect(requests).toHaveLength(0);
+    expect(output()).toContain("is not a valid X handle");
+  });
+
+  test("no handles means no socials key on the wire", async () => {
+    respond = () => Response.json(CODE_SENT);
+
+    await link(["dev@acme.com"]);
+
+    expect(requests[0]?.body).not.toHaveProperty("socials");
+  });
+
   test("a feature-flagged-off server produces a sentence, not a mystery", async () => {
     respond = () => Response.json({ error: "feature_disabled" }, { status: 404 });
 

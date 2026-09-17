@@ -14,21 +14,49 @@ import { confirmEmailLink, emailLinkStatus, requestEmailLink, unlinkEmail } from
 import { readConfig, writeConfig } from "../config.ts";
 import type { ClientConfig } from "../config.ts";
 import { apiOrigin } from "./shared.ts";
-import type { LinkedEmailWire } from "@obrigado/shared";
-import { LinkCode, LinkEmail } from "@obrigado/shared";
+import type { LinkedEmailWire, Socials } from "@obrigado/shared";
+import {
+  isSocialPlatform,
+  LinkCode,
+  LinkEmail,
+  normalizeHandle,
+  SOCIAL_PLATFORM_IDS,
+  SOCIAL_PLATFORMS,
+} from "@obrigado/shared";
+
+/** One flag per platform, generated from the table the server validates against, wrapped. */
+function platformFlags(): string {
+  const lines: string[] = [];
+  let line = "";
+  for (const flag of SOCIAL_PLATFORM_IDS.map((platform) => `--${platform}`)) {
+    if (line !== "" && line.length + flag.length + 1 > 72) {
+      lines.push(line);
+      line = "";
+    }
+    line = line === "" ? flag : `${line} ${flag}`;
+  }
+  if (line !== "") lines.push(line);
+  return lines.map((text) => `  ${text}`).join("\n");
+}
 
 const LINK_USAGE = `obrigado link — put your name (or your company's domain) on obrigado.dev/obrigado
 
   obrigado link                          where each linked email stands this month
   obrigado link you@company.com          request a verification code
-  obrigado link you@gmail.com --name "Ada L" [--url https://ada.dev]
+  obrigado link you@gmail.com --name "Ada L"
   obrigado link --code 123456            confirm with the emailed code
   obrigado link you@company.com --no-list  verify without being listed
   obrigado unlink you@company.com        remove the link and the listing
 
-A company-domain email lists the domain itself; a personal email lists the name
-you give (reviewed before it appears). Listing lasts only while a linked install
-sees a sponsored line that month — the page re-earns itself on the 1st.
+Links, on either kind of email:
+  --url https://ada.dev                  one website
+  --github ada --x ada_l                 one handle per platform, from:
+${platformFlags()}
+
+A company-domain email lists the domain and its links as soon as it is verified; a
+personal email lists the name and links you give once they have been reviewed. Listing
+lasts only while a linked install sees a sponsored line that month — the page re-earns
+itself on the 1st.
 `;
 
 /**
@@ -65,21 +93,25 @@ interface LinkArgs {
   readonly code?: string | undefined;
   readonly name?: string | undefined;
   readonly url?: string | undefined;
+  readonly socials?: Socials | undefined;
   readonly noList: boolean;
   readonly problem?: string | undefined;
 }
 
-/** Tiny by-hand parse, same trade as `cli.ts`: a parser dependency for five flags
- *  would be more surface than the flags. */
+/** Tiny by-hand parse, same trade as `cli.ts`: a parser dependency for a handful of flags
+ *  would be more surface than the flags. The platform flags come from the shared table, and
+ *  a handle is checked here as well as on the server so a typo is a sentence, not a 400. */
 function parseArgs(argv: readonly string[]): LinkArgs {
   let email: string | undefined;
   let code: string | undefined;
   let name: string | undefined;
   let url: string | undefined;
+  const socials: Socials = {};
   let noList = false;
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i] as string;
+    const platform = arg.startsWith("--") ? arg.slice(2) : "";
     if (arg === "--no-list") {
       noList = true;
     } else if (arg === "--code" || arg === "--name" || arg === "--url") {
@@ -88,6 +120,20 @@ function parseArgs(argv: readonly string[]): LinkArgs {
       if (arg === "--code") code = value;
       if (arg === "--name") name = value;
       if (arg === "--url") url = value;
+      i += 1;
+    } else if (isSocialPlatform(platform)) {
+      const value = argv[i + 1];
+      const { label } = SOCIAL_PLATFORMS[platform];
+      if (value === undefined) return { noList, problem: `${arg} needs a value` };
+      // One account per platform: the second flag is a mistake, not a replacement.
+      if (socials[platform] !== undefined) {
+        return { noList, problem: `${arg} given twice — one ${label} account per email` };
+      }
+      const handle = normalizeHandle(platform, value);
+      if (handle === null) {
+        return { noList, problem: `${JSON.stringify(value)} is not a valid ${label} handle` };
+      }
+      socials[platform] = handle;
       i += 1;
     } else if (arg.startsWith("--")) {
       return { noList, problem: `unknown flag ${arg}` };
@@ -98,7 +144,7 @@ function parseArgs(argv: readonly string[]): LinkArgs {
     }
   }
 
-  return { email, code, name, url, noList };
+  return { email, code, name, url, socials, noList };
 }
 
 function describe(entry: LinkedEmailWire): string {
@@ -166,6 +212,9 @@ async function requestFlow(flow: Flow, args: LinkArgs, email: string): Promise<n
     consent_listing: !args.noList,
     ...(args.name === undefined ? {} : { display_name: args.name }),
     ...(args.url === undefined ? {} : { url: args.url }),
+    ...(args.socials === undefined || Object.keys(args.socials).length === 0
+      ? {}
+      : { socials: args.socials }),
   };
 
   const result = await requestEmailLink(flow.options, request);

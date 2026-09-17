@@ -115,8 +115,11 @@ export interface ClientConfig {
    * What this developer agreed to be targeted on. Absent means none of it.
    *
    * Independent flags rather than a level: somebody may be happy to share a country and not
-   * what their agent is reading, or the reverse, and a 0-3 scale would present that as a
+   * what their agent is reading, or the reverse, and a scale would present that as a
    * hierarchy of trust it is not.
+   *
+   * `packages` covers the lockfile. The deps are sent regardless because they are what the
+   * payout is split across; the flag decides whether an advertiser may target them.
    *
    * Sent on every session, so turning one off takes effect on the next render rather than at
    * some later sync — and the server nulls what it had stored rather than merely stopping.
@@ -128,6 +131,7 @@ export interface ClientConfig {
    * that lands in the packages already in their own lockfile.
    */
   readonly sharing?: {
+    readonly packages?: boolean;
     readonly region?: boolean;
     readonly network?: boolean;
     readonly activity?: boolean;
@@ -137,6 +141,7 @@ export interface ClientConfig {
 /** What the wire carries, with absent meaning "consented to nothing". */
 export function sharingSettings(config: ClientConfig | null): SharingSettings {
   return {
+    packages: config?.sharing?.packages ?? false,
     region: config?.sharing?.region ?? false,
     network: config?.sharing?.network ?? false,
     activity: config?.sharing?.activity ?? false,

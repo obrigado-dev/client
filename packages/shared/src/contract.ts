@@ -10,6 +10,7 @@
 import { z } from "zod";
 
 import { hasControlCharacters, parseMarkup } from "./markup.ts";
+import { isHandle, perPlatform, SOCIAL_PLATFORMS } from "./socials.ts";
 
 export const API_VERSION = "v1";
 
@@ -74,9 +75,9 @@ export type DepEntry = z.infer<typeof DepEntrySchema>;
 /**
  * What this developer agreed to be targeted on.
  *
- * Three independent flags, not one level: somebody may be happy to share a country and not
+ * Four independent flags, not one level: somebody may be happy to share a country and not
  * what their agent is reading, or the reverse, and an ordinal would present that as a
- * hierarchy of trust it is not. All default false — an absent object means an older client,
+ * hierarchy of trust it is not. All default false. An absent object means an older client,
  * and an older client has consented to nothing.
  *
  * Sent on EVERY session rather than recorded once, because it is the developer's live choice
@@ -88,6 +89,19 @@ export type DepEntry = z.infer<typeof DepEntrySchema>;
  * already in their own lockfile.
  */
 export const SharingSettingsSchema = z.object({
+  /**
+   * Whether the dependency set may SELECT an ad, not merely receive the payout.
+   *
+   * The deps are sent either way: they are what the 70% is split across, and an install that
+   * withheld them would fund nothing. What this flag governs is whether an advertiser may buy
+   * `package:` or `ecosystem:` reach against them. Off, the lockfile pays maintainers and
+   * tells advertisers nothing.
+   *
+   * It was not a flag at all until A28, because package targeting was the product's one
+   * baseline. Baseline consent is not consent, and the honest version of "all of it is off
+   * unless you say otherwise" has to include the dimension the business likes most.
+   */
+  packages: z.boolean().default(false),
   /** Country, derived from the connecting address and stored on the install. */
   region: z.boolean().default(false),
   /** Whether the connecting address may be matched against advertiser-supplied ranges. */
@@ -644,6 +658,25 @@ export const LinkEmail = z.email().max(254);
  *  server-side, not from the code itself. */
 export const LinkCode = z.string().regex(/^\d{6}$/u);
 
+/**
+ * One handle per platform, keyed by platform — so "one account per platform" is the shape of
+ * the object, not a rule. Checked against the same patterns the page renders with
+ * (`socials.ts`), so nothing reaches the database that the page would then refuse to link. A
+ * key this version does not know is stripped rather than refused, like every other object on
+ * the wire: a newer CLI offering a platform the server has not shipped loses that one link,
+ * not the whole request.
+ */
+const SocialHandlesSchema = z.object(
+  perPlatform((platform) =>
+    z
+      .string()
+      .refine((handle) => isHandle(platform, handle), {
+        message: `not a valid ${SOCIAL_PLATFORMS[platform].label} handle`,
+      })
+      .optional(),
+  ),
+);
+
 export const EmailLinkRequestSchema = z.object({
   email: LinkEmail,
   /**
@@ -664,8 +697,9 @@ export const EmailLinkRequestSchema = z.object({
     })
     .optional(),
   /**
-   * Individuals only. http(s) enforced because this becomes an `href` on a
-   * public page — `z.url()` alone would accept `javascript:`.
+   * One website, for either kind — for a company, the one link beside the domain it is
+   * already listed under (A29). http(s) enforced because this becomes an `href` on a public
+   * page — `z.url()` alone would accept `javascript:`.
    */
   url: z
     .url()
@@ -674,6 +708,8 @@ export const EmailLinkRequestSchema = z.object({
       message: "url must be http(s)",
     })
     .optional(),
+  /** Social handles, for either kind (A29). */
+  socials: SocialHandlesSchema.optional(),
 });
 export type EmailLinkRequest = z.infer<typeof EmailLinkRequestSchema>;
 

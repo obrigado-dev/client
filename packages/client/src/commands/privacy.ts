@@ -12,12 +12,18 @@
  * lands in the open-source packages already in that developer's own lockfile. So the honest
  * pitch is the indirect one — your dependencies earn more — and it is the only one on offer.
  *
- * ## Three settings, not a level
+ * ## Four settings, not a level
  *
  * They are independent because the concerns are: somebody may be happy to say which country
- * they are in and not what their agent has been reading, or the reverse. A single 0–3 scale
- * would present that as a hierarchy of trust, and it is not one — `network` stores nothing at
- * all while `region` stores a country, so the "higher" setting holds less data.
+ * they are in and not what their agent has been reading, or the reverse. A single scale would
+ * present that as a hierarchy of trust, and it is not one: `network` stores nothing at all
+ * while `region` stores a country, so the "higher" setting holds less data.
+ *
+ * `packages` is the one that used to be free. Until A28 the lockfile targeted whether the
+ * developer liked it or not, on the grounds that it was the product. A baseline nobody agreed
+ * to is not a baseline, so it is a flag like the rest and starts off like the rest. The deps
+ * still travel on every session: they are what the 70% is split across, and the flag only
+ * decides whether an advertiser may buy reach against them.
  *
  * ## Turning one off erases
  *
@@ -27,9 +33,15 @@
  */
 import { readConfig, writeConfig } from "../config.ts";
 import type { ClientConfig } from "../config.ts";
+import type { SharingSettings } from "@obrigado/shared";
 
 interface Dimension {
-  readonly key: "region" | "network" | "activity";
+  /**
+   * Keyed off the wire type rather than a union repeated here, so a fourth targeting field
+   * added to the contract fails to build until this table describes it. A dimension the
+   * server can act on and the client never names is one nobody consented to.
+   */
+  readonly key: keyof SharingSettings;
   readonly label: string;
   readonly what: string;
   readonly stored: string;
@@ -43,35 +55,47 @@ interface Dimension {
  * guess. Network targeting is the invasive-sounding one and is the only one that persists
  * nothing.
  */
-const DIMENSIONS: readonly Dimension[] = [
+export const DIMENSIONS: readonly Dimension[] = [
+  {
+    key: "packages",
+    label: "packages",
+    what: "Advertisers target the packages you depend on.",
+    stored:
+      "Stores nothing new. Your lockfile is already sent, because it is what the payout " +
+      "is split across. This decides whether it can also pick the ad.",
+  },
   {
     key: "region",
     label: "region",
-    what: "Advertisers can target the country you are in.",
-    stored: "Your country is stored on this install. Not a history — the current value only.",
+    what: "Advertisers target your country.",
+    stored: "Stores your country. Current value, no history.",
   },
   {
     key: "network",
     label: "network",
-    what: "Advertisers can target IP ranges they supply, and yours is checked against them.",
-    stored: "Nothing is stored. Your address is compared during the request and discarded.",
+    what: "Advertisers match your IP against ranges they supply.",
+    stored: "Stores nothing. Checked during the request, then dropped.",
   },
   {
     key: "activity",
     label: "activity",
-    what: "Advertisers can target the packages your agent has been reading lately.",
+    what: "Advertisers target packages your agent read recently.",
     stored:
-      "Nothing new. These are the package ids `obrigado read` already reports, resolved on " +
-      "this machine — never a file path, and never your conversation.",
+      "Stores nothing new. Package ids `obrigado read` already reports, resolved locally. " +
+      "No paths, no conversation.",
   },
 ];
 
 /**
- * The one place a developer is told targeting exists.
+ * The offer, for the install that cannot be asked.
  *
- * Printed rather than prompted, and that is the deliberate half: `install` runs in scripts and
- * pipes, and a blocking question would hang them. Nothing is turned on here — the offer is
- * made, the command to accept it is given, and the default stays off.
+ * `install` runs in provisioning scripts, Dockerfiles and CI, where a blocking question is a
+ * hang rather than a question — so this is what a run with no terminal attached gets, and what
+ * `--no-input` forces. A developer at a keyboard gets `runTargetingSetup` instead, which asks
+ * the same three things and shows the JSON each answer produces.
+ *
+ * Nothing is turned on here either way. The offer is made, the command to accept it is given,
+ * and the default stays off.
  *
  * The pitch is the indirect one because it is the only honest one. §3's "you earn nothing from
  * it" is what makes farming impressions pointless, so the developer is not paid for this and
@@ -80,19 +104,41 @@ const DIMENSIONS: readonly Dimension[] = [
  */
 export function printTargetingOffer(sharing: ClientConfig["sharing"]): void {
   if (sharing?.region === true || sharing?.network === true || sharing?.activity === true) {
-    console.log("\nTargeting settings kept from your previous install — `obrigado privacy`.");
+    console.log("\nTargeting settings kept from your last install. See `obrigado privacy`.");
     return;
   }
 
   console.log(
-    "\nAdvertisers can currently target this install on one thing: the packages your\n" +
-      "project depends on. You can let them target more — your region, an IP range, or\n" +
-      "the packages your agent has been reading. All of it is off, and stays off unless\n" +
-      "you say otherwise.\n\n" +
-      "You would earn nothing for it. Better-targeted inventory sells for more, and 70%\n" +
-      "of that goes to the packages in your lockfile — that is the whole of the offer.\n\n" +
+    "\nAdvertisers cannot target this install on anything. Lockfile, region, IP range\n" +
+      "and recently-read packages are all off, and stay off unless you say otherwise.\n" +
+      "You earn nothing for turning them on; better targeting just pays your deps more.\n\n" +
       "  obrigado privacy    see what each one means",
   );
+}
+
+/**
+ * Hard-wrap to the width every hand-written paragraph in this CLI already uses.
+ *
+ * The dimension copy is stored as one sentence per field because it belongs to `DIMENSIONS`
+ * rather than to a screen, and two screens now print it at two different indents. Wrapping at
+ * the point of use keeps one wording and lets each caller decide where it starts, instead of
+ * pre-broken strings that are right in one place and ragged in the other.
+ */
+export function wrapAt(text: string, indent: string, width = 78): string[] {
+  const room = Math.max(width - indent.length, 20);
+  const lines: string[] = [];
+  let line = "";
+
+  for (const word of text.split(" ")) {
+    if (line.length > 0 && line.length + 1 + word.length > room) {
+      lines.push(indent + line);
+      line = word;
+    } else {
+      line = line.length === 0 ? word : `${line} ${word}`;
+    }
+  }
+  if (line.length > 0) lines.push(indent + line);
+  return lines;
 }
 
 function usage(): number {
@@ -123,9 +169,11 @@ export async function privacy(argv: readonly string[]): Promise<number> {
   const enabled = value === "on";
 
   if (name === "all") {
+    // Built from the table rather than listed, so a dimension added to `DIMENSIONS` cannot be
+    // left out of "all" and quietly stay on after somebody turned everything off.
     await writeConfig({
       ...config,
-      sharing: { region: enabled, network: enabled, activity: enabled },
+      sharing: Object.fromEntries(DIMENSIONS.map((entry) => [entry.key, enabled])),
     });
     process.stdout.write(`Everything is ${value}.\n`);
     return 0;
@@ -147,13 +195,13 @@ function show(sharing: NonNullable<ClientConfig["sharing"]> | Record<string, nev
   for (const dimension of DIMENSIONS) {
     const on = sharing?.[dimension.key] === true;
     process.stdout.write(`  ${on ? "on " : "off"}  ${dimension.label}\n`);
-    process.stdout.write(`       ${dimension.what}\n`);
-    process.stdout.write(`       ${dimension.stored}\n\n`);
+    for (const line of wrapAt(dimension.what, "       ")) process.stdout.write(`${line}\n`);
+    for (const line of wrapAt(dimension.stored, "       ")) process.stdout.write(`${line}\n`);
+    process.stdout.write("\n");
   }
   process.stdout.write(
-    "You earn nothing for any of this, and that is on purpose — being paid for it would\n" +
-      "make farming impressions worth doing. Better-targeted inventory sells for more, and\n" +
-      "70% of that goes to the packages in your own lockfile.\n\n" +
+    "You earn nothing for any of this, on purpose: paying for consent would make\n" +
+      "farming impressions worth doing. Better targeting just pays your deps more.\n\n" +
       "  obrigado privacy <name> on|off\n",
   );
 }
