@@ -38,31 +38,25 @@ describe("the table", () => {
     ]);
   });
 
-  test("gives every agent a label a reader would recognise", () => {
+  /*
+   * The per-row invariants, in one pass, so a row that contradicts itself fails once.
+   *
+   * A label is what a reader scans for, so every row needs one.
+   *
+   * A fork inherits a surface; it does not have one. Both at once would put the same extension
+   * on the landing page twice, under two names, as though they were separate integrations. And
+   * an `inherits` pointing at a host that was removed — or at itself — resolves to nothing, so
+   * the label and the demo panel it composes would quietly lose a name.
+   */
+  test("every row is internally consistent", () => {
     for (const agent of AGENTS) {
       expect(agent.label.length).toBeGreaterThan(0);
-    }
-  });
 
-  /*
-   * A fork inherits a surface; it does not have one. Both at once would put the same extension
-   * on the landing page twice, under two names, as though they were separate integrations.
-   */
-  test("never lets an agent both inherit a surface and declare one", () => {
-    for (const agent of AGENTS) {
-      if (agent.inherits !== null) expect(agent.surface).toBeNull();
-    }
-  });
-
-  test("only inherits from hosts that exist", () => {
-    for (const agent of AGENTS) {
-      if (agent.inherits !== null) expect(AGENT_IDS).toContain(agent.inherits);
-    }
-  });
-
-  test("never has an agent inherit from itself", () => {
-    for (const agent of AGENTS) {
-      expect(agent.inherits).not.toBe(agent.id);
+      if (agent.inherits !== null) {
+        expect(agent.surface).toBeNull();
+        expect(AGENT_IDS).toContain(agent.inherits);
+        expect(agent.inherits).not.toBe(agent.id);
+      }
     }
   });
 });
@@ -144,12 +138,6 @@ describe("surfaceLabel", () => {
 });
 
 describe("isAgentId", () => {
-  test("accepts every id in the table", () => {
-    for (const id of AGENT_IDS) {
-      expect(isAgentId(id)).toBe(true);
-    }
-  });
-
   /*
    * It guards a value arriving over the wire, which is arbitrary text until it is checked.
    *
@@ -158,8 +146,18 @@ describe("isAgentId", () => {
    * failed for someone whose change was entirely correct — a rejection sample has to be a
    * name nobody will ever legitimately add.
    */
-  test("rejects anything else", () => {
-    for (const value of ["", "Claude-Code", "vscode ", "not-a-real-host", null, undefined, 7, {}]) {
+  test("rejects anything that is not an id in the table", () => {
+    for (const value of [
+      "",
+      "Claude-Code",
+      "claude_code",
+      "vscode ",
+      "not-a-real-host",
+      null,
+      undefined,
+      7,
+      {},
+    ]) {
       expect(isAgentId(value)).toBe(false);
     }
   });

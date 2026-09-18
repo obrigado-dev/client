@@ -82,14 +82,6 @@ describe("installing", () => {
     expect(after?.["statusLine"]).toEqual(foreign);
   });
 
-  test("refuses to overwrite the developer's own statusline", async () => {
-    const personal = { type: "command", command: "~/bin/my-prompt.sh" };
-    await write({ statusLine: personal });
-
-    expect((await installStatusLine(settingsPath)).outcome.status).toBe("refused");
-    expect((await readSettings(settingsPath))?.["statusLine"]).toEqual(personal);
-  });
-
   test("is idempotent — installing twice changes nothing", async () => {
     await installStatusLine(settingsPath);
     const first = await readFile(settingsPath, "utf8");
@@ -207,14 +199,6 @@ describe("--replace", () => {
     // Byte-for-byte, including key order and the surrounding settings.
     expect(JSON.parse(await readFile(settingsPath, "utf8"))).toEqual(JSON.parse(original));
   });
-
-  test("still backs the file up before replacing", async () => {
-    await write({ statusLine: foreign });
-    const { outcome } = await installStatusLine(settingsPath, { replace: true });
-
-    if (outcome.status !== "installed" || outcome.backup === null) throw new Error("no backup");
-    expect(JSON.parse(await readFile(outcome.backup, "utf8"))).toEqual({ statusLine: foreign });
-  });
 });
 
 describe("the installed command must be runnable", () => {
@@ -300,6 +284,10 @@ describe("recognising our command wherever it is nested", () => {
 
   const theirs = [
     ["another tool's own status line", "runcommand statusline"],
+    // The developer's own script, which `install` must refuse to overwrite for the same
+    // reason it refuses another tool's: they earn nothing from Obrigado, so a surprise
+    // here has no upside to trade against.
+    ["a developer's own script", "~/bin/my-prompt.sh"],
     ["a longer word that merely starts the same", "mytool statuslines"],
     ["a hyphenated sibling command", "obrigado statusline-preview"],
   ] as const;

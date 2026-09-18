@@ -68,42 +68,31 @@ describe("parseSponsored", () => {
 });
 
 describe("splitCommand", () => {
-  test("splits on whitespace", () => {
-    expect(splitCommand("obrigado  statusline\t--agent pi")).toEqual([
-      "obrigado",
-      "statusline",
-      "--agent",
-      "pi",
-    ]);
-  });
+  test("splits a command line into argv", () => {
+    const cases: ReadonlyArray<readonly [string, readonly string[]]> = [
+      // Runs of whitespace, tabs included, are one separator.
+      ["obrigado  statusline\t--agent pi", ["obrigado", "statusline", "--agent", "pi"]],
+      // The bug every host copy had: a source checkout under a directory with a space became
+      // four arguments and the spawn failed silently. Double quotes, single quotes and a
+      // backslash escape all keep the path whole.
+      [
+        'bun "/Users/Jane Doe/obrigado/cli.ts" statusline',
+        ["bun", "/Users/Jane Doe/obrigado/cli.ts", "statusline"],
+      ],
+      ["bun '/Users/Jane Doe/cli.ts' statusline", ["bun", "/Users/Jane Doe/cli.ts", "statusline"]],
+      ["bun /Users/Jane\\ Doe/cli.ts statusline", ["bun", "/Users/Jane Doe/cli.ts", "statusline"]],
+      // Nothing to run is an empty argv, not one empty argument.
+      ["", []],
+      ["   ", []],
+      // An unterminated quote takes the rest of the line rather than throwing.
+      ['bun "unterminated path', ["bun", "unterminated path"]],
+    ];
 
-  test("keeps a quoted path with a space in it whole", () => {
-    // The bug every host copy had: a source checkout under a directory with a space became
-    // four arguments and the spawn failed silently.
-    expect(splitCommand('bun "/Users/Jane Doe/obrigado/cli.ts" statusline')).toEqual([
-      "bun",
-      "/Users/Jane Doe/obrigado/cli.ts",
-      "statusline",
-    ]);
-    expect(splitCommand("bun '/Users/Jane Doe/cli.ts' statusline")).toEqual([
-      "bun",
-      "/Users/Jane Doe/cli.ts",
-      "statusline",
-    ]);
-    expect(splitCommand("bun /Users/Jane\\ Doe/cli.ts statusline")).toEqual([
-      "bun",
-      "/Users/Jane Doe/cli.ts",
-      "statusline",
-    ]);
-  });
-
-  test("an empty string is an empty argv", () => {
-    expect(splitCommand("")).toEqual([]);
-    expect(splitCommand("   ")).toEqual([]);
-  });
-
-  test("an unterminated quote takes the rest of the line rather than throwing", () => {
-    expect(splitCommand('bun "unterminated path')).toEqual(["bun", "unterminated path"]);
+    for (const [command, argv] of cases) {
+      expect(`${command} → ${JSON.stringify(splitCommand(command))}`).toBe(
+        `${command} → ${JSON.stringify(argv)}`,
+      );
+    }
   });
 });
 

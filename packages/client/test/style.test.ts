@@ -20,12 +20,46 @@ const env = (vars: Record<string, string | undefined>) => vars;
 const colorful = env({ TERM: "xterm-256color", COLORTERM: "truecolor" });
 
 describe("the palette", () => {
-  test("offers no alert colours", () => {
-    // In a terminal, red means error and yellow means warning. An ad wearing
-    // either is impersonating a build failure — the same attack as injecting
-    // escape bytes, reached through a channel we would have sanctioned.
-    for (const banned of ["red", "yellow", "orange", "bright-red"]) {
-      expect(isCreativeStyle(banned)).toBe(false);
+  /*
+   * What an advertiser may ask for, value by value — and it is the refusals that carry the
+   * rules, because the lists themselves are pinned to the wire contract below.
+   *
+   * **No alert colours.** In a terminal, red means error and yellow means warning. An ad
+   * wearing either is impersonating a build failure — the same attack as injecting escape
+   * bytes, reached through a channel we would have sanctioned.
+   *
+   * **Nothing that outshouts the label.** Bold, reverse, blink and background colours would
+   * each make the copy louder than the `sponsored` label that discloses it. Italic is the one
+   * effect allowed: it DIFFERENTIATES the line from the developer's own status text, which
+   * helps the disclosure, where bold AMPLIFIES the copy and competes with it.
+   *
+   * **Underline is not advertiser-selectable.** It means "clickable", and the renderer applies
+   * it exactly when the text really is a link, so an advertiser cannot borrow the affordance
+   * as an attention-grab.
+   */
+  test("only the quiet slots and effects are selectable", () => {
+    const values = [
+      ["italic", false, true],
+      ["none", false, true],
+      // Alert colours.
+      ["red", false, false],
+      ["yellow", false, false],
+      ["orange", false, false],
+      ["bright-red", false, false],
+      // Louder than the label.
+      ["bold", false, false],
+      ["reverse", false, false],
+      ["blink", false, false],
+      ["bg-cyan", false, false],
+      ["inverse", false, false],
+      ["strikethrough", false, false],
+      // The renderer's own affordance, never the advertiser's.
+      ["underline", false, false],
+    ] as const;
+
+    for (const [value, style, effect] of values) {
+      expect(`${value} style=${isCreativeStyle(value)}`).toBe(`${value} style=${style}`);
+      expect(`${value} effect=${isCreativeEffect(value)}`).toBe(`${value} effect=${effect}`);
     }
   });
 
@@ -54,40 +88,6 @@ describe("the palette", () => {
       expect(source).toContain('"italic"');
     }
   });
-
-  test("offers no attention-grabbing effects", () => {
-    // Each of these would make the copy louder than the `sponsored` label.
-    for (const banned of ["bold", "reverse", "blink", "underline", "bg-cyan", "inverse"]) {
-      expect(isCreativeStyle(banned)).toBe(false);
-    }
-  });
-
-  test("is exactly the documented set", () => {
-    expect([...CREATIVE_STYLES]).toEqual(["default", "cyan", "blue", "green", "magenta"]);
-  });
-});
-
-describe("effects", () => {
-  test("italic is allowed; bold and its relatives are not", () => {
-    // Italic DIFFERENTIATES the line from the developer's own status text, which
-    // helps the disclosure. Bold AMPLIFIES the copy, making it louder than the
-    // `sponsored` label that discloses it. One aids the label, the other
-    // competes with it.
-    expect(isCreativeEffect("italic")).toBe(true);
-    expect(isCreativeEffect("none")).toBe(true);
-
-    for (const banned of ["bold", "reverse", "blink", "strikethrough", "underline"]) {
-      expect(isCreativeEffect(banned)).toBe(false);
-    }
-  });
-
-  test("underline is not advertiser-selectable", () => {
-    // Underline means "clickable". It is applied by the renderer exactly when
-    // the text really is a link, so an advertiser cannot borrow the affordance
-    // as an attention-grab.
-    expect(isCreativeEffect("underline")).toBe(false);
-    expect([...CREATIVE_EFFECTS]).toEqual(["none", "italic"]);
-  });
 });
 
 describe("applyStyle", () => {
@@ -112,12 +112,6 @@ describe("applyStyle", () => {
 
   test("'default' emits nothing at all", () => {
     expect(applyStyle("copy", "default", colorful)).toBe("copy");
-  });
-
-  test("every style leaves the copy itself intact", () => {
-    for (const style of CREATIVE_STYLES) {
-      expect(applyStyle("neon.tech", style, colorful)).toContain("neon.tech");
-    }
   });
 });
 

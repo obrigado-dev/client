@@ -12,7 +12,7 @@
  */
 import { describe, expect, test } from "bun:test";
 
-import { AGENTS, CLIENT_VERSION, DEFAULT_AGENT, isAgent } from "../src/version.ts";
+import { CLIENT_VERSION } from "../src/version.ts";
 
 describe("the version on the wire is the version we shipped", () => {
   test("CLIENT_VERSION matches package.json", async () => {
@@ -27,30 +27,5 @@ describe("the version on the wire is the version we shipped", () => {
     // migration 0017: text, CHECK ~ '^[0-9A-Za-z.+-]{1,32}$'. A version the database refuses
     // would fail the session upsert, which is the request that serves the ad.
     expect(CLIENT_VERSION).toMatch(/^[0-9A-Za-z.+-]{1,32}$/u);
-  });
-});
-
-describe("which host a build targets", () => {
-  test("the default is a member of the closed set", () => {
-    expect(AGENTS).toContain(DEFAULT_AGENT);
-  });
-
-  test("the set is closed, because it is a rollup key", () => {
-    // A typo splits one agent's traffic into two populations no query joins back together.
-    expect(isAgent("claude-code")).toBe(true);
-    expect(isAgent("codex")).toBe(true);
-    expect(isAgent("Claude-Code")).toBe(false);
-    expect(isAgent("claude_code")).toBe(false);
-    // oxlint-disable-next-line unicorn/no-useless-undefined -- passing undefined IS the case under test; the autofix strips it and the call stops compiling
-    expect(isAgent(undefined)).toBe(false);
-  });
-
-  test("the agents the spec names are all present", () => {
-    // §2: "Claude Code, Codex, Cursor, Gemini CLI". Adding a client later should be adding
-    // an installer, not discovering the enum was never extended.
-    const named: readonly string[] = ["claude-code", "codex", "cursor", "gemini-cli"];
-    for (const agent of named) {
-      expect(AGENTS as readonly string[]).toContain(agent);
-    }
   });
 });

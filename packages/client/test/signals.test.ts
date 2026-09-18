@@ -104,6 +104,10 @@ describe("environment signals", () => {
     // warn about it, and a whole-file grep flagged that as the defect. Same false
     // positive `check:money` produced against the comment explaining why not to divide
     // by a million.
+    //
+    // The trap is not theoretical: stdout is a pipe under this harness exactly as it is
+    // under Claude Code, which `style.test.ts` asserts beside the colour rule. Consulting
+    // it here would report no TTY on every render and suppress all revenue.
     const source = await Bun.file(new URL("../src/api.ts", import.meta.url).pathname).text();
 
     const code = source
@@ -116,13 +120,6 @@ describe("environment signals", () => {
 
     expect(code).not.toContain("stdout.isTTY");
     expect(code).toContain("stderr.isTTY");
-  });
-
-  test("and the harness proves why: stdout really is a pipe here", () => {
-    // Exactly the condition Claude Code creates. If `collectSignals` consulted stdout
-    // it would report no TTY on every render and suppress all revenue — so this asserts
-    // the trap is real rather than theoretical.
-    expect(process.stdout.isTTY).not.toBe(true);
   });
 
   test("a real terminal environment reports a tty", () => {

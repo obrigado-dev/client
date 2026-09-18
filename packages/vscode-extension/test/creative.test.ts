@@ -27,6 +27,8 @@ const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==";
 
 describe("status bar text", () => {
   test("the glyph precedes a label that precedes the copy", () => {
+    // Asserted whole, which also pins that the one icon we place survives the stripping
+    // below: only advertiser-supplied parts go through `stripCodicons`.
     expect(statusText(ad())).toBe("$(sparkle) sponsored · Ship it faster — example.com");
   });
 
@@ -38,11 +40,6 @@ describe("status bar text", () => {
     expect(line.match(/\$\(/gu)).toEqual(["$("]);
     expect(line).toContain("$ (error)");
     expect(line).toContain("$ (sync~spin)");
-  });
-
-  test("the glyph itself still survives that stripping", () => {
-    // Only advertiser-supplied parts are stripped; the one icon we place is ours.
-    expect(statusText(ad())).toContain("$(sparkle)");
   });
 
   test("a label carrying an icon token is stripped too", () => {

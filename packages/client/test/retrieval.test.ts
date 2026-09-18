@@ -35,59 +35,39 @@ afterEach(async () => {
 });
 
 describe("path resolution", () => {
-  test("npm, plain", () => {
-    expect(packageOfPath(join("proj", "node_modules", "react", "index.js"))).toBe("npm:react");
-  });
+  test("a file inside a package resolves to that package, per ecosystem", () => {
+    const cases: ReadonlyArray<readonly [string, string | null]> = [
+      // npm, plain.
+      [join("proj", "node_modules", "react", "index.js"), "npm:react"],
+      // Scoped names are a large fraction of npm, and the one the moderation checker's `\b`
+      // bug also missed.
+      [join("proj", "node_modules", "@types", "bun", "index.d.ts"), "npm:@types/bun"],
+      // Nested: a transitive dependency's own node_modules. The file belongs to the INNERMOST
+      // package.
+      [join("proj", "node_modules", "vite", "node_modules", "rollup", "dist.js"), "npm:rollup"],
+      // cargo, with the version stripped.
+      [
+        join("home", ".cargo", "registry", "src", "index", "serde-1.0.203", "lib.rs"),
+        "cargo:serde",
+      ],
+      // `base64-0.22.1` must not become `base` — only the trailing version group goes.
+      [join("registry", "src", "idx", "base64-0.22.1", "lib.rs"), "cargo:base64"],
+      // pypi, from site-packages.
+      [join("venv", "lib", "site-packages", "requests", "api.py"), "pypi:requests"],
+      // `requests-2.31.0.dist-info` is metadata ABOUT the package, not the package.
+      [join("venv", "lib", "site-packages", "requests-2.31.0.dist-info", "METADATA"), null],
+      // go, from the module cache.
+      [
+        join("home", "go", "pkg", "mod", "github.com", "pkg", "errors@v0.9.1", "e.go"),
+        "go:github.com/pkg/errors",
+      ],
+      // Everything is lowercased, so it matches a dependency set.
+      [join("node_modules", "React", "index.js"), "npm:react"],
+    ];
 
-  test("npm, scoped", () => {
-    // Scoped names are a large fraction of npm, and the one the moderation checker's `\\b`
-    // bug also missed.
-    expect(packageOfPath(join("proj", "node_modules", "@types", "bun", "index.d.ts"))).toBe(
-      "npm:@types/bun",
-    );
-  });
-
-  test("npm, nested — the innermost package wins", () => {
-    // A transitive dependency's own node_modules. The file belongs to the inner package.
-    expect(
-      packageOfPath(join("proj", "node_modules", "vite", "node_modules", "rollup", "dist.js")),
-    ).toBe("npm:rollup");
-  });
-
-  test("cargo, with the version stripped", () => {
-    expect(
-      packageOfPath(join("home", ".cargo", "registry", "src", "index", "serde-1.0.203", "lib.rs")),
-    ).toBe("cargo:serde");
-  });
-
-  test("cargo, a name containing digits survives", () => {
-    // `base64-0.22.1` must not become `base` — only the trailing version group goes.
-    expect(packageOfPath(join("registry", "src", "idx", "base64-0.22.1", "lib.rs"))).toBe(
-      "cargo:base64",
-    );
-  });
-
-  test("pypi, from site-packages", () => {
-    expect(packageOfPath(join("venv", "lib", "site-packages", "requests", "api.py"))).toBe(
-      "pypi:requests",
-    );
-  });
-
-  test("pypi metadata directories are not packages", () => {
-    // `requests-2.31.0.dist-info` is metadata about the package, not the package.
-    expect(
-      packageOfPath(join("venv", "lib", "site-packages", "requests-2.31.0.dist-info", "METADATA")),
-    ).toBeNull();
-  });
-
-  test("go, from the module cache", () => {
-    expect(
-      packageOfPath(join("home", "go", "pkg", "mod", "github.com", "pkg", "errors@v0.9.1", "e.go")),
-    ).toBe("go:github.com/pkg/errors");
-  });
-
-  test("everything is lowercased, so it matches a dependency set", () => {
-    expect(packageOfPath(join("node_modules", "React", "index.js"))).toBe("npm:react");
+    for (const [path, expected] of cases) {
+      expect(`${path} → ${packageOfPath(path)}`).toBe(`${path} → ${expected}`);
+    }
   });
 });
 
@@ -100,18 +80,20 @@ describe("the developer's own code is never reported", () => {
     ).toBeNull();
   });
 
-  test("a path with no package marker resolves to nothing", () => {
-    for (const path of ["", "/etc/passwd", "README.md", join("src", "index.ts"), "/"]) {
+  test("nothing without a real package marker resolves", () => {
+    for (const path of [
+      "",
+      "/etc/passwd",
+      "README.md",
+      join("src", "index.ts"),
+      "/",
+      // A directory merely NAMED node_modules-ish is not a package root.
+      join("src", "node_modules_backup", "thing.ts"),
+      // An empty package segment: the marker is there and the name is not.
+      `${join("proj", "node_modules")}/`,
+    ]) {
       expect(`${path} → ${packageOfPath(path)}`).toBe(`${path} → null`);
     }
-  });
-
-  test("a directory merely NAMED node_modules-ish is not a package root", () => {
-    expect(packageOfPath(join("src", "node_modules_backup", "thing.ts"))).toBeNull();
-  });
-
-  test("an empty package segment resolves to nothing", () => {
-    expect(packageOfPath(`${join("proj", "node_modules")}/`)).toBeNull();
   });
 });
 

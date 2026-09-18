@@ -115,22 +115,24 @@ describe('stripControlCharacters — §3 "always labeled" must survive the ad co
     expect(safe.split(ESC)).toHaveLength(1);
   });
 
-  test("removes every control character, not only ESC", () => {
-    for (const code of [0x00, 0x07, 0x08, 0x09, 0x0a, 0x0d, 0x1b, 0x7f, 0x9b]) {
-      const text = `a${String.fromCodePoint(code)}b`;
-      expect(stripControlCharacters(text)).toBe("ab");
-    }
-  });
+  test("removes every character that could rewrite the row, not only ESC", () => {
+    const hostile = [
+      // C0 and C1 controls, and DEL — not only ESC.
+      0x00, 0x07, 0x08, 0x09, 0x0a, 0x0d, 0x1b, 0x7f, 0x9b,
+      // Trojan Source, through the sanctioned channel: U+202E inside the copy makes a
+      // terminal draw the rest of the row right-to-left, so the label can be made to read
+      // after the copy — or inside it — with no control byte at all. `\p{Cc}` misses every
+      // one of these, which is what every layer used to check.
+      0x06_1c, 0x20_0e, 0x20_0f, 0x20_2a, 0x20_2d, 0x20_2e, 0x20_66, 0x20_69,
+    ];
 
-  test("removes the bidirectional controls that reorder the row", () => {
-    // Trojan Source, through the sanctioned channel: U+202E inside the copy makes a
-    // terminal draw the rest of the row right-to-left, so the label can be made to read
-    // after the copy — or inside it — with no control byte at all. `\p{Cc}` misses every
-    // one of these, which is what every layer used to check.
-    for (const code of [0x06_1c, 0x20_0e, 0x20_0f, 0x20_2a, 0x20_2d, 0x20_2e, 0x20_66, 0x20_69]) {
+    for (const code of hostile) {
       const text = `a${String.fromCodePoint(code)}b`;
-      expect(stripControlCharacters(text)).toBe("ab");
+      expect(`U+${code.toString(16)} → ${stripControlCharacters(text)}`).toBe(
+        `U+${code.toString(16)} → ab`,
+      );
     }
+
     // Zero-width joiners stay: emoji sequences need them and they reorder nothing.
     expect(stripControlCharacters("👨‍💻")).toBe("👨‍💻");
   });

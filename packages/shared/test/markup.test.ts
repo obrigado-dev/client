@@ -4,8 +4,6 @@ import {
   lineClasses,
   spanClasses,
   withDefaultLink,
-  MAX_EMPHASIS_CHARS,
-  MAX_EMPHASIS_RATIO,
   MAX_HIGHLIGHT_LENGTH,
   MAX_VISIBLE_LENGTH,
   parseMarkup,
@@ -32,30 +30,24 @@ describe("plain copy", () => {
 });
 
 describe("emphasis", () => {
-  test("bold applies to a run", () => {
-    const { spans } = ok("try **neon** today");
-    expect(spans).toEqual([{ text: "try " }, { text: "neon", bold: true }, { text: " today" }]);
-  });
+  /* Each marker, and the runs it produces — asserted as the whole span list, because where a
+     style STOPS matters as much as where it starts. Nesting composes rather than replaces, and
+     a marker may wrap a single letter. */
+  test("each marker styles exactly its run", () => {
+    const cases = [
+      ["try **neon** today", [{ text: "try " }, { text: "neon", bold: true }, { text: " today" }]],
+      ["try _neon_ today", [{ text: "try " }, { text: "neon", italic: true }, { text: " today" }]],
+      [
+        "try `neon` today",
+        [{ text: "try " }, { text: "neon", highlight: true }, { text: " today" }],
+      ],
+      ["a **_b_** c", [{ text: "a " }, { text: "b", bold: true, italic: true }, { text: " c" }]],
+      ["**n**eon", [{ text: "n", bold: true }, { text: "eon" }]],
+    ] as const;
 
-  test("italic applies to a run", () => {
-    const { spans } = ok("try _neon_ today");
-    expect(spans[1]).toEqual({ text: "neon", italic: true });
-  });
-
-  test("highlight applies to a run", () => {
-    const { spans } = ok("try `neon` today");
-    expect(spans[1]).toEqual({ text: "neon", highlight: true });
-  });
-
-  test("styles nest", () => {
-    const { spans } = ok("a **_b_** c");
-    expect(spans[1]).toEqual({ text: "b", bold: true, italic: true });
-  });
-
-  test("individual letters can be styled", () => {
-    const { spans } = ok("**n**eon");
-    expect(spans[0]).toEqual({ text: "n", bold: true });
-    expect(spans[1]).toEqual({ text: "eon" });
+    for (const [source, spans] of cases) {
+      expect(ok(source).spans).toEqual([...spans]);
+    }
   });
 });
 
@@ -105,29 +97,35 @@ describe("the single tracking link", () => {
 });
 
 describe("§3 prominence, as arithmetic", () => {
-  test("refuses bold covering a whole LONG line", () => {
-    const { problems } = parseMarkup(
-      `**${"everything is bold here and then some more".slice(0, 42)}**`,
-    );
-    expect(problems.join(" ")).toContain("at most");
-  });
+  /*
+   * How much of a line may shout, by example.
+   *
+   * The cap is proportional OR absolute, whichever is more permissive — so a long line may not
+   * be bold throughout, while a short brand-only creative may be (nine bold characters do not
+   * drown a nine-character `sponsored` label; `"a link can carry other styles"` above is that
+   * case, and it passes `ok`). A highlight is capped separately so it cannot become a banner.
+   */
+  test("emphasis is refused past the cap and allowed within it", () => {
+    const cases = [
+      // Bold covering a whole long line.
+      [`**${"everything is bold here and then some more".slice(0, 42)}**`, "at most"],
+      // Emphasis beyond the cap, with unemphasised text after it.
+      [`**${"a".repeat(40)}**${"b".repeat(20)}`, "at most"],
+      // A highlight long enough to read as a banner.
+      [`\`${"x".repeat(MAX_HIGHLIGHT_LENGTH + 1)}\`${"y".repeat(60)}`, "at most"],
+      // Within the cap.
+      ["Postgres, but you never think about it — **neon**", null],
+    ] as const;
 
-  test("allows a short brand-only creative to be fully emphasised", () => {
-    // Nine bold characters do not drown a nine-character `sponsored` label, so
-    // the cap is proportional OR absolute, whichever is more permissive.
-    const { spans, problems } = parseMarkup("[**neon.tech**]");
-    expect(problems).toEqual([]);
-    expect(spans[0]).toEqual({ text: "neon.tech", bold: true, link: true });
-  });
-
-  test("refuses emphasis beyond the cap on a long line", () => {
-    const { problems } = parseMarkup(`**${"a".repeat(40)}**${"b".repeat(20)}`);
-    expect(problems.join(" ")).toContain("at most");
-  });
-
-  test("allows emphasis within the cap", () => {
-    const { spans } = ok("Postgres, but you never think about it — **neon**");
-    expect(spans.some((s) => s.bold === true)).toBe(true);
+    for (const [source, problem] of cases) {
+      const { spans, problems } = parseMarkup(source);
+      if (problem === null) {
+        expect(problems).toEqual([]);
+        expect(spans.some((span) => span.bold === true)).toBe(true);
+      } else {
+        expect(problems.join(" ")).toContain(problem);
+      }
+    }
   });
 
   test("italic is not capped — it differentiates rather than amplifies", () => {
@@ -135,17 +133,6 @@ describe("§3 prominence, as arithmetic", () => {
     // text, which helps the disclosure; bold competes with it.
     const { problems } = parseMarkup("_the whole line in italic is fine_");
     expect(problems).toEqual([]);
-  });
-
-  test("caps highlight length so it cannot become a banner", () => {
-    const long = "x".repeat(MAX_HIGHLIGHT_LENGTH + 1);
-    const { problems } = parseMarkup(`\`${long}\`${"y".repeat(60)}`);
-    expect(problems.join(" ")).toContain("at most");
-  });
-
-  test("the caps are the documented ones", () => {
-    expect(MAX_EMPHASIS_RATIO).toBe(0.5);
-    expect(MAX_EMPHASIS_CHARS).toBe(16);
   });
 });
 

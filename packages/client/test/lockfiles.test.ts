@@ -560,6 +560,9 @@ describe("gradle", () => {
     "empty=annotationProcessor,testAnnotationProcessor",
   ].join("\n");
 
+  /* Asserted as the WHOLE list, which is also what says the `empty=` marker never becomes a
+     package: it is how Gradle records a configuration that resolved to nothing, and a parser
+     that took it at face value would invoice for one. */
   test("reads coordinates and drops the version", () => {
     expect(
       gradleParser
@@ -571,14 +574,6 @@ describe("gradle", () => {
       "maven:com.squareup.okhttp3:okhttp",
       "maven:org.junit.jupiter:junit-jupiter-api",
     ]);
-  });
-
-  /* `empty` is how Gradle records a configuration that resolved to nothing. It is not a
-     package, and a parser that took it at face value would invoice for one. */
-  test("never treats the empty marker as a package", () => {
-    const names = gradleParser.parse({ lockfile: LOCK }).map((dep) => dep.p);
-
-    expect(names.some((name) => name.includes("empty"))).toBe(false);
   });
 
   test("the version catalog promotes its libraries to depth 0", () => {
@@ -634,6 +629,10 @@ describe("maven", () => {
     </dependencies>
   </project>`;
 
+  /* Again the whole list, so it is also the assertion that `dependencyManagement` (versions
+     for dependencies nobody uses), a commented-out dependency, and a groupId that is an
+     unresolved property placeholder are all excluded — each would fund something the project
+     does not ship. */
   test("names the project's own dependencies, at depth 0", () => {
     expect(mavenParser.parse({ lockfile: POM }).toSorted((a, b) => a.p.localeCompare(b.p))).toEqual(
       [
@@ -641,14 +640,6 @@ describe("maven", () => {
         { p: "maven:org.junit.jupiter:junit-jupiter", d: 0 },
       ],
     );
-  });
-
-  test("excludes dependencyManagement, comments, and unresolved properties", () => {
-    const names = mavenParser.parse({ lockfile: POM }).map((dep) => dep.p);
-
-    expect(names).not.toContain("maven:org.never.shipped:version-pin-only");
-    expect(names).not.toContain("maven:org.commented:out");
-    expect(names.some((name) => name.includes("$"))).toBe(false);
   });
 
   test("a POM with nothing in it yields nothing rather than throwing", () => {

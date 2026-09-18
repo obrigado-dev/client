@@ -158,17 +158,38 @@ describe("a batch the server will never accept", () => {
    * The trigger was mundane — a session ran past the timing bound and `session_s` failed its
    * range check — which is the point. Any future validation mismatch would do it.
    */
-  test("a 400 drops the batch instead of blocking the queue forever", async () => {
-    respondWith = 400;
-    for (let n = 0; n < 3; n += 1) {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- appends must land in order
-      await enqueue(impression(n), { queuePath });
+  test("a permanent rejection drops the batch; a transient one keeps it", async () => {
+    const cases = [
+      // 400 is permanent: the batch will never be accepted, so it goes — all three events,
+      // including the ones that were fine, because the beacon validates the whole request.
+      { status: 400, events: 3, expected: { sent: 0, kept: 0, dropped: 3 }, depth: 0 },
+      // 429 and 408 mean try again, so nothing is dropped.
+      { status: 429, events: 1, expected: { sent: 0, kept: 1, dropped: 0 }, depth: 1 },
+      { status: 408, events: 1, expected: { sent: 0, kept: 1, dropped: 0 }, depth: 1 },
+      // A 5xx is the server's problem, not the batch's.
+      { status: 503, events: 1, expected: { sent: 0, kept: 1, dropped: 0 }, depth: 1 },
+    ] as const;
+
+    for (const { status, events, expected, depth } of cases) {
+      respondWith = status;
+      for (let n = 0; n < events; n += 1) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- appends must land in order
+        await enqueue(impression(n), { queuePath });
+      }
+
+      // oxlint-disable-next-line eslint/no-await-in-loop -- one status at a time, and each asserts before the next
+      const result = await flushQueue({
+        apiOrigin: origin(),
+        installKey: "k".repeat(32),
+        queuePath,
+      });
+      expect(`${status}: ${JSON.stringify(result)}`).toBe(`${status}: ${JSON.stringify(expected)}`);
+      // oxlint-disable-next-line eslint/no-await-in-loop -- see above
+      expect(await queueDepth({ queuePath })).toBe(depth);
+
+      // oxlint-disable-next-line eslint/no-await-in-loop -- a fresh queue for the next status
+      await Bun.write(queuePath, "");
     }
-
-    const result = await flushQueue({ apiOrigin: origin(), installKey: "k".repeat(32), queuePath });
-
-    expect(result).toEqual({ sent: 0, kept: 0, dropped: 3 });
-    expect(await queueDepth({ queuePath })).toBe(0);
   });
 
   test("so a later valid impression still gets through", async () => {
@@ -203,33 +224,6 @@ describe("a batch the server will never accept", () => {
     const code = source.replaceAll(/\/\*[\s\S]*?\*\//gu, "").replaceAll(/\/\/[^\n]*/gu, "");
 
     expect(code).not.toMatch(/console\.(error|warn|log)/u);
-  });
-
-  test("429 and 408 are retried, not dropped — they mean try again", async () => {
-    for (const status of [429, 408]) {
-      respondWith = status;
-      // oxlint-disable-next-line eslint/no-await-in-loop -- one status at a time, and each asserts before the next
-      await enqueue(impression(status), { queuePath });
-      // oxlint-disable-next-line eslint/no-await-in-loop -- see above
-      const result = await flushQueue({
-        apiOrigin: origin(),
-        installKey: "k".repeat(32),
-        queuePath,
-      });
-      expect(result.dropped).toBe(0);
-      expect(result.kept).toBeGreaterThan(0);
-      // oxlint-disable-next-line eslint/no-await-in-loop -- see above
-      await Bun.write(queuePath, "");
-    }
-  });
-
-  test("a 5xx is retried, not dropped", async () => {
-    respondWith = 503;
-    await enqueue(impression(9), { queuePath });
-
-    const result = await flushQueue({ apiOrigin: origin(), installKey: "k".repeat(32), queuePath });
-
-    expect(result).toEqual({ sent: 0, kept: 1, dropped: 0 });
   });
 });
 

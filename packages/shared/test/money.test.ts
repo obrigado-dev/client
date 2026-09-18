@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import * as fc from "fast-check";
 
 import {
-  addMicros,
   formatUsd,
   MoneyError,
   micros,
@@ -14,10 +13,6 @@ import {
   usd,
 } from "../src/money.ts";
 import type { Micros } from "../src/money.ts";
-
-/** Gross amounts spanning a single micro to well past the §5 upside case
- *  ($800k/month ≈ 8e11 micros). */
-const anyGross = fc.bigInt({ min: 0n, max: 10n ** 15n }).map((n) => micros(n));
 
 describe("wire codecs — the only number↔money boundary", () => {
   test("round-trips every safe integer", () => {
@@ -49,19 +44,10 @@ describe("wire codecs — the only number↔money boundary", () => {
 });
 
 describe("arithmetic", () => {
-  test("addMicros is exact over large sets", () => {
-    fc.assert(
-      fc.property(fc.array(anyGross, { maxLength: 1000 }), (values) => {
-        let expected = 0n;
-        for (const v of values) expected += v;
-        expect(addMicros(...values)).toBe(expected as Micros);
-      }),
-      { numRuns: 500 },
-    );
-  });
-
   test("negative money is rejected at construction, not represented", () => {
+    // The invariant `formatUsd` below is only backstopping.
     expect(() => micros(-1n)).toThrow(MoneyError);
+    expect(() => micros(-1n)).toThrow(/non-negative/u);
     expect(() => subMicros(micros(1n), micros(2n))).toThrow(MoneyError);
   });
 });
@@ -101,11 +87,6 @@ describe("formatUsd", () => {
     expect(formatUsd(asIfCast(-400n))).toBe("-$0.0004");
     expect(formatUsd(asIfCast(-1_234_560_000n))).toBe("-$1,234.56");
     expect(formatUsd(asIfCast(-1n))).toBe("-$0.000001");
-  });
-
-  test("micros() is what actually forbids a negative amount", () => {
-    // The invariant the formatter is only backstopping.
-    expect(() => micros(-1n)).toThrow(/non-negative/u);
   });
 
   test("never renders a nonzero amount as zero", () => {

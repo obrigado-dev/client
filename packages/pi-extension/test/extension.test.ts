@@ -192,12 +192,4 @@ describe("splitCommand matches @obrigado/surface", () => {
   test.each(inputs)("%j", (input) => {
     expect(splitCommand(input)).toEqual(sharedSplitCommand(input));
   });
-
-  test("a quoted path with a space stays one argument", () => {
-    expect(splitCommand('bun "/Users/Jane Doe/cli.ts" statusline')).toEqual([
-      "bun",
-      "/Users/Jane Doe/cli.ts",
-      "statusline",
-    ]);
-  });
 });
