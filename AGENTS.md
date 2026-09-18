@@ -75,6 +75,12 @@ list goes.
 A `v<version>` tag runs `release.yml`: the gate, `bun run build:binaries` for every platform,
 a GitHub release with `SHA256SUMS`, and a download-and-verify of what was published.
 
+Bump `packages/client/package.json` and `CLIENT_VERSION` in `packages/client/src/version.ts`
+together first (`version.test.ts` fails if they disagree). `release.yml` refuses a tag that is
+not `v` plus that version, and refuses `0.0.0`. The version is how the server knows what an
+install is running, and the client never updates itself, so a release that reported the wrong
+number could never be asked to update.
+
 ## The platform pin
 
 This repository is a git submodule of `obrigado-dev/platform`, pinned by commit. After a

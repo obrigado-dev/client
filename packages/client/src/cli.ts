@@ -29,9 +29,11 @@ const USAGE = `obrigado — sponsored status lines that fund your dependencies
   obrigado projects            every package this install has funded, ranked
   obrigado share               a public page for what this install funds
   obrigado share create        issue a link; share revoke kills it
-  obrigado link                verify an email to appear on obrigado.dev/obrigado
+  obrigado link                verify an email or GitHub to appear on obrigado.dev/obrigado
+  obrigado link github         sign in with GitHub; your login lists at once
   obrigado link you@company.com  request a code; link --code 123456 confirms
   obrigado unlink you@company.com  remove the email and its listing
+  obrigado unlink github       remove the GitHub account and its listing
   obrigado config              show settings; config <name> <value> to change one
   obrigado privacy             what advertisers may target you on (all off by default)
   obrigado privacy <name> on|off   packages, region, network or activity

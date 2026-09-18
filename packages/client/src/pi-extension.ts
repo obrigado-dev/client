@@ -27,6 +27,7 @@ import { fileURLToPath } from "node:url";
 
 import { BACKUP_DIR, ensureDir } from "./config.ts";
 import { rendererCommand } from "./renderer-command.ts";
+import { CLIENT_VERSION } from "./version.ts";
 
 /** The two hosts that load this extension unmodified. */
 export type PiHost = "pi" | "oh-my-pi";
@@ -121,6 +122,9 @@ const AGENT_MARKER = 'const AGENT = "pi";';
 /** The second rewritten line: how the copy reaches the renderer. */
 const COMMAND_MARKER = 'const COMMAND = "obrigado statusline";';
 
+/** The third: which client wrote the copy, so a stale file can be told apart from a stale binary. */
+const SURFACE_VERSION_MARKER = 'const SURFACE_VERSION = "0.0.0";';
+
 function rewrite(source: string, marker: string, replacement: string): string {
   const occurrences = source.split(marker).length - 1;
   if (occurrences !== 1) {
@@ -139,14 +143,24 @@ function rewrite(source: string, marker: string, replacement: string): string {
  * spawns a missing command renders nothing and says nothing about why. `process.execPath` is
  * the Bun running this installer, which is by definition one that can run the CLI.
  */
-export function sourceForHost(source: string, host: PiHost, command = rendererCommand()): string {
+export function sourceForHost(
+  source: string,
+  host: PiHost,
+  command = rendererCommand(),
+  version = CLIENT_VERSION,
+): string {
   const withCommand = rewrite(
     source,
     COMMAND_MARKER,
     `const COMMAND = ${JSON.stringify(command)};`,
   );
-  if (host === "pi") return withCommand;
-  return rewrite(withCommand, AGENT_MARKER, `const AGENT = "${host}";`);
+  const withVersion = rewrite(
+    withCommand,
+    SURFACE_VERSION_MARKER,
+    `const SURFACE_VERSION = ${JSON.stringify(version)};`,
+  );
+  if (host === "pi") return withVersion;
+  return rewrite(withVersion, AGENT_MARKER, `const AGENT = "${host}";`);
 }
 
 async function backup(path: string, backupDir: string): Promise<string | null> {

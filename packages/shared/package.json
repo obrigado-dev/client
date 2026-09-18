@@ -18,6 +18,7 @@
     "./agents": "./src/agents.ts",
     "./money": "./src/money.ts",
     "./contract": "./src/contract.ts",
+    "./wall-contract": "./src/wall-contract.ts",
     "./markup": "./src/markup.ts",
     "./rotation": "./src/rotation.ts",
     "./socials": "./src/socials.ts"

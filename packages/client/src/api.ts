@@ -163,7 +163,7 @@ export type LinkResult<T> =
   | { readonly ok: true; readonly data: T }
   | { readonly ok: false; readonly error: string };
 
-async function postLink<T>(
+export async function postLink<T>(
   options: StatsOptions,
   path: string,
   body: unknown,
@@ -190,7 +190,7 @@ async function postLink<T>(
   }
 }
 
-function parsedOrNull<T>(result: { success: boolean; data?: T }): T | null {
+export function parsedOrNull<T>(result: { success: boolean; data?: T }): T | null {
   return result.success && result.data !== undefined ? result.data : null;
 }
 
@@ -324,6 +324,8 @@ export interface SignalContext {
   readonly agent: string;
   /** The HOST's own version, if its payload reported one. */
   readonly agentVersion?: string | undefined;
+  /** OUR shim's version inside the host, if it reported one (A30). */
+  readonly surfaceVersion?: string | undefined;
   /** What the developer agreed to be targeted on. Absent means none of it. */
   readonly sharing?: SharingSettings | undefined;
   /**
@@ -351,6 +353,7 @@ export function collectSignals(context: SignalContext): SessionSignals {
     agent: context.agent,
     ...(context.agentVersion === undefined ? {} : { agent_version: context.agentVersion }),
     client_version: CLIENT_VERSION,
+    ...(context.surfaceVersion === undefined ? {} : { surface_version: context.surfaceVersion }),
     os: process.platform,
     ...(context.sharing === undefined ? {} : { sharing: context.sharing }),
     // Omitted entirely rather than sent empty when activity is not shared: a request that
@@ -378,6 +381,25 @@ export function hostVersionFromPayload(payload: string): string | undefined {
     return typeof parsed.version === "string" && parsed.version.length > 0
       ? parsed.version.slice(0, 64)
       : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The version of our own shim inside the host — the Pi extension, the OpenCode plugin, the VS Code
+ * extension — from the payload it wrote (A30).
+ *
+ * Held to the pattern the database column enforces rather than just the contract's length: a
+ * value the column refuses would fail the installation upsert, and that is the request that
+ * serves the line. A malformed version is no signal, never a failed render.
+ */
+export function surfaceVersionFromPayload(payload: string): string | undefined {
+  if (payload.length === 0) return undefined;
+  try {
+    const parsed = JSON.parse(payload) as { surface_version?: unknown };
+    const value = parsed.surface_version;
+    return typeof value === "string" && /^[0-9A-Za-z.+-]{1,32}$/u.test(value) ? value : undefined;
   } catch {
     return undefined;
   }

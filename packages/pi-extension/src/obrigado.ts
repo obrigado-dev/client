@@ -71,6 +71,16 @@ interface ExtensionApi {
  */
 const COMMAND = "obrigado statusline";
 
+/**
+ * Which `obrigado` wrote this copy (A30).
+ *
+ * `obrigado install` rewrites this line to its own version, the same way it rewrites `COMMAND`,
+ * and every render reports it. The file changes only when install runs again, so this is the one
+ * place the server can see that a developer updated the binary and kept last month's extension —
+ * and ask them, in the notice slot, to run install once more.
+ */
+const SURFACE_VERSION = "0.0.0";
+
 /** The environment override still wins, for running against a checkout without reinstalling. */
 function statuslineCommand(): readonly string[] {
   const override = process.env["OBRIGADO_STATUSLINE_COMMAND"];
@@ -133,7 +143,7 @@ export function splitCommand(text: string): string[] {
  * two sessions would consume each other's inventory.
  */
 function payloadFor(sessionId: string, cwd: string): string {
-  return JSON.stringify({ session_id: sessionId, cwd });
+  return JSON.stringify({ session_id: sessionId, cwd, surface_version: SURFACE_VERSION });
 }
 
 /**

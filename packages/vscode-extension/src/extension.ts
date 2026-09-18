@@ -43,6 +43,15 @@ const RENDER_TIMEOUT_MS = 2_000;
 const OPEN_COMMAND = "obrigado.openSponsor";
 
 /**
+ * This extension's own version, reported on every render (A30).
+ *
+ * The Marketplace updates the extension and the developer updates the binary, on their own
+ * schedules, so the server needs both numbers to know which one to ask about. `package.json` must
+ * agree; a test holds them together.
+ */
+const SURFACE_VERSION = "0.0.0";
+
+/**
  * Which host this is, as the wire records it.
  *
  * Cursor is a VS Code fork and reports its own `appName`, so one extension serves both and
@@ -129,7 +138,11 @@ function fetchSponsored(cwd: string): Promise<Sponsored | null> {
     // its own dependencies were never funded. `env.sessionId` is unique to this editor
     // process; the workspace path tells two windows of one process apart.
     child.stdin.end(
-      JSON.stringify({ session_id: `${host()}-${vscode.env.sessionId}-${cwd}`, cwd }),
+      JSON.stringify({
+        session_id: `${host()}-${vscode.env.sessionId}-${cwd}`,
+        cwd,
+        surface_version: SURFACE_VERSION,
+      }),
     );
   });
 }

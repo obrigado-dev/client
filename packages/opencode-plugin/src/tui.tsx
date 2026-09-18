@@ -32,6 +32,15 @@ import { createRoot, createSignal, onCleanup } from "solid-js";
 const AGENT = "opencode";
 
 /**
+ * This plugin's own version, reported on every render (A30).
+ *
+ * OpenCode resolves the plugin from its cache, not from the binary, so the two fall behind
+ * separately and need different sentences to fix. `package.json` must agree; a test holds them
+ * together, the same way `CLIENT_VERSION` is held to the client's manifest.
+ */
+const SURFACE_VERSION = "0.0.0";
+
+/**
  * How often the line is re-rendered.
  *
  * Matched to the other hosts' cadence rather than to the frame rate: this is a process
@@ -155,7 +164,7 @@ function statuslineCommand(): readonly string[] {
  * rotation cursor, so two sessions would consume each other's inventory.
  */
 function payloadFor(sessionId: string, cwd: string): string {
-  return JSON.stringify({ session_id: sessionId, cwd });
+  return JSON.stringify({ session_id: sessionId, cwd, surface_version: SURFACE_VERSION });
 }
 
 /**

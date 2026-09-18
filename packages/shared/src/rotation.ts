@@ -6,7 +6,7 @@
  * and the website cannot quietly disagree about expiry, exhaustion, or hold time.
  */
 import { ROTATION_SECONDS } from "./contract.ts";
-import type { BatchItem, SessionResponse } from "./contract.ts";
+import type { BatchItem, ClientNotice, SessionResponse } from "./contract.ts";
 
 /** One creative holds long enough to be read and to satisfy an exposure threshold. */
 export const ROTATE_AFTER_MS = ROTATION_SECONDS * 1000;
@@ -34,6 +34,15 @@ export interface CachedBatch {
    * therefore cannot have influenced anything.
    */
   retrieval?: string | undefined;
+  /**
+   * Obrigado's own notice for this install, if the server had one (A30).
+   *
+   * Cached with the batch because it arrives with the batch, and for the same TTL: a notice
+   * the operator withdraws stops showing when the next batch is fetched, not on some later sync.
+   * Carrying it here says nothing about whether it shows — that is paced per install, not per
+   * batch, by the client's `notice.ts`.
+   */
+  notice?: ClientNotice | undefined;
 }
 
 /**
@@ -62,6 +71,7 @@ export function cacheFromResponse(
     shown_at: now,
     reported: [],
     ...(retrieval === undefined ? {} : { retrieval }),
+    ...(response.notice === undefined ? {} : { notice: response.notice }),
   };
 }
 

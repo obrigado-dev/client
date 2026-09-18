@@ -121,6 +121,17 @@ Whichever applies, the rendering rules — the `sponsored` label, the allowed st
 control-character ban — live in `packages/shared` and are not per-host. Do not reimplement
 them; a surface that renders ad copy without the disclosure is not a surface we can ship.
 
+Draw `label` from the line you are handed, never a word of your own. Most lines say
+`sponsored`, but Obrigado's own notices (A30) arrive in the same shape labelled `obrigado`,
+with `kind: "notice"` beside it. A host that hardcodes "Sponsored" would mislabel them.
+
+If the host runs code of ours (a plugin, an extension, a copied file), write its version into
+the payload beside `session_id`: `{ "session_id": …, "cwd": …, "surface_version": "0.3.0" }`.
+Keep it a literal that a test holds to the package's manifest, as `SURFACE_VERSION` does in
+the existing hosts. Our shim updates on a different schedule from the binary, and this is how
+the server can tell which of the two a developer needs to update. A host that runs the binary
+directly, as Claude Code does, sends nothing.
+
 ## Before you open the PR
 
 ```sh

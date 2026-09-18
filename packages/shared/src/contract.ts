@@ -10,7 +10,6 @@
 import { z } from "zod";
 
 import { hasControlCharacters, parseMarkup } from "./markup.ts";
-import { isHandle, perPlatform, SOCIAL_PLATFORMS } from "./socials.ts";
 
 export const API_VERSION = "v1";
 
@@ -174,6 +173,18 @@ export const SessionSignalsSchema = z.object({
    * have shown up as revenue quietly falling with nothing to correlate it against.
    */
   client_version: z.string().max(32).optional(),
+  /**
+   * The version of OUR code inside the host: the Pi extension, the OpenCode plugin, the VS Code
+   * extension. The shim writes it into the payload it hands the renderer (A30).
+   *
+   * Separate from `client_version` because the two go stale separately. The binary changes
+   * when the developer reinstalls it; the Pi extension is a file `obrigado install` copied,
+   * unchanged until install runs again; the OpenCode plugin is whatever OpenCode's cache
+   * resolved. "Update the binary" and "run install again" are different sentences, and one
+   * version could not say which one a developer needs. Absent under Claude Code, which runs
+   * the binary directly and has no shim of ours to fall behind.
+   */
+  surface_version: z.string().max(32).optional(),
   os: z.string().max(64).optional(),
 });
 export type SessionSignals = z.infer<typeof SessionSignalsSchema>;
@@ -319,6 +330,39 @@ export const BatchItemSchema = z.object({
 });
 export type BatchItem = z.infer<typeof BatchItemSchema>;
 
+/** How long a notice may be. Shorter than a creative: it shares the slot and must not crowd it. */
+export const NOTICE_MAX_LENGTH = 120;
+
+/**
+ * A message from Obrigado itself, shown in the sponsored line's slot (A30).
+ *
+ * The one thing the renderer draws that nobody paid for, so what makes an ad an ad is absent by
+ * construction: no nonce, no impression id, no brand, no spans, no palette. The client never
+ * reports one and the server never bills one. Operators write them (`client_notices`); nothing
+ * an advertiser can reach produces one.
+ *
+ * It exists because nothing else can reach an install that is already out there. The client
+ * never updates itself (§3), so a binary installed today renders what it renders until somebody
+ * replaces it, and this is the only channel that can ask them to.
+ */
+export const ClientNoticeSchema = z.object({
+  /** Stable per notice. Pacing is per install, not per notice, but the id is what a log shows. */
+  id: z.string().min(1).max(32),
+  body: z
+    .string()
+    .min(1)
+    .max(NOTICE_MAX_LENGTH)
+    .refine((text) => !hasControlCharacters(text), {
+      message: "notice must not contain control or bidirectional characters",
+    }),
+  /** https only: it becomes an OSC 8 link in a terminal and an `href` in an editor. */
+  url: z
+    .url()
+    .max(200)
+    .refine((value) => value.startsWith("https://"), { message: "notice url must be https" }),
+});
+export type ClientNotice = z.infer<typeof ClientNoticeSchema>;
+
 export const SessionResponseSchema = z.object({
   /** Computed server-side from `deps`. INVARIANT 8: a client-supplied
    *  fingerprint is never read. */
@@ -328,6 +372,15 @@ export const SessionResponseSchema = z.object({
   /** INVARIANT 6: false when the killswitch is engaged. The client renders
    *  nothing at all in that case. */
   serving: z.boolean(),
+  /**
+   * Something Obrigado needs this install to know, or absent (A30).
+   *
+   * Absent rather than null from an older server, and from this one whenever the batch would
+   * be refused anyway: the killswitch, a machine session, a suppressed install. `serving: false`
+   * alone does NOT suppress it: an install with no inventory to show is exactly one that can
+   * spare the slot.
+   */
+  notice: ClientNoticeSchema.optional(),
 });
 export type SessionResponse = z.infer<typeof SessionResponseSchema>;
 
@@ -639,130 +692,6 @@ export const ShareResponseSchema = z.object({
   revoked: z.boolean(),
 });
 export type ShareResponse = z.infer<typeof ShareResponseSchema>;
-
-// ─────────────── POST /api/v1/link (email linking, feature-flagged) ───────────────
-
-/**
- * An email a developer chooses to attach to this install.
- *
- * This is the ONE exception to "the developer side has no identity", and it is
- * opt-in twice: verifying proves control of the inbox, and `consent_listing` is
- * a separate explicit choice because being published is a different act than
- * being verified. The server refuses the whole feature unless its flag is on,
- * so a client talking to a server that has not launched it gets a clean
- * `feature_disabled` error rather than a mystery 404.
- */
-export const LinkEmail = z.email().max(254);
-
-/** Six digits, typed from an email. Entropy comes from the attempt cap and TTL
- *  server-side, not from the code itself. */
-export const LinkCode = z.string().regex(/^\d{6}$/u);
-
-/**
- * One handle per platform, keyed by platform — so "one account per platform" is the shape of
- * the object, not a rule. Checked against the same patterns the page renders with
- * (`socials.ts`), so nothing reaches the database that the page would then refuse to link. A
- * key this version does not know is stripped rather than refused, like every other object on
- * the wire: a newer CLI offering a platform the server has not shipped loses that one link,
- * not the whole request.
- */
-const SocialHandlesSchema = z.object(
-  perPlatform((platform) =>
-    z
-      .string()
-      .refine((handle) => isHandle(platform, handle), {
-        message: `not a valid ${SOCIAL_PLATFORMS[platform].label} handle`,
-      })
-      .optional(),
-  ),
-);
-
-export const EmailLinkRequestSchema = z.object({
-  email: LinkEmail,
-  /**
-   * Required, never defaulted. A default here would mean the CLI decided
-   * whether a person gets published; the person decides.
-   */
-  consent_listing: z.boolean(),
-  /**
-   * Individuals only (freemail domains). Control characters rejected for the
-   * same reason as creative copy: this string is published on a public page.
-   */
-  display_name: z
-    .string()
-    .min(1)
-    .max(80)
-    .refine((name) => !hasControlCharacters(name), {
-      message: "display name must not contain control or bidirectional characters",
-    })
-    .optional(),
-  /**
-   * One website, for either kind — for a company, the one link beside the domain it is
-   * already listed under (A29). http(s) enforced because this becomes an `href` on a public
-   * page — `z.url()` alone would accept `javascript:`.
-   */
-  url: z
-    .url()
-    .max(200)
-    .refine((value) => value.startsWith("https://") || value.startsWith("http://"), {
-      message: "url must be http(s)",
-    })
-    .optional(),
-  /** Social handles, for either kind (A29). */
-  socials: SocialHandlesSchema.optional(),
-});
-export type EmailLinkRequest = z.infer<typeof EmailLinkRequestSchema>;
-
-export const EmailLinkCodeResponseSchema = z.object({
-  status: z.literal("code_sent"),
-  entity_kind: z.enum(["company", "individual"]),
-  /**
-   * The exact sentence that will be published if the code is confirmed —
-   * authored server-side so the CLI shows the truth rather than its own
-   * paraphrase of it.
-   */
-  publishes: z.string().max(400),
-  expires_in_s: z.int().positive(),
-});
-export type EmailLinkCodeResponse = z.infer<typeof EmailLinkCodeResponseSchema>;
-
-export const EmailLinkConfirmRequestSchema = z.object({
-  email: LinkEmail,
-  code: LinkCode,
-});
-export type EmailLinkConfirmRequest = z.infer<typeof EmailLinkConfirmRequestSchema>;
-
-export const LinkedEmailWireSchema = z.object({
-  email: z.string(),
-  entity_kind: z.enum(["company", "individual"]),
-  verified: z.boolean(),
-  /** True when this email's entry is publicly visible right now. */
-  listed: z.boolean(),
-  /** Individuals are reviewed before publication, like every ad creative. */
-  pending_review: z.boolean(),
-  /** Whether this install's impressions have qualified the entry this period. */
-  qualified_this_period: z.boolean(),
-});
-export type LinkedEmailWire = z.infer<typeof LinkedEmailWireSchema>;
-
-export const EmailLinkConfirmResponseSchema = z.object({
-  linked: z.boolean(),
-  entry: LinkedEmailWireSchema.optional(),
-});
-export type EmailLinkConfirmResponse = z.infer<typeof EmailLinkConfirmResponseSchema>;
-
-export const EmailLinkStatusResponseSchema = z.object({
-  /** `YYYY-MM-01`, the period qualification is being reported against. */
-  period: z.string(),
-  emails: z.array(LinkedEmailWireSchema),
-});
-export type EmailLinkStatusResponse = z.infer<typeof EmailLinkStatusResponseSchema>;
-
-export const EmailUnlinkRequestSchema = z.object({ email: LinkEmail });
-export type EmailUnlinkRequest = z.infer<typeof EmailUnlinkRequestSchema>;
-
-export const EmailUnlinkResponseSchema = z.object({ unlinked: z.boolean() });
-export type EmailUnlinkResponse = z.infer<typeof EmailUnlinkResponseSchema>;
 
 // ─────────────── Errors ───────────────
 

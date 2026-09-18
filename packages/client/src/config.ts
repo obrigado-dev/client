@@ -42,6 +42,8 @@ export const BATCH_PATH = join(OBRIGADO_DIR, "batch.json");
 export const QUEUE_PATH = join(OBRIGADO_DIR, "queue.jsonl");
 export const BACKUP_DIR = join(OBRIGADO_DIR, "backups");
 export const SESSION_STATE_DIR = join(OBRIGADO_DIR, "sessions");
+/** When Obrigado's own notice last took the slot, across every host (A30). */
+export const NOTICE_PATH = join(OBRIGADO_DIR, "notice.json");
 
 export const CLAUDE_SETTINGS_PATH = absolute(join(HOME, ".claude", "settings.json"));
 export const CODEX_HOME = absolute(process.env["CODEX_HOME"] ?? join(HOME, ".codex"));
@@ -111,6 +113,20 @@ export interface ClientConfig {
    * confirm. Local convenience only — never sent anywhere by itself.
    */
   readonly pending_link_email?: string;
+  /**
+   * The session `obrigado link github` signed this install in with (A33): who the developer is
+   * to Obrigado, for a later feature to present as `Authorization: Bearer`.
+   *
+   * Nothing sends it today. It is kept because the client never updates itself, so the release
+   * that first uses it should find the person already signed in rather than ask again. The
+   * server stores only its sha256; `obrigado unlink github` ends it there and removes it here.
+   */
+  readonly developer_session?: {
+    readonly token: string;
+    /** The GitHub login it was issued for, as GitHub reported it then. */
+    readonly login: string;
+    readonly expires_at: string;
+  };
   /**
    * What this developer agreed to be targeted on. Absent means none of it.
    *

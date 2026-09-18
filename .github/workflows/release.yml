@@ -30,6 +30,27 @@ jobs:
         with:
           bun-version-file: package.json
 
+      # The tag must be the version the binary reports. `CLIENT_VERSION` is what every install
+      # sends as `client_version`, and `version.test.ts` holds it to the manifest; this holds the
+      # tag to the manifest. Without both, a release could go out still reporting 0.0.0, and the
+      # notice line (A30), which is targeted by version, could never ask those installs to update:
+      # the client does not update itself, so a binary that cannot be told apart cannot be reached.
+      - name: The tag is the version the binary reports
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -eu
+          manifest="packages/client/package.json"
+          version="$(bun -e "console.log(JSON.parse(await Bun.file('$manifest').text()).version)")"
+          if [ "$version" = "0.0.0" ]; then
+            echo "$manifest is still 0.0.0: bump it (and CLIENT_VERSION) before tagging" >&2
+            exit 1
+          fi
+          if [ "$TAG" != "v$version" ]; then
+            echo "tag says $TAG but $manifest says $version" >&2
+            exit 1
+          fi
+
       - run: bun install --frozen-lockfile
 
       # The same gate CI runs. A tag is not a reason to publish something that does not pass —

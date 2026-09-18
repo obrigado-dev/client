@@ -3,6 +3,7 @@ import {
   hostVersionFromPayload,
   isCiEnvironment,
   startSession,
+  surfaceVersionFromPayload,
   timingFromPayload,
 } from "../api.ts";
 import { sharingSettings } from "../config.ts";
@@ -23,6 +24,7 @@ import { claudeIntegration, readConfig, sponsoredPosition } from "../config.ts";
 import type { ClientConfig } from "../config.ts";
 import { isPrivateRepo, resolveDeps } from "../deps.ts";
 import { stripControlCharacters } from "../link.ts";
+import { noticeForRender, noticeLine, noticeParts } from "../notice.ts";
 import { copyParts, renderCopy } from "../render.ts";
 import { drainRetrieval } from "../retrieval.ts";
 import {
@@ -116,6 +118,7 @@ async function ensureBatch(
     signals: collectSignals({
       agent,
       agentVersion: hostVersionFromPayload(payload),
+      surfaceVersion: surfaceVersionFromPayload(payload),
       sharing: sharingSettings(config),
       ...(retrieved === undefined ? {} : { retrieved }),
     }),
@@ -271,7 +274,10 @@ export async function statusline(argv: readonly string[] = []): Promise<number> 
     // the one moment per session cheap enough to sweep abandoned state on.
     const coldStart = state.batch === null;
     const outcome = await ensureBatch(config, origin, payload, state, agent);
-    const rotation = outcome.batch === null ? null : nextCreative(outcome.batch);
+    // Decided BEFORE the rotation is consulted, so while a notice holds the slot the rotation
+    // neither advances nor claims an impression: the window is simply unbilled (A30).
+    const notice = await noticeForRender(outcome.batch?.notice);
+    const rotation = notice !== null || outcome.batch === null ? null : nextCreative(outcome.batch);
 
     /*
      * Enqueue BEFORE persisting the rotation.
@@ -285,9 +291,14 @@ export async function statusline(argv: readonly string[] = []): Promise<number> 
     if (rotation?.fresh === true) await reportImpression(rotation.item, payload);
 
     await persistRender(agent, sessionId, state, outcome);
-    if (rotation === null) return 0;
-
-    if (structured) {
+    if (notice !== null) {
+      // Obrigado's own line, labelled as ours rather than as an ad, in whichever form the host
+      // asked for. See `notice.ts`.
+      const line = structured ? JSON.stringify(noticeParts(notice)) : noticeLine(notice);
+      process.stdout.write(`${line}\n`);
+    } else if (rotation === null) {
+      return 0;
+    } else if (structured) {
       // A host that draws its own UI cannot use an ANSI string. OpenCode's TUI has a
       // real link element, so handing it pre-escaped bytes would force it to either
       // render them literally or strip them — the two failures that disqualified

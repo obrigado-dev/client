@@ -11,6 +11,7 @@ import {
   uninstallPiExtension,
 } from "../src/pi-extension.ts";
 import { rendererCommand } from "../src/renderer-command.ts";
+import { CLIENT_VERSION } from "../src/version.ts";
 
 function scratch(): Promise<string> {
   return mkdtemp(join(tmpdir(), "obrigado-pi-"));
@@ -64,6 +65,25 @@ describe("writing the extension", () => {
     expect(written).toContain(`const COMMAND = ${JSON.stringify(rendererCommand())};`);
     const command = rendererCommand().split(" ")[0] ?? "";
     expect(command === "obrigado" || (await Bun.file(command).exists())).toBe(true);
+  });
+
+  /*
+   * The copy is frozen until install runs again, so the version that wrote it is the only way the
+   * server can tell "update the binary" from "run install again" (A30). A copy that kept the
+   * source's placeholder would report every Pi install as a checkout.
+   */
+  test("stamps the copy with the client version that wrote it", async () => {
+    const { path, backups } = await target();
+
+    await installPiExtension("pi", path, backups);
+    const written = await readFile(path, "utf8");
+
+    expect(written).toContain(`const SURFACE_VERSION = ${JSON.stringify(CLIENT_VERSION)};`);
+    expect(written).toContain("surface_version: SURFACE_VERSION");
+    const source = await readFile(new URL("../../pi-extension/src/obrigado.ts", import.meta.url));
+    expect(sourceForHost(source.toString(), "pi", "obrigado statusline", "9.9.9")).toContain(
+      'const SURFACE_VERSION = "9.9.9";',
+    );
   });
 
   test("refuses a source whose agent marker is missing", () => {

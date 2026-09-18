@@ -28,11 +28,11 @@ import { describe, expect, test } from "bun:test";
 
 import {
   BeaconRequestSchema,
-  EmailLinkConfirmRequestSchema,
-  EmailLinkRequestSchema,
   MAX_DURATION_S,
   SessionRequestSchema,
+  SessionResponseSchema,
 } from "../src/contract.ts";
+import { EmailLinkConfirmRequestSchema, EmailLinkRequestSchema } from "../src/wall-contract.ts";
 /**
  * The oldest session request shape that has ever shipped.
  *
@@ -211,5 +211,46 @@ describe("v1 email-link requests keep parsing", () => {
     expect(EmailLinkConfirmRequestSchema.safeParse(V1_LINK_CONFIRM).error?.message ?? "ok").toBe(
       "ok",
     );
+  });
+});
+
+describe("notices and surface versions only widen the contract (A30)", () => {
+  /** What every server before A30 answered, and what this one answers with nothing to say. */
+  const V1_SESSION_RESPONSE = {
+    fp: "0".repeat(32),
+    batch: [],
+    ttl_seconds: 900,
+    serving: false,
+  };
+
+  test("a response with no notice still parses", () => {
+    const parsed = SessionResponseSchema.safeParse(V1_SESSION_RESPONSE);
+    expect(parsed.error?.message ?? "ok").toBe("ok");
+    expect(parsed.data?.notice).toBeUndefined();
+  });
+
+  test("a notice parses, and one that would not be safe to draw does not", () => {
+    const notice = { id: "update-0.2", body: "An update is out.", url: "https://obrigado.dev/x" };
+    expect(SessionResponseSchema.safeParse({ ...V1_SESSION_RESPONSE, notice }).success).toBe(true);
+
+    // A link that is not https, and copy carrying an escape byte, are refused at the boundary:
+    // the renderer is the second layer, not the only one.
+    const escape = String.fromCodePoint(0x1b);
+    for (const bad of [
+      { ...notice, url: "http://obrigado.dev/x" },
+      { ...notice, body: `${escape}]8;;https://evil.example click` },
+    ]) {
+      expect(SessionResponseSchema.safeParse({ ...V1_SESSION_RESPONSE, notice: bad }).success).toBe(
+        false,
+      );
+    }
+  });
+
+  test("a request that names its surface's version parses", () => {
+    const parsed = SessionRequestSchema.safeParse({
+      ...V1_SESSION_MINIMAL,
+      signals: { ...V1_SESSION_MINIMAL.signals, agent: "pi", surface_version: "0.3.0" },
+    });
+    expect(parsed.error?.message ?? "ok").toBe("ok");
   });
 });

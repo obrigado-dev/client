@@ -12,17 +12,12 @@
  */
 import { confirmEmailLink, emailLinkStatus, requestEmailLink, unlinkEmail } from "../api.ts";
 import { readConfig, writeConfig } from "../config.ts";
-import type { ClientConfig } from "../config.ts";
+import { explain, parseLinkArgs } from "./link-args.ts";
+import type { LinkArgs, LinkFlow } from "./link-args.ts";
+import { gitHubStatusLines, linkGitHub, unlinkGitHubCommand } from "./link-github.ts";
 import { apiOrigin } from "./shared.ts";
-import type { LinkedEmailWire, Socials } from "@obrigado/shared";
-import {
-  isSocialPlatform,
-  LinkCode,
-  LinkEmail,
-  normalizeHandle,
-  SOCIAL_PLATFORM_IDS,
-  SOCIAL_PLATFORMS,
-} from "@obrigado/shared";
+import type { LinkedEmailWire } from "@obrigado/shared";
+import { LinkCode, LinkEmail, SOCIAL_PLATFORM_IDS } from "@obrigado/shared";
 
 /** One flag per platform, generated from the table the server validates against, wrapped. */
 function platformFlags(): string {
@@ -41,111 +36,26 @@ function platformFlags(): string {
 
 const LINK_USAGE = `obrigado link — put your name (or your company's domain) on obrigado.dev/obrigado
 
-  obrigado link                          where each linked email stands this month
+  obrigado link                          where each linked email and account stands
+  obrigado link github                   sign in with GitHub; your login lists at once
   obrigado link you@company.com          request a verification code
   obrigado link you@gmail.com --name "Ada L"
   obrigado link --code 123456            confirm with the emailed code
   obrigado link you@company.com --no-list  verify without being listed
   obrigado unlink you@company.com        remove the link and the listing
+  obrigado unlink github [login]         remove a GitHub account and its listing
 
-Links, on either kind of email:
+Links, on an email or beside a GitHub login:
   --url https://ada.dev                  one website
   --github ada --x ada_l                 one handle per platform, from:
 ${platformFlags()}
 
 A company-domain email lists the domain and its links as soon as it is verified; a
-personal email lists the name and links you give once they have been reviewed. Listing
+personal email lists the name and links you give once they have been reviewed. A GitHub
+login lists as soon as GitHub confirms it; a name or links beside it wait for review. Listing
 lasts only while a linked install sees a sponsored line that month — the page re-earns
 itself on the 1st.
 `;
-
-/**
- * Server error codes → sentences. Each failure has a different next step, which
- * is the whole reason the api layer reports codes instead of `null`.
- */
-const ERROR_TEXT: Record<string, string> = {
-  feature_disabled: "This server doesn't have email linking enabled yet.",
-  disposable_domain: "Disposable email domains can't be linked.",
-  invalid_request: "The server rejected that request — check the address and try again.",
-  too_many_codes: "Too many codes requested for now. Wait an hour and try again.",
-  too_many_emails: "This install already has its maximum number of linked emails.",
-  code_expired: "That code has expired. Request a new one with `obrigado link <email>`.",
-  code_invalid: "That code doesn't match. Check the email and try again.",
-  too_many_attempts: "Too many wrong attempts. Request a new code with `obrigado link <email>`.",
-  unknown_install: "This install isn't registered yet — render a status line once, then retry.",
-  unknown_email: "That email isn't linked to this install.",
-  bad_response: "The server answered with something this client doesn't understand.",
-};
-
-function explain(error: string, origin: string): string {
-  if (error === "unreachable") return `Could not reach ${origin}.`;
-  return ERROR_TEXT[error] ?? `The server refused: ${error}.`;
-}
-
-/**
- * `?: T | undefined` rather than `?: T`, because `exactOptionalPropertyTypes` makes those
- * different types: the second says the key may be ABSENT, and the parser always sets every
- * key — to `undefined` when the flag was not given. Absent and undefined mean the same thing
- * to every reader here, so the type says so.
- */
-interface LinkArgs {
-  readonly email?: string | undefined;
-  readonly code?: string | undefined;
-  readonly name?: string | undefined;
-  readonly url?: string | undefined;
-  readonly socials?: Socials | undefined;
-  readonly noList: boolean;
-  readonly problem?: string | undefined;
-}
-
-/** Tiny by-hand parse, same trade as `cli.ts`: a parser dependency for a handful of flags
- *  would be more surface than the flags. The platform flags come from the shared table, and
- *  a handle is checked here as well as on the server so a typo is a sentence, not a 400. */
-function parseArgs(argv: readonly string[]): LinkArgs {
-  let email: string | undefined;
-  let code: string | undefined;
-  let name: string | undefined;
-  let url: string | undefined;
-  const socials: Socials = {};
-  let noList = false;
-
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i] as string;
-    const platform = arg.startsWith("--") ? arg.slice(2) : "";
-    if (arg === "--no-list") {
-      noList = true;
-    } else if (arg === "--code" || arg === "--name" || arg === "--url") {
-      const value = argv[i + 1];
-      if (value === undefined) return { noList, problem: `${arg} needs a value` };
-      if (arg === "--code") code = value;
-      if (arg === "--name") name = value;
-      if (arg === "--url") url = value;
-      i += 1;
-    } else if (isSocialPlatform(platform)) {
-      const value = argv[i + 1];
-      const { label } = SOCIAL_PLATFORMS[platform];
-      if (value === undefined) return { noList, problem: `${arg} needs a value` };
-      // One account per platform: the second flag is a mistake, not a replacement.
-      if (socials[platform] !== undefined) {
-        return { noList, problem: `${arg} given twice — one ${label} account per email` };
-      }
-      const handle = normalizeHandle(platform, value);
-      if (handle === null) {
-        return { noList, problem: `${JSON.stringify(value)} is not a valid ${label} handle` };
-      }
-      socials[platform] = handle;
-      i += 1;
-    } else if (arg.startsWith("--")) {
-      return { noList, problem: `unknown flag ${arg}` };
-    } else if (email === undefined) {
-      email = arg;
-    } else {
-      return { noList, problem: "more than one email given" };
-    }
-  }
-
-  return { email, code, name, url, socials, noList };
-}
 
 function describe(entry: LinkedEmailWire): string {
   if (!entry.verified) return "unverified";
@@ -156,11 +66,7 @@ function describe(entry: LinkedEmailWire): string {
     : "listed, no view yet this month";
 }
 
-interface Flow {
-  readonly config: ClientConfig;
-  readonly origin: string;
-  readonly options: { readonly apiOrigin: string; readonly installKey: string };
-}
+type Flow = LinkFlow;
 
 async function confirmFlow(flow: Flow, args: LinkArgs, code: string): Promise<number> {
   if (!LinkCode.safeParse(code).success) {
@@ -246,17 +152,23 @@ async function statusFlow(flow: Flow): Promise<number> {
     return 1;
   }
 
-  if (result.data.emails.length === 0) {
-    console.log("  No emails linked to this install.\n");
+  const { emails, github } = result.data;
+  if (emails.length === 0 && github.length === 0) {
+    console.log("  No emails or GitHub accounts linked to this install.\n");
     console.log(LINK_USAGE);
     return 0;
   }
 
-  console.log(`  Linked emails — period ${result.data.period}\n`);
-  const width = Math.max(...result.data.emails.map((entry) => entry.email.length));
-  for (const entry of result.data.emails) {
+  console.log(`  Linked to this install — period ${result.data.period}\n`);
+  const width = Math.max(
+    ...emails.map((entry) => entry.email.length),
+    ...github.map((entry) => entry.login.length + 1),
+  );
+  for (const entry of emails) {
     console.log(`  ${entry.email.padEnd(width)}  ${entry.entity_kind}  ${describe(entry)}`);
   }
+  const signedIn = flow.config.developer_session?.login;
+  for (const line of gitHubStatusLines(github, width, signedIn)) console.log(line);
   return 0;
 }
 
@@ -267,7 +179,7 @@ export async function link(argv: readonly string[]): Promise<number> {
     return 1;
   }
 
-  const args = parseArgs(argv);
+  const args = parseLinkArgs(argv[0] === "github" ? argv.slice(1) : argv);
   if (args.problem !== undefined) {
     console.log(`  ${args.problem}\n`);
     console.log(LINK_USAGE);
@@ -281,6 +193,8 @@ export async function link(argv: readonly string[]): Promise<number> {
     options: { apiOrigin: origin, installKey: config.install_key },
   };
 
+  if (argv[0] === "github") return await linkGitHub(flow, args);
+
   if (args.code !== undefined) return await confirmFlow(flow, args, args.code);
   if (args.email !== undefined) return await requestFlow(flow, args, args.email);
   return await statusFlow(flow);
@@ -292,6 +206,8 @@ export async function unlink(argv: readonly string[]): Promise<number> {
     console.log("Obrigado is not installed. Run `obrigado install`.");
     return 1;
   }
+
+  if (argv[0] === "github") return await unlinkGitHubCommand(config, argv[1]);
 
   const email = argv[0];
   if (email === undefined || !LinkEmail.safeParse(email).success) {
