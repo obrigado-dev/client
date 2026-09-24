@@ -4,7 +4,7 @@ What a host that draws its own UI needs from [Obrigado](https://obrigado.dev)'s 
 nothing else.
 
 Obrigado puts one labeled sponsored line in a coding agent's status line, and 70% of the
-revenue funds the open-source packages the developer's project depends on. There is one
+revenue funds grants to open source maintainers. There is one
 renderer, `obrigado statusline`, and every host serialises from it. A host that composes the
 line from parts rather than printing an ANSI string — OpenCode's TUI plugin, the VS Code
 extension — runs `obrigado statusline --agent <host> --json` and draws what it is handed.

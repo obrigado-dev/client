@@ -37,7 +37,7 @@ its own UI cannot consume an ANSI string, and handing it one would force exactly
 render-literally-or-strip failure that sank Codex.
 
 The label sits outside the link, as it does in the terminal renderer: what is clickable is
-the advertiser's copy, and nobody can click the word "sponsored" and land on an advertiser.
+the advertiser's copy, and nobody can click the disclosure itself and land on an advertiser.
 
 Every failure renders nothing, leaving OpenCode looking exactly as it did before the plugin
 was installed. That is the correct failure for an advertisement.

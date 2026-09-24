@@ -80,7 +80,7 @@ describe("how a notice is drawn", () => {
   test("labelled as ours, never as sponsored", () => {
     const line = noticeLine(NOTICE, { TERM: "dumb" });
     expect(line).toBe(`${NOTICE_LABEL} · ${NOTICE.body}`);
-    expect(line).not.toContain("sponsored");
+    expect(line).not.toContain("oss-sponsor");
   });
 
   test("the label stays outside the link", () => {

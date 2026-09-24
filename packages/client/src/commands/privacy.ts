@@ -22,7 +22,7 @@
  * `packages` is the one that used to be free. Until A28 the lockfile targeted whether the
  * developer liked it or not, on the grounds that it was the product. A baseline nobody agreed
  * to is not a baseline, so it is a flag like the rest and starts off like the rest. The deps
- * still travel on every session: they are what the 70% is split across, and the flag only
+ * still travel on every session: they are what makes an impression worth buying, and the flag only
  * decides whether an advertiser may buy reach against them.
  *
  * ## Turning one off erases
@@ -62,7 +62,7 @@ export const DIMENSIONS: readonly Dimension[] = [
     what: "Advertisers target the packages you depend on.",
     stored:
       "Stores nothing new. Your lockfile is already sent, because it is what the payout " +
-      "is split across. This decides whether it can also pick the ad.",
+      "makes an impression worth buying. This decides whether it can also pick the ad.",
   },
   {
     key: "region",
@@ -111,7 +111,7 @@ export function printTargetingOffer(sharing: ClientConfig["sharing"]): void {
   console.log(
     "\nAdvertisers cannot target this install on anything. Lockfile, region, IP range\n" +
       "and recently-read packages are all off, and stay off unless you say otherwise.\n" +
-      "You earn nothing for turning them on; better targeting just pays your deps more.\n\n" +
+      "You earn nothing for turning them on; better targeting just raises what the line is worth.\n\n" +
       "  obrigado privacy    see what each one means",
   );
 }
@@ -201,7 +201,7 @@ function show(sharing: NonNullable<ClientConfig["sharing"]> | Record<string, nev
   }
   process.stdout.write(
     "You earn nothing for any of this, on purpose: paying for consent would make\n" +
-      "farming impressions worth doing. Better targeting just pays your deps more.\n\n" +
+      "farming impressions worth doing. Better targeting just raises what the line is worth.\n\n" +
       "  obrigado privacy <name> on|off\n",
   );
 }

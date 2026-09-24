@@ -67,8 +67,14 @@ export interface SponsoredBrand {
 
 /** One `--json` line from `obrigado statusline`. */
 export interface Sponsored {
-  /** The disclosure. A host renders it before the copy, always, and never styles it. */
-  readonly label: string;
+  /**
+   * The disclosure. A host renders it before the copy and never styles it.
+   *
+   * Null when the developer turned it off locally (A34) — the one case where a line is drawn
+   * without one, decided by the person reading it and by nobody else. A host draws the copy
+   * alone then, rather than inventing a prefix of its own.
+   */
+  readonly label: string | null;
   /** The plain copy: the accessible fallback, and the form that belongs in a log. */
   readonly copy: string;
   /** The click redirect, `https://obrigado.dev/c/<token>`. */
@@ -82,8 +88,10 @@ export interface Sponsored {
 /**
  * One line of `--json` output, or null for anything that is not a complete sponsored line.
  *
- * Label, copy and URL, or nothing: a creative without its label is an undisclosed
- * advertisement, and one without its URL is an impression nobody can act on. Styling is
+ * Copy and URL, or nothing: a creative without its URL is an impression nobody can act on.
+ * The label may be absent, and only for the reason A34 gives — the renderer sends `null` when
+ * the developer turned the disclosure off, and the renderer is the only thing that can. An
+ * advertiser cannot reach this field. Styling is
  * optional on the wire — an older renderer that sends none still renders, as one unstyled link
  * over the whole line. A brand without a name is not a brand; the alt text for a logo IS the
  * name, so a malformed one is dropped rather than rendered half-way.
@@ -98,13 +106,14 @@ export function parseSponsored(line: string): Sponsored | null {
   if (typeof parsed !== "object" || parsed === null) return null;
 
   const { label, copy, url, spans, style, effect, brand } = parsed as Partial<Sponsored>;
-  if (typeof label !== "string" || typeof copy !== "string" || typeof url !== "string") {
-    return null;
-  }
-  if (label.length === 0 || copy.length === 0 || url.length === 0) return null;
+  if (typeof copy !== "string" || typeof url !== "string") return null;
+  if (copy.length === 0 || url.length === 0) return null;
+  if (label !== null && label !== undefined && typeof label !== "string") return null;
 
   return {
-    label,
+    // An older renderer always sends one; a newer one sends null when it is off. Empty is
+    // read as off too, so a host never draws a bare separator.
+    label: typeof label === "string" && label.length > 0 ? label : null,
     copy,
     url,
     spans: Array.isArray(spans) && spans.length > 0 ? spans : [{ text: copy, link: true }],

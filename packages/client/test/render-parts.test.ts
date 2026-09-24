@@ -71,6 +71,6 @@ describe("copyParts — one render, serialised for a host that draws its own UI"
   test("the label is never included — the caller adds it, outside the link", () => {
     // A host that received the disclosure as a span could style it with the
     // advertiser's palette, or make it clickable. Neither is allowed (§3).
-    expect(JSON.stringify(copyParts(item()))).not.toContain("sponsored");
+    expect(JSON.stringify(copyParts(item()))).not.toContain("oss-sponsor");
   });
 });

@@ -18,7 +18,6 @@ import {
   MAX_DURATION_S,
   PackageId,
   SessionResponseSchema,
-  ShareResponseSchema,
   StatsResponseSchema,
 } from "@obrigado/shared";
 import type {
@@ -31,7 +30,6 @@ import type {
   SessionResponse,
   SessionSignals,
   SharingSettings,
-  ShareResponse,
   StatsResponse,
   TimingSignals,
 } from "@obrigado/shared";
@@ -123,26 +121,6 @@ export async function fetchStats(options: StatsOptions): Promise<StatsResponse |
     if (!response.ok) return null;
 
     const parsed = StatsResponseSchema.safeParse(await response.json());
-    return parsed.success ? parsed.data : null;
-  } catch {
-    return null;
-  }
-}
-
-export async function changeShare(
-  options: StatsOptions,
-  action: "issue" | "revoke",
-): Promise<ShareResponse | null> {
-  try {
-    const response = await fetch(`${options.apiOrigin}/api/${API_VERSION}/share`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Obrigado-Key": options.installKey },
-      body: JSON.stringify({ action }),
-      signal: AbortSignal.timeout(STATS_TIMEOUT_MS),
-    });
-    if (!response.ok) return null;
-
-    const parsed = ShareResponseSchema.safeParse(await response.json());
     return parsed.success ? parsed.data : null;
   } catch {
     return null;
@@ -332,7 +310,7 @@ export interface SignalContext {
    * Package ids the agent has been reading lately, for SELECTION.
    *
    * Sent only when `sharing.activity` is on. The same ids the beacon already carries for
-   * payout weighting — resolved to packages locally and with anything unresolvable dropped,
+   * targeting — resolved to packages locally and with anything unresolvable dropped,
    * because "the project is the private part" (see `retrieval.ts`). Passed in rather than read
    * here so the caller decides, and so a config that says no produces a request with no field
    * rather than a field the server is trusted to ignore.

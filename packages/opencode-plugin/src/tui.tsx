@@ -284,7 +284,7 @@ function sponsoredRow(
       ) : null}
       <text>
         {glyphEnabled() ? `${GLYPH_FRAMES[frame() % GLYPH_FRAMES.length] ?? ""} ` : ""}
-        {ad.label} ·{" "}
+        {ad.label === null ? null : <>{ad.label} · </>}
         {ad.spans.map((span) =>
           span.link === true ? (
             <a href={ad.url} style={runStyle(span, ad, hovered())}>

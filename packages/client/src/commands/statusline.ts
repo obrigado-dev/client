@@ -20,7 +20,7 @@ import {
 import type { BatchItem } from "@obrigado/shared";
 import type { CachedBatch } from "@obrigado/shared/rotation";
 import { isChainedRender, readStdinPayload, runChained } from "../chain.ts";
-import { claudeIntegration, readConfig, sponsoredPosition } from "../config.ts";
+import { claudeIntegration, labelShown, readConfig, sponsoredPosition } from "../config.ts";
 import type { ClientConfig } from "../config.ts";
 import { isPrivateRepo, resolveDeps } from "../deps.ts";
 import { stripControlCharacters } from "../link.ts";
@@ -40,8 +40,15 @@ import { DEFAULT_AGENT, isAgent } from "../version.ts";
 import type { Agent } from "../version.ts";
 import { apiOrigin } from "./shared.ts";
 
-/** §3: "always labeled". This prefix is not configurable. */
-const SPONSOR_LABEL = "sponsored";
+/**
+ * The disclosure, as §3 requires it and A34 lets a developer turn it off.
+ *
+ * `oss-sponsor` rather than `sponsored`: it still names the line as paid placement, which is
+ * what the disclosure is for, and it names what the money does, which is what makes this
+ * product different from the one §3 was written against. Advertisers cannot change it — only
+ * the person reading the line can, with `obrigado config label off`.
+ */
+const SPONSOR_LABEL = "oss-sponsor";
 
 /**
  * Which host is rendering this line.
@@ -176,8 +183,19 @@ function pendingLine(text: string | null): () => void {
   };
 }
 
-/** Queue the impression for a creative that has just taken the surface. */
-async function reportImpression(item: BatchItem, payload: string): Promise<void> {
+/**
+ * Queue the impression for a creative that has just taken the surface.
+ *
+ * `shareActivity` gates the read list for the same reason the session request does: the
+ * published answer on /faq says what an agent has been reading travels only when that flag is
+ * on, and this path used to drain the queue whichever way it was set. Wiring the hook is a
+ * second opt-in on top, not a substitute for the first.
+ */
+async function reportImpression(
+  item: BatchItem,
+  payload: string,
+  shareActivity: boolean,
+): Promise<void> {
   // §14 Phase 3: timing travels with the impression, not the session, because
   // interactivity accumulates as the session runs. The first render of a session has
   // almost no history and would classify as unattended on its own; the tenth has
@@ -186,7 +204,7 @@ async function reportImpression(item: BatchItem, payload: string): Promise<void>
   // §14 Phase 6. Drained rather than read: the queue is per-session state written by a
   // hook, and leaving entries behind would report the same reads against every subsequent
   // impression, inflating the multiplier for whatever the agent happened to open once.
-  const retrieved = await drainRetrieval();
+  const retrieved = shareActivity ? await drainRetrieval() : [];
 
   const signals: { timing?: typeof timing; retrieved?: string[] } = {};
   if (Object.keys(timing).length > 0) signals.timing = timing;
@@ -288,7 +306,9 @@ export async function statusline(argv: readonly string[] = []): Promise<number> 
      * with no trace. The other order has a strictly better failure mode, because INVARIANT 5
      * makes re-queuing an impression that already landed harmless.
      */
-    if (rotation?.fresh === true) await reportImpression(rotation.item, payload);
+    if (rotation?.fresh === true) {
+      await reportImpression(rotation.item, payload, config.sharing?.activity === true);
+    }
 
     await persistRender(agent, sessionId, state, outcome);
     if (notice !== null) {
@@ -309,7 +329,9 @@ export async function statusline(argv: readonly string[] = []): Promise<number> 
       // label travels with it so no host has to remember to add one.
       process.stdout.write(
         `${JSON.stringify({
-          label: SPONSOR_LABEL,
+          // Null when the developer turned the disclosure off, so a host that draws its own
+          // UI drops the prefix rather than inventing one. See `@obrigado/surface`.
+          label: labelShown(config) ? SPONSOR_LABEL : null,
           // Plain copy travels too: it is the accessible fallback for a host that cannot
           // style, and the form that belongs in a log.
           copy: stripControlCharacters(rotation.item.body).trim(),
@@ -319,14 +341,14 @@ export async function statusline(argv: readonly string[] = []): Promise<number> 
       );
     } else {
       // The label is outside the link, so what is clickable is the ad copy and the
-      // word "sponsored" is not — a developer should never Cmd+click the disclosure
-      // itself and land on an advertiser.
+      // disclosure is not — a developer should never Cmd+click the label itself and
+      // land on an advertiser.
       // Sanitise BEFORE wrapping: escape bytes inside the link text would still
       // reach the terminal, and could erase the label that precedes it.
       // §3: the LABEL is never styled. Only the copy carries the advertiser's
       // palette choice, so the disclosure cannot be made quieter than the ad.
       const body = renderCopy(rotation.item, { color: config.color ?? "auto" });
-      process.stdout.write(`${SPONSOR_LABEL} · ${body}\n`);
+      process.stdout.write(labelShown(config) ? `${SPONSOR_LABEL} · ${body}\n` : `${body}\n`);
     }
 
     // Ship beacons AFTER the line is on screen, and AWAIT it.

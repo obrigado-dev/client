@@ -109,7 +109,7 @@ export function requestPreview(sharing: SharingSettings, retrieved: readonly str
 
 function preamble(say: Say): void {
   say("\nTargeting: 4 questions, all default no. Nothing is targetable until you say so.");
-  say("You earn nothing for saying yes; better targeting just pays your deps more.");
+  say("You earn nothing for saying yes; better targeting just raises what the line is worth.");
 }
 
 /**
@@ -268,6 +268,6 @@ export function reportStored(decision: SharingDecision): void {
     console.log("");
   }
 
-  console.log("70% of gross revenue goes to the packages your project depends on.");
+  console.log("70% of gross revenue funds grants to open source maintainers.");
   if (!decision.asked) printTargetingOffer(decision.sharing);
 }

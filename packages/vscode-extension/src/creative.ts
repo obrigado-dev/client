@@ -21,7 +21,7 @@ import type { Sponsored, SponsoredBrand, SponsoredSpan } from "@obrigado/surface
 export type { Sponsored, SponsoredSpan };
 
 /** Said once, rendered in the hover. */
-const FOOTER = "70% of revenue funds the packages you depend on.";
+const FOOTER = "70% of revenue funds open source maintainers.";
 
 /**
  * The mark, as a Codicon.
@@ -59,7 +59,10 @@ export function escapeMarkdown(value: string): string {
  * not, and adjacency that another publisher can break is not that guarantee.
  */
 export function statusText(ad: Sponsored): string {
-  return `${GLYPH} ${stripCodicons(ad.label)} · ${stripCodicons(ad.copy)}`;
+  const copy = stripCodicons(ad.copy);
+  // No label means the developer turned the disclosure off (A34); the copy stands alone
+  // rather than behind a separator with nothing before it.
+  return ad.label === null ? `${GLYPH} ${copy}` : `${GLYPH} ${stripCodicons(ad.label)} · ${copy}`;
 }
 
 /**
@@ -88,7 +91,7 @@ export function tooltipMarkdown(ad: Sponsored): string {
   const copy = ad.spans.map((span) => emphasise(span, ad)).join("");
   return [
     ...logoLine(ad.brand),
-    `**${escapeMarkdown(ad.label)}**`,
+    ...(ad.label === null ? [] : [`**${escapeMarkdown(ad.label)}**`]),
     "",
     `[${copy}](${markdownUrl(ad.url)})`,
     "",

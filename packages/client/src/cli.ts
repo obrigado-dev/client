@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * `obrigado` — install | uninstall | statusline | status | projects | share | …
+ * `obrigado` — install | uninstall | statusline | status | link | …
  *
  * §3 governs everything here: sponsored copy appears only in host-owned status
  * or lifecycle UI. Never in prompts, code, context, shell history, or generated
@@ -12,11 +12,11 @@ import { config, refresh } from "./commands/config.ts";
 import { install, uninstall } from "./commands/install.ts";
 import { link, unlink } from "./commands/link.ts";
 import { privacy } from "./commands/privacy.ts";
-import { printRetrievalHook, projects, read, share, summary } from "./commands/projects.ts";
+import { printRetrievalHook, read, summary } from "./commands/projects.ts";
 import { doctor, status } from "./commands/status.ts";
 import { statusline } from "./commands/statusline.ts";
 
-const USAGE = `obrigado — sponsored status lines that fund your dependencies
+const USAGE = `obrigado — sponsored status lines that fund open source maintainers
 
   obrigado install             configure every detected supported agent
   obrigado install --agent claude-code|opencode|codex
@@ -25,10 +25,7 @@ const USAGE = `obrigado — sponsored status lines that fund your dependencies
   obrigado install --replace   take over an existing statusline (reversible)
   obrigado install --no-input  skip the targeting questions; everything stays off
   obrigado uninstall [--agent claude-code|opencode|codex]
-  obrigado status              this month, all time, and top funded packages
-  obrigado projects            every package this install has funded, ranked
-  obrigado share               a public page for what this install funds
-  obrigado share create        issue a link; share revoke kills it
+  obrigado status              what this install has contributed, this month and all time
   obrigado link                verify an email or GitHub to appear on obrigado.dev/obrigado
   obrigado link github         sign in with GitHub; your login lists at once
   obrigado link you@company.com  request a code; link --code 123456 confirms
@@ -43,17 +40,17 @@ const USAGE = `obrigado — sponsored status lines that fund your dependencies
   obrigado statusline --json   the line's parts, for a host that draws its own UI
   obrigado summary             one-line session summary (--json for a hook)
   obrigado summary --print-hook  the hook config to paste, if you want it
-  obrigado read --print-hook   opt into retrieval weighting (packages you read count 2x)
+  obrigado read --print-hook   report which packages your agent reads (off by default)
   obrigado doctor              diagnostics
 
-70% of gross revenue goes to the open-source packages your project depends on.
-You earn nothing. https://obrigado.dev
+70% of gross revenue funds grants to open source maintainers. You earn nothing.
+https://obrigado.dev
 `;
 
 /**
  * Dispatch table.
  *
- * Each handler takes the remaining argv so subcommands (`share create`) and flags
+ * Each handler takes the remaining argv so subcommands (`link github`) and flags
  * (`summary --json`) do not need a parser. Adding one for two cases would be more
  * code than the cases.
  */
@@ -63,8 +60,6 @@ const commands: Record<string, (argv: readonly string[]) => Promise<number>> = {
   config: () => config(),
   refresh: () => refresh(),
   status: () => status(),
-  projects: () => projects(),
-  share: (argv) => share(argv[0]),
   link: (argv) => link(argv),
   unlink: (argv) => unlink(argv),
   summary: (argv) => summary(argv.includes("--json"), argv.includes("--print-hook")),

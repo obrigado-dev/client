@@ -17,6 +17,10 @@ const SETTINGS = {
     values: ["auto", "off"],
     describe: "colour for the sponsored copy; `off` overrides any advertiser choice",
   },
+  label: {
+    values: ["on", "off"],
+    describe: "the `oss-sponsor ·` disclosure on the sponsored line (A34)",
+  },
   api_origin: {
     values: null,
     describe: "which Obrigado server to talk to",
@@ -36,6 +40,7 @@ function isSettingName(value: string): value is SettingName {
 function show(current: ClientConfig): void {
   console.log(`Settings — ${OBRIGADO_DIR}/config.json\n`);
   console.log(`  color            ${current.color ?? "auto"}`);
+  console.log(`  label            ${current.label ?? "on"}`);
   console.log(`  api_origin       ${apiOrigin(current)}`);
   console.log(`  session_summary  ${current.session_summary ?? true}`);
 
@@ -89,6 +94,9 @@ export async function config(): Promise<number> {
   switch (name) {
     case "color":
       await writeConfig({ ...next, color: value === "off" ? "off" : "auto" });
+      break;
+    case "label":
+      await writeConfig({ ...next, label: value === "off" ? "off" : "on" });
       break;
     case "api_origin":
       await writeConfig({ ...next, api_origin: value });

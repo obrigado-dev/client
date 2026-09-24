@@ -87,14 +87,14 @@ afterEach(() => {
 
 describe("the footer entry", () => {
   test("sets the line the CLI printed, under a stable key", async () => {
-    const cli = await stubCli(`printf '%s\\n' 'sponsored · Neon'`);
+    const cli = await stubCli(`printf '%s\\n' 'oss-sponsor · Neon'`);
     process.env["OBRIGADO_STATUSLINE_COMMAND"] = cli;
     const { handlers, api } = harness();
     extension(api);
 
     await handlers.get("session_start")?.({}, context(true, recorded));
 
-    expect(recorded.statuses).toEqual([["obrigado", "sponsored · Neon"]]);
+    expect(recorded.statuses).toEqual([["obrigado", "oss-sponsor · Neon"]]);
   });
 
   /*
@@ -103,7 +103,7 @@ describe("the footer entry", () => {
    * nobody could see would be a billed impression nobody saw.
    */
   test("asks for nothing when the host has no UI", async () => {
-    const cli = await stubCli(`printf '%s\\n' 'sponsored · Neon'; touch "$0.ran"`);
+    const cli = await stubCli(`printf '%s\\n' 'oss-sponsor · Neon'; touch "$0.ran"`);
     process.env["OBRIGADO_STATUSLINE_COMMAND"] = cli;
     const { handlers, api } = harness();
     extension(api);
@@ -160,13 +160,13 @@ describe("the footer entry", () => {
   });
 
   test("refreshes on every turn, not only at session start", async () => {
-    process.env["OBRIGADO_STATUSLINE_COMMAND"] = await stubCli(`printf 'sponsored\\n'`);
+    process.env["OBRIGADO_STATUSLINE_COMMAND"] = await stubCli(`printf 'oss-sponsor\\n'`);
     const { handlers, api } = harness();
     extension(api);
 
     await handlers.get("turn_end")?.({}, context(true, recorded));
 
-    expect(recorded.statuses).toEqual([["obrigado", "sponsored"]]);
+    expect(recorded.statuses).toEqual([["obrigado", "oss-sponsor"]]);
   });
 });
 

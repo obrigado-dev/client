@@ -66,7 +66,7 @@ option open; the reverse would not.
 into. It is the only thing here visible without a click.
 
 `StatusBarItem.text` supports Codicons (`$(name)`) and nothing else — no per-run colour, no
-bold, italic or underline. It renders `$(sparkle) sponsored · copy`, and the glyph is the
+bold, italic or underline. It renders `$(sparkle) oss-sponsor · copy`, and the glyph is the
 whole of what that prototype can be on this surface. Not a `~spin` variant: a spinning glyph
 in a status bar reads as work in progress, which is the note the animated OpenCode version
 already got.

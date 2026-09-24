@@ -2,7 +2,7 @@
  * Depth from a dependency graph.
  *
  * §10.3 stores depth and weights settlement by `1/(1+depth)`, so depth decides
- * money: a package one level deeper earns half as much from the same session.
+ * targeting: depth is how directly a project uses a package, which is what an advertiser buys.
  * That makes two properties non-negotiable.
  *
  * **Shallowest wins.** A package reachable both directly and transitively is a

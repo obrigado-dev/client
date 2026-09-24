@@ -120,7 +120,7 @@ describe("a notice in the slot", () => {
       join(home, ".obrigado", "notice.json"),
       JSON.stringify({ id: NOTICE.id, started_at: Date.now() - 60_000 }),
     );
-    expect(await render("pi")).toContain("sponsored ·");
+    expect(await render("pi")).toContain("oss-sponsor ·");
   });
 
   test("a host that draws its own UI gets parts it already knows how to draw", async () => {

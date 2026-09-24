@@ -4,7 +4,7 @@ import { parseSponsored, splitCommand, statuslineArgv } from "../src/index.ts";
 
 describe("parseSponsored", () => {
   const line = JSON.stringify({
-    label: "sponsored",
+    label: "oss-sponsor",
     copy: "Postgres, but you never think about it — neon.tech",
     url: "https://obrigado.dev/c/tok",
     spans: [{ text: "Postgres", bold: true, link: true }],
@@ -15,7 +15,7 @@ describe("parseSponsored", () => {
 
   test("keeps every part the renderer sent", () => {
     expect(parseSponsored(line)).toEqual({
-      label: "sponsored",
+      label: "oss-sponsor",
       copy: "Postgres, but you never think about it — neon.tech",
       url: "https://obrigado.dev/c/tok",
       spans: [{ text: "Postgres", bold: true, link: true }],
@@ -25,10 +25,10 @@ describe("parseSponsored", () => {
     });
   });
 
-  test("label, copy and URL, or nothing", () => {
-    // A creative without its label is an undisclosed advertisement; one without its URL is
-    // an impression nobody can act on. Neither is drawn.
-    for (const missing of ["label", "copy", "url"]) {
+  test("copy and URL, or nothing", () => {
+    // A creative without its URL is an impression nobody can act on, and one without copy is
+    // not a line. Neither is drawn.
+    for (const missing of ["copy", "url"]) {
       const partial = JSON.parse(line) as Record<string, unknown>;
       delete partial[missing];
       expect(parseSponsored(JSON.stringify(partial))).toBeNull();
@@ -36,10 +36,21 @@ describe("parseSponsored", () => {
     }
   });
 
+  test("no label is a line the developer turned the disclosure off on (A34)", () => {
+    // The one case where a line is drawn without one, and only the renderer can ask for it:
+    // an advertiser has no field here. Absent and empty read the same, so a host never draws
+    // a separator with nothing before it.
+    for (const off of [{ label: null }, { label: undefined }, { label: "" }]) {
+      const chosen = JSON.stringify({ ...(JSON.parse(line) as object), ...off });
+      expect(parseSponsored(chosen)?.label).toBeNull();
+      expect(parseSponsored(chosen)?.copy.length).toBeGreaterThan(0);
+    }
+  });
+
   test("an older renderer that sends no styling still renders, as one link", () => {
-    const bare = JSON.stringify({ label: "sponsored", copy: "hello", url: "https://x.example" });
+    const bare = JSON.stringify({ label: "oss-sponsor", copy: "hello", url: "https://x.example" });
     expect(parseSponsored(bare)).toEqual({
-      label: "sponsored",
+      label: "oss-sponsor",
       copy: "hello",
       url: "https://x.example",
       spans: [{ text: "hello", link: true }],
@@ -51,7 +62,7 @@ describe("parseSponsored", () => {
 
   test("a brand without a name is not a brand", () => {
     const nameless = JSON.stringify({
-      label: "sponsored",
+      label: "oss-sponsor",
       copy: "hello",
       url: "https://x.example",
       brand: { logo: "data:image/png;base64,AAAA" },
@@ -135,7 +146,7 @@ describe("statuslineArgv", () => {
 describe("the palette", () => {
   test("an unknown slot or effect degrades to none rather than to a string", () => {
     const line = JSON.stringify({
-      label: "sponsored",
+      label: "oss-sponsor",
       copy: "hello",
       url: "https://x.example",
       style: "red",

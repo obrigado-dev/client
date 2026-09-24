@@ -114,7 +114,7 @@ describe("when there is a line to show", () => {
     const lines = await render();
 
     expect(lines[0]).toBe(THEIRS);
-    expect(lines[1]).toContain("sponsored ·");
+    expect(lines[1]).toContain("oss-sponsor ·");
   });
 
   test("above puts ours on top", async () => {
@@ -122,7 +122,7 @@ describe("when there is a line to show", () => {
 
     const lines = await render();
 
-    expect(lines[0]).toContain("sponsored ·");
+    expect(lines[0]).toContain("oss-sponsor ·");
     expect(lines[1]).toBe(THEIRS);
   });
 

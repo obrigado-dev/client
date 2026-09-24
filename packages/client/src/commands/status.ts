@@ -1,5 +1,5 @@
 import { formatUsd, microsFromWire } from "@obrigado/shared/money";
-import type { DepEntry, StatsResponse } from "@obrigado/shared";
+import type { DepEntry } from "@obrigado/shared";
 
 import { fetchStats } from "../api.ts";
 import { droppedEvents, queueDepth } from "../beacon.ts";
@@ -19,36 +19,18 @@ import { sessionStateSummary } from "../session-state.ts";
 import { isOurStatusLine, readSettings } from "../statusline.ts";
 import { apiOrigin } from "./shared.ts";
 
-/** How many funded packages `status` names before deferring to `obrigado projects`. */
-const TOP_N = 8;
-
-/** How many local dependencies to list when there is nothing funded yet. */
+/** How many local dependencies to list. Enough to recognise the project, not a manifest. */
 const LOCAL_PREVIEW = 12;
 
 /**
- * The ranked packages, or the local dependency list when nothing has been funded.
+ * What this workspace is made of.
  *
- * The fallback is not a placeholder: before the first impression, "here is what this
- * workspace would fund" is the honest answer and the one the install pitch promises.
- * An empty section would read as "this does nothing".
+ * It used to rank the packages this install had funded and what each one got. A36 ended
+ * per-package allocation, so the honest version is the one this always fell back to: the
+ * dependency set an advertiser is buying reach into, read off the lockfile on this machine.
  */
-function printPackages(stats: StatsResponse | null, deps: readonly DepEntry[]): void {
-  if (stats !== null && stats.funded.length > 0) {
-    console.log("\n  Top funded:");
-    const top = stats.funded.slice(0, TOP_N);
-    const width = Math.max(...top.map((entry) => entry.package_id.length));
-    for (const entry of top) {
-      console.log(
-        `    ${entry.package_id.padEnd(width)}  ${formatUsd(microsFromWire(entry.share_micros))}`,
-      );
-    }
-    if (stats.funded.length > TOP_N) {
-      console.log(`    … ${stats.funded.length - TOP_N} more — \`obrigado projects\``);
-    }
-    return;
-  }
-
-  console.log("\n  Packages this workspace would fund:");
+function printPackages(deps: readonly DepEntry[]): void {
+  console.log("\n  This workspace depends on:");
   for (const dep of deps.slice(0, LOCAL_PREVIEW)) console.log(`    ${dep.p}`);
   if (deps.length > LOCAL_PREVIEW) console.log(`    … and ${deps.length - LOCAL_PREVIEW} more`);
 }
@@ -56,8 +38,8 @@ function printPackages(stats: StatsResponse | null, deps: readonly DepEntry[]): 
 /**
  * `obrigado status` (§14 Phase 1).
  *
- * The four figures the spec names — "this period's contribution, top funded
- * packages, session count, lifetime total" — above the local diagnostics. That order
+ * The figures §14 names — "this period's contribution, session count, lifetime total" —
+ * above the local diagnostics. That order
  * is the point: this is the retention surface, and the install pitch is "see which
  * projects your work funded", not "see whether your statusline hook is wired up".
  *
@@ -88,7 +70,7 @@ export async function status(): Promise<number> {
     const period = formatUsd(microsFromWire(stats.period_micros));
     const lifetime = formatUsd(microsFromWire(stats.lifetime_micros));
     console.log(`  This month    ${period}  (${stats.period}, accrued)`);
-    console.log(`  All time      ${lifetime}  to ${stats.package_count} packages`);
+    console.log(`  All time      ${lifetime}  across ${stats.package_count} packages`);
     console.log(`  Impressions   ${stats.impressions}`);
   }
 
@@ -127,11 +109,10 @@ export async function status(): Promise<number> {
     `  Clickable     ${supportsHyperlinks() ? "yes (Cmd/Ctrl+click)" : "no — this terminal has no OSC 8 support"}`,
   );
 
-  printPackages(stats, workspace.deps);
+  printPackages(workspace.deps);
 
-  console.log("\n  70% of gross revenue from these impressions is allocated to these packages.");
-  if (stats?.share_url !== undefined) console.log(`  Your shareable page: ${stats.share_url}`);
-  console.log(`  Full breakdown: ${origin}/transparency`);
+  console.log("\n  70% of gross revenue from these impressions funds open source maintainers.");
+  console.log(`  Every grant is published: ${origin}/transparency`);
   return 0;
 }
 

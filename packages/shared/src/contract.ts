@@ -91,7 +91,7 @@ export const SharingSettingsSchema = z.object({
   /**
    * Whether the dependency set may SELECT an ad, not merely receive the payout.
    *
-   * The deps are sent either way: they are what the 70% is split across, and an install that
+   * The deps are sent either way: they are what makes an impression worth buying, and an install that
    * withheld them would fund nothing. What this flag governs is whether an advertiser may buy
    * `package:` or `ecosystem:` reach against them. Off, the lockfile pays maintainers and
    * tells advertisers nothing.
@@ -456,7 +456,7 @@ export type BeaconResponse = z.infer<typeof BeaconResponseSchema>;
  *                 at request time and never stored. Obrigado sells no IP-to-organisation
  *                 mapping; an advertiser wanting account targeting brings their own ranges.
  *   - `retrieval` a package the agent has been reading lately (§14 Phase 6's signal, reused
- *                 for selection rather than only for payout weighting).
+ *                 for ad selection rather than only reported).
  *
  * The last describes the SURFACE, and needs no consent because it is not a fact about a
  * person: every session already names the host that will render the line.
@@ -640,25 +640,11 @@ export type PublishDraftRequest = z.infer<typeof PublishDraftRequestSchema>;
 // ─────────────── Install-scoped reporting (§14 Phase 1) ───────────────
 
 /**
- * One package an install has funded.
+ * What `obrigado status` renders.
  *
- * `share_micros` is the POOL share — what the maintainer is owed — never gross.
- * Reporting gross would overstate what a developer's sessions actually sent to
- * open source by 30/70, on the surface whose entire job is being believed.
- */
-export const FundedPackageWireSchema = z.object({
-  package_id: z.string(),
-  share_micros: WireMicros,
-  depth: z.int().min(0),
-});
-export type FundedPackageWire = z.infer<typeof FundedPackageWireSchema>;
-
-/**
- * What `obrigado status` and `obrigado projects` render.
- *
- * The four figures §14 names — "this period's contribution, top funded packages,
- * session count, lifetime total" — plus the share link state, so `status` can tell
- * a developer whether a public page for their install exists.
+ * §14 named four figures — "this period's contribution, top funded packages, session count,
+ * lifetime total" — and A36 removed the second: there is no per-package allocation to rank,
+ * so `package_count` is the size of the dependency tree rather than a list of payees.
  */
 export const StatsResponseSchema = z.object({
   period: z.string(),
@@ -666,32 +652,11 @@ export const StatsResponseSchema = z.object({
   impressions: z.int().min(0),
   period_micros: WireMicros,
   lifetime_micros: WireMicros,
+  /** Distinct packages across this install's dependency trees. */
   package_count: z.int().min(0),
-  funded: z.array(FundedPackageWireSchema),
   first_seen: z.string(),
-  /** Absent when the install has never been shared. */
-  share_url: z.string().optional(),
 });
 export type StatsResponse = z.infer<typeof StatsResponseSchema>;
-
-/**
- * Issue or revoke the share link.
- *
- * Two explicit actions rather than a toggle: "revocable" is a promise a developer
- * has to be able to keep deliberately, and a toggle whose current state the client
- * has cached wrong would revoke when they meant to reissue.
- */
-export const ShareRequestSchema = z.object({
-  action: z.enum(["issue", "revoke"]),
-});
-export type ShareRequest = z.infer<typeof ShareRequestSchema>;
-
-export const ShareResponseSchema = z.object({
-  /** Absent after a revoke. */
-  share_url: z.string().optional(),
-  revoked: z.boolean(),
-});
-export type ShareResponse = z.infer<typeof ShareResponseSchema>;
 
 // ─────────────── Errors ───────────────
 

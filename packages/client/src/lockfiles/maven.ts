@@ -19,7 +19,7 @@
  *
  *   - `gradle.lockfile` is a real resolved set. Every transitive dependency is named, and the
  *     depth split comes from the version catalog the way Go's comes from `go.mod`.
- *   - `pom.xml` yields DIRECT dependencies only. A Maven project funds the libraries it names
+ *   - `pom.xml` yields DIRECT dependencies only. A Maven project reports the libraries it names
  *     and nothing underneath them, because nothing underneath them is written down anywhere on
  *     the machine. That underpays deep transitive maintainers in Maven projects relative to
  *     every other ecosystem, and the alternative — resolving the graph ourselves — needs the

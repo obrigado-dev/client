@@ -108,6 +108,16 @@ export interface ClientConfig {
    */
   readonly color?: "auto" | "off";
   /**
+   * Whether the sponsored line carries its disclosure (A34). On unless set otherwise.
+   *
+   * The same principle as `color`, taken to its end: the line is drawn in the developer's own
+   * status bar, and they may decide what it says there. Only they can — an advertiser cannot
+   * buy an unlabeled line, and nothing in the API or the console can set this. What it costs
+   * is written down in the amendment and on `/ads`, because an advertiser whose copy may run
+   * without the prefix is owed that fact before they pay.
+   */
+  readonly label?: "on" | "off";
+  /**
    * The email a verification code was last requested for, so `obrigado link
    * --code 123456` does not make the developer retype the address. Cleared on
    * confirm. Local convenience only — never sent anywhere by itself.
@@ -134,8 +144,8 @@ export interface ClientConfig {
    * what their agent is reading, or the reverse, and a scale would present that as a
    * hierarchy of trust it is not.
    *
-   * `packages` covers the lockfile. The deps are sent regardless because they are what the
-   * payout is split across; the flag decides whether an advertiser may target them.
+   * `packages` covers the lockfile. The deps are sent regardless because they are what makes
+   * an impression worth buying; the flag decides whether an advertiser may target them.
    *
    * Sent on every session, so turning one off takes effect on the next render rather than at
    * some later sync — and the server nulls what it had stored rather than merely stopping.
@@ -194,6 +204,11 @@ export function codexIntegration(config: ClientConfig | null): CodexIntegrationC
  * An unreadable or absent value is "below" — the same row an install that predates the option
  * renders in, so upgrading the client cannot silently move somebody's line.
  */
+/** Whether the disclosure is drawn. Absent means yes; only "off" turns it off. */
+export function labelShown(config: ClientConfig | null): boolean {
+  return config?.label !== "off";
+}
+
 export function sponsoredPosition(config: ClientConfig | null): SponsoredPosition {
   return claudeIntegration(config)?.sponsored_position === "above" ? "above" : "below";
 }

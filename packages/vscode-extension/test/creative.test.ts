@@ -12,7 +12,7 @@ import {
 function ad(over: Partial<Sponsored> = {}): Sponsored {
   const copy = over.copy ?? "Ship it faster — example.com";
   return {
-    label: "sponsored",
+    label: "oss-sponsor",
     copy,
     url: "https://obrigado.dev/c/abc123.sig",
     spans: [{ text: copy, link: true } satisfies SponsoredSpan],
@@ -29,7 +29,7 @@ describe("status bar text", () => {
   test("the glyph precedes a label that precedes the copy", () => {
     // Asserted whole, which also pins that the one icon we place survives the stripping
     // below: only advertiser-supplied parts go through `stripCodicons`.
-    expect(statusText(ad())).toBe("$(sparkle) sponsored · Ship it faster — example.com");
+    expect(statusText(ad())).toBe("$(sparkle) oss-sponsor · Ship it faster — example.com");
   });
 
   test("a creative cannot paint the editor's own icons", () => {
@@ -54,9 +54,10 @@ describe("status bar text", () => {
 describe("hover markdown", () => {
   test("label, copy as a link, and the split", () => {
     const md = tooltipMarkdown(ad());
-    expect(md).toContain("**sponsored**");
+    // Markdown-escaped: the hyphen in the label would otherwise read as a list marker.
+    expect(md).toContain("**oss\\-sponsor**");
     expect(md).toContain("[Ship it faster — example\\.com](https://obrigado.dev/c/abc123.sig)");
-    expect(md).toContain("70% of revenue funds the packages you depend on");
+    expect(md).toContain("70% of revenue funds open source maintainers");
   });
 
   test("bold and italic runs survive, because markdown can carry them", () => {

@@ -163,11 +163,11 @@ describe("capability detection", () => {
 
 describe("the label is never styled", () => {
   test("styling applies to the copy only, so the disclosure cannot be dimmed", () => {
-    // The rendered line is `sponsored · <styled copy>`; the label is outside.
+    // The rendered line is `oss-sponsor · <styled copy>`; the label is outside.
     const style: CreativeStyle = "cyan";
-    const line = `sponsored · ${applyStyle("buy things", style, colorful)}`;
+    const line = `oss-sponsor · ${applyStyle("buy things", style, colorful)}`;
 
-    expect(line.startsWith("sponsored · ")).toBe(true);
-    expect(line.indexOf(ESC)).toBeGreaterThan(line.indexOf("sponsored"));
+    expect(line.startsWith("oss-sponsor · ")).toBe(true);
+    expect(line.indexOf(ESC)).toBeGreaterThan(line.indexOf("oss-sponsor"));
   });
 });

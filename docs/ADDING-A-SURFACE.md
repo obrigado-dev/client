@@ -117,13 +117,17 @@ The host decides this, not us. There are three precedents:
 3. **The host has an extension gallery.** VS Code and Cursor install an extension that creates
    a status bar item. See `packages/vscode-extension/`.
 
-Whichever applies, the rendering rules — the `sponsored` label, the allowed styles, the
+Whichever applies, the rendering rules — the disclosure, the allowed styles, the
 control-character ban — live in `packages/shared` and are not per-host. Do not reimplement
 them; a surface that renders ad copy without the disclosure is not a surface we can ship.
 
 Draw `label` from the line you are handed, never a word of your own. Most lines say
-`sponsored`, but Obrigado's own notices (A30) arrive in the same shape labelled `obrigado`,
-with `kind: "notice"` beside it. A host that hardcodes "Sponsored" would mislabel them.
+`oss-sponsor`, but Obrigado's own notices (A30) arrive in the same shape labelled `obrigado`,
+with `kind: "notice"` beside it. A host that hardcodes one word would mislabel them.
+
+`label` can be `null`, and then you draw the copy alone. That is a developer who ran
+`obrigado config label off` (A34) — the only thing that can ask for it. Never substitute a
+word of your own to fill the gap.
 
 If the host runs code of ours (a plugin, an extension, a copied file), write its version into
 the payload beside `session_id`: `{ "session_id": …, "cwd": …, "surface_version": "0.3.0" }`.

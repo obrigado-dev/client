@@ -151,9 +151,9 @@ describe('stripControlCharacters — §3 "always labeled" must survive the ad co
   test("the rendered line keeps the label ahead of sanitised copy", () => {
     // What the statusline command composes: label, separator, then the body.
     const body = stripControlCharacters(`${ESC}[2K${ESC}[1Gfree money`);
-    const rendered = `sponsored · ${hyperlink(body, "https://obrigado.dev/c/t", plainEnv)}`;
+    const rendered = `oss-sponsor · ${hyperlink(body, "https://obrigado.dev/c/t", plainEnv)}`;
 
-    expect(rendered.startsWith("sponsored · ")).toBe(true);
+    expect(rendered.startsWith("oss-sponsor · ")).toBe(true);
     expect(rendered).not.toContain(ESC);
   });
 });
