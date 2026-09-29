@@ -49,6 +49,8 @@ workflow only stages, and a person approves. Every later version goes through CI
 ## Every later version
 
 1. Bump the manifest: `cd packages/<pkg> && bun pm version <version> --no-git-tag-version`.
+   Then bump the same package's `"version"` in `bun.lock` by hand — `bun install` leaves it,
+   and packing pins dependents from it. `version.test.ts` holds the two together.
 2. Commit, then tag `<pkg>-v<version>` on that commit and push the tag.
 3. `.github/workflows/publish.yml` runs the gate, packs with bun, and STAGES the version with
    `npm stage publish --provenance`. It refuses if the tag's version is not the manifest's.

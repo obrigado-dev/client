@@ -29,6 +29,10 @@ this passes on every laptop and fails on every runner.
 
 1. Bump: `cd packages/<pkg> && bun pm version <version> --no-git-tag-version`. Never plain
    `bun pm version`: it creates a `v*` tag, which is the binaries' namespace.
+   Then set that package's `"version"` in `bun.lock` to match, by hand: `bun install` does not,
+   and `bun pm pack` pins dependents from the lockfile, not the manifest. `version.test.ts`
+   fails the gate until they agree. The platform repository's `bun.lock` carries the same
+   entry under `client/packages/<pkg>`; fix it in the pin commit.
 2. Commit. Tag that commit `<pkg>-v<version>`. Push the branch, then the tag.
 3. `.github/workflows/publish.yml` runs the gate, packs with `bun pm pack` (which rewrites
    `workspace:*` to the exact version and runs `prepack`, the build), and **stages** the

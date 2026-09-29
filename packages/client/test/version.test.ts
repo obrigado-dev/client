@@ -29,3 +29,36 @@ describe("the version on the wire is the version we shipped", () => {
     expect(CLIENT_VERSION).toMatch(/^[0-9A-Za-z.+-]{1,32}$/u);
   });
 });
+
+/**
+ * Every workspace's version in `bun.lock` must be its manifest's.
+ *
+ * `bun pm pack` rewrites `workspace:*` from the LOCKFILE's workspace versions, not from the
+ * manifests, and `bun install` does not refresh them after `bun pm version`. So the first
+ * pack after surface 0.2.0 pinned the OpenCode plugin to surface 0.1.0 — the release whose
+ * parser drops the whole line when a developer turns the label off — and only reading the
+ * tarball caught it. This fails the gate on the release commit instead, before a tag exists.
+ */
+describe("the lockfile agrees with the manifests", () => {
+  test("every workspace package is locked at the version it declares", async () => {
+    const root = new URL("../../../", import.meta.url).pathname;
+    const lock = await Bun.file(`${root}bun.lock`).text();
+    const paths = await Array.fromAsync(new Bun.Glob("packages/*/package.json").scan(root));
+    const manifests = await Promise.all(
+      paths.map(async (path) => ({
+        dir: path.replace(/\/package\.json$/u, ""),
+        version: ((await Bun.file(`${root}${path}`).json()) as { version?: string }).version,
+      })),
+    );
+
+    const stale = manifests.flatMap(({ dir, version }) => {
+      if (version === undefined) return [];
+      const locked = new RegExp(`"${dir}": \\{\\s*"name": "[^"]+",\\s*"version": "([^"]+)"`, "u")
+        .exec(lock)?.[1];
+      return locked === version ? [] : [`${dir}: package.json ${version}, bun.lock ${locked}`];
+    });
+
+    // Fix: set that entry's "version" in bun.lock by hand. `bun install` will not.
+    expect(stale).toEqual([]);
+  });
+});
