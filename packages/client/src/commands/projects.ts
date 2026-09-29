@@ -9,15 +9,18 @@
  * mechanic; a retention mechanic that prints a stack trace on a train is not one.
  */
 import { fetchStats } from "../api.ts";
+import { readStdinPayload } from "../chain.ts";
 import { readConfig } from "../config.ts";
-import { recordRead } from "../retrieval.ts";
+import { rendererCommand } from "../renderer-command.ts";
+import { pathOfHookInput, recordRead } from "../retrieval.ts";
 import { apiOrigin } from "./shared.ts";
 import { formatUsd, microsFromWire } from "@obrigado/shared/money";
 
 /**
- * `obrigado read <path>` — the retrieval hook target (§14 Phase 6).
+ * `obrigado read` — the retrieval hook target (§14 Phase 6).
  *
- * Invoked by a `PostToolUse` hook on the read tools. Resolves the path to a package LOCALLY
+ * Invoked by a `PostToolUse` hook on the read tools, which sends the tool's input as JSON on
+ * stdin. A path argument is for running it by hand. Resolves the path to a package LOCALLY
  * and queues only the package id; a path that does not resolve to a package is dropped
  * entirely, because "somewhere in the project" is exactly the private part.
  *
@@ -25,13 +28,31 @@ import { formatUsd, microsFromWire } from "@obrigado/shared/money";
  * hook that fails loudly has broken something far more important than an ad.
  */
 export async function read(path: string | undefined): Promise<number> {
-  if (path === undefined || path.length === 0) return 0;
   const config = await readConfig();
   // Opt-out honoured here too: a developer who turned the summary off has said they do not
   // want this client doing extra work on their machine.
   if (config === null) return 0;
-  await recordRead(path);
+  // An empty argument falls through to stdin as well. The config this command used to print
+  // passed `"$CLAUDE_TOOL_INPUT_FILE_PATH"`, which Claude Code never sets, so a developer who
+  // pasted it arrives here with an empty argument and starts recording without pasting again.
+  const target =
+    path !== undefined && path.length > 0 ? path : pathOfHookInput(await readStdinPayload());
+  if (target !== null) await recordRead(target);
   return 0;
+}
+
+/**
+ * The CLI invoked the way the status line invokes it, running `subcommand` instead.
+ *
+ * A printed hook has the same three cases as an installed status line — PATH, a compiled
+ * binary, a checkout — so it takes the same answer, and a bare `obrigado` is wrong for two of
+ * them. The subcommand REPLACES `statusline`: appending it as well once printed `… read read`,
+ * which recorded the literal string "read".
+ */
+function hookCommand(subcommand: string): string {
+  const override = process.env["OBRIGADO_STATUSLINE_COMMAND"];
+  const base = override !== undefined && override.length > 0 ? override : rendererCommand();
+  return base.replace(/statusline$/u, subcommand);
 }
 
 /**
@@ -41,8 +62,6 @@ export async function read(path: string | undefined): Promise<number> {
  * and A7 records the full argument.
  */
 export function printRetrievalHook(): void {
-  const command = process.env["OBRIGADO_STATUSLINE_COMMAND"]?.replace(/statusline$/u, "read");
-
   console.log("Add this to the `hooks` key in ~/.claude/settings.json:\n");
   console.log(
     JSON.stringify(
@@ -54,7 +73,7 @@ export function printRetrievalHook(): void {
               hooks: [
                 {
                   type: "command",
-                  command: `${command ?? "obrigado"} read "$CLAUDE_TOOL_INPUT_FILE_PATH"`,
+                  command: hookCommand("read"),
                 },
               ],
             },
@@ -95,15 +114,13 @@ export function printRetrievalHook(): void {
  * line that may never appear is worse than one copy-paste. See A7.
  */
 function printHook(): void {
-  const command = process.env["OBRIGADO_STATUSLINE_COMMAND"]?.replace(/statusline$/u, "summary");
-
   console.log("Add this to the `hooks` key in ~/.claude/settings.json:\n");
   console.log(
     JSON.stringify(
       {
         hooks: {
           SessionEnd: [
-            { hooks: [{ type: "command", command: `${command ?? "obrigado"} summary --json` }] },
+            { hooks: [{ type: "command", command: `${hookCommand("summary")} --json` }] },
           ],
         },
       },

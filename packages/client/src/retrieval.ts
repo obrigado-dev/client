@@ -117,6 +117,27 @@ export function packageOfPath(path: string): string | null {
 }
 
 /**
+ * The path a `PostToolUse` hook's input names, or null.
+ *
+ * Claude Code hands a command hook its input as JSON on stdin, never in the environment:
+ * `tool_input.file_path` for Read and Edit, and `tool_input.path` for Grep, which may omit it.
+ * The hook config this client printed once passed `"$CLAUDE_TOOL_INPUT_FILE_PATH"`, a variable
+ * Claude Code has never set, so every read arrived as an empty argument and nothing was ever
+ * recorded.
+ */
+export function pathOfHookInput(payload: string): string | null {
+  if (payload.length === 0) return null;
+  try {
+    const input = (JSON.parse(payload) as { tool_input?: { file_path?: unknown; path?: unknown } })
+      .tool_input;
+    const path = input?.file_path ?? input?.path;
+    return typeof path === "string" && path.length > 0 ? path : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Record that the agent read a file.
  *
  * Appends rather than rewrites, so concurrent tool calls cannot lose each other's entries.

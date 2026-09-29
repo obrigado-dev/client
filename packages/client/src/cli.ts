@@ -87,10 +87,11 @@ if (handler === undefined) {
 try {
   process.exit(await handler(process.argv.slice(3)));
 } catch (error) {
-  // Neither of the two machine-invoked paths may print to a developer's terminal:
-  // the statusline renders into their prompt, and the summary's stdout is parsed as
-  // JSON by a hook.
-  if (name === "statusline" || name === "summary") process.exit(0);
+  // None of the machine-invoked paths may print to a developer's terminal: the statusline
+  // renders into their prompt, the summary's stdout is parsed as JSON by a hook, and `read`
+  // runs after every file the agent reads, where a nonzero exit puts a "hook error" notice
+  // and the first line of stderr into the session's transcript.
+  if (name === "statusline" || name === "summary" || name === "read") process.exit(0);
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
 }
