@@ -1,7 +1,6 @@
 {
   "name": "@obrigado/opencode-plugin",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
   "homepage": "https://obrigado.dev",
   "bugs": {
     "url": "https://github.com/obrigado-dev/client/issues"
@@ -12,9 +11,16 @@
     "url": "https://github.com/obrigado-dev/client.git",
     "directory": "packages/opencode-plugin"
   },
+  "files": [
+    "LICENSE",
+    "src/tui.tsx"
+  ],
   "type": "module",
   "exports": {
     "./tui": "./src/tui.tsx"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@obrigado/surface": "workspace:*"

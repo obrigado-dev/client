@@ -1,6 +1,6 @@
 {
   "name": "@obrigado/surface",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "What an Obrigado host composes: the `obrigado statusline --json` shape, its parser, and how to invoke the renderer.",
   "keywords": [
     "coding-agent",
