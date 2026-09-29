@@ -53,8 +53,10 @@ describe("the lockfile agrees with the manifests", () => {
 
     const stale = manifests.flatMap(({ dir, version }) => {
       if (version === undefined) return [];
-      const locked = new RegExp(`"${dir}": \\{\\s*"name": "[^"]+",\\s*"version": "([^"]+)"`, "u")
-        .exec(lock)?.[1];
+      const locked = new RegExp(
+        `"${dir}": \\{\\s*"name": "[^"]+",\\s*"version": "([^"]+)"`,
+        "u",
+      ).exec(lock)?.[1];
       return locked === version ? [] : [`${dir}: package.json ${version}, bun.lock ${locked}`];
     });
 
