@@ -34,3 +34,33 @@ jobs:
           name: obrigado-vscode-${{ github.sha }}
           path: packages/vscode-extension/dist/obrigado-vscode.vsix
           if-no-files-found: error
+
+  # The JetBrains plugin is Kotlin, so it has its own toolchain and its own job. `check` runs the
+  # unit tests, including the vectors that hold its copy of `@obrigado/surface` to the TypeScript
+  # one. The Plugin Verifier is not run here: it downloads several IDE releases, and it is a
+  # release step (docs/PUBLISHING.md), not a per-push one.
+  jetbrains:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: packages/jetbrains-plugin
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # Also validates the committed wrapper jar against Gradle's published checksums.
+      - uses: gradle/actions/setup-gradle@v6
+
+      - run: ./gradlew check buildPlugin
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: obrigado-jetbrains-${{ github.sha }}
+          path: packages/jetbrains-plugin/build/distributions/*.zip
+          if-no-files-found: error

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { parseSponsored, splitCommand, statuslineArgv } from "../src/index.ts";
+import { parseSponsored, splitCommand, statuslineArgv, type Sponsored } from "../src/index.ts";
 
 describe("parseSponsored", () => {
   const line = JSON.stringify({
@@ -154,4 +154,49 @@ describe("the palette", () => {
     });
     expect(parseSponsored(line)).toMatchObject({ style: "default", effect: "none" });
   });
+});
+
+/**
+ * This package's behaviour as data, for the one host that cannot import it: the JetBrains plugin
+ * is Kotlin, and its `VectorsTest` holds that copy to the same file. These tests are what make the
+ * file a description of THIS implementation, so a vector can only change when both agree.
+ */
+interface Vectors {
+  readonly splitCommand: readonly { readonly input: string; readonly argv: string[] }[];
+  readonly statuslineArgv: readonly {
+    readonly agent: string;
+    readonly override: string | null;
+    readonly json?: boolean;
+    readonly argv: string[];
+  }[];
+  readonly parseSponsored: readonly {
+    readonly line: string;
+    readonly sponsored: Sponsored | null;
+  }[];
+}
+
+const vectors = (await Bun.file(new URL("vectors.json", import.meta.url)).json()) as Vectors;
+
+describe("the shared vectors", () => {
+  test.each(vectors.splitCommand.map((vector) => [vector.input, vector.argv] as const))(
+    "splitCommand(%j)",
+    (input, argv) => {
+      expect(splitCommand(input)).toEqual(argv);
+    },
+  );
+
+  test.each(vectors.statuslineArgv.map((vector) => [vector.override, vector] as const))(
+    "statuslineArgv with override %j",
+    (override, vector) => {
+      const options = vector.json === undefined ? {} : { json: vector.json };
+      expect(statuslineArgv(vector.agent, override ?? undefined, options)).toEqual(vector.argv);
+    },
+  );
+
+  test.each(vectors.parseSponsored.map((vector) => [vector.line, vector.sponsored] as const))(
+    "parseSponsored(%j)",
+    (line, sponsored) => {
+      expect(parseSponsored(line)).toEqual(sponsored);
+    },
+  );
 });

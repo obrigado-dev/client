@@ -153,6 +153,19 @@ export const AGENTS = [
     surface: null,
     inherits: "pi",
   },
+  {
+    id: "jetbrains",
+    label: "JetBrains IDEs",
+    installs: "marketplace",
+    kind: "editor",
+    // One id for IntelliJ IDEA, PyCharm, WebStorm, GoLand and the rest, because they are one
+    // platform running one plugin rather than forks of each other: the extension point is the
+    // platform's, documented at plugins.jetbrains.com/docs/intellij/status-bar-widgets.html. The
+    // IDE's build rides the payload as the host version, so which one rendered is not lost.
+    surface:
+      "A status bar widget, registered through the documented `statusBarWidgetFactory` extension point.",
+    inherits: null,
+  },
 ] as const satisfies readonly AgentFacts[];
 
 /**

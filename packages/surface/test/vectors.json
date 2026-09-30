@@ -1,0 +1,516 @@
+{
+  "$comment": "What @obrigado/surface does, as data. surface.test.ts holds the TypeScript implementation to these; the JetBrains plugin's VectorsTest holds its Kotlin copy to the same. Change a behaviour and both must agree before either passes.",
+  "splitCommand": [
+    {
+      "input": "",
+      "argv": []
+    },
+    {
+      "input": "   ",
+      "argv": []
+    },
+    {
+      "input": "obrigado statusline",
+      "argv": ["obrigado", "statusline"]
+    },
+    {
+      "input": "obrigado  statusline\t--agent pi",
+      "argv": ["obrigado", "statusline", "--agent", "pi"]
+    },
+    {
+      "input": "bun \"/Users/Jane Doe/obrigado/cli.ts\" statusline",
+      "argv": ["bun", "/Users/Jane Doe/obrigado/cli.ts", "statusline"]
+    },
+    {
+      "input": "bun '/Users/Jane Doe/cli.ts' statusline",
+      "argv": ["bun", "/Users/Jane Doe/cli.ts", "statusline"]
+    },
+    {
+      "input": "bun /Users/Jane\\ Doe/cli.ts statusline",
+      "argv": ["bun", "/Users/Jane Doe/cli.ts", "statusline"]
+    },
+    {
+      "input": "bun \"a \\\"quoted\\\" path\" statusline",
+      "argv": ["bun", "a \"quoted\" path", "statusline"]
+    },
+    {
+      "input": "bun \"unterminated path",
+      "argv": ["bun", "unterminated path"]
+    },
+    {
+      "input": "trailing backslash\\",
+      "argv": ["trailing", "backslash\\"]
+    },
+    {
+      "input": "'single \\ keeps its backslash'",
+      "argv": ["single \\ keeps its backslash"]
+    },
+    {
+      "input": "\"\" empty",
+      "argv": ["", "empty"]
+    },
+    {
+      "input": "mixed\"quo\"ted",
+      "argv": ["mixedquoted"]
+    },
+    {
+      "input": "C:\\obrigado\\bin statusline",
+      "argv": ["C:obrigadobin", "statusline"]
+    },
+    {
+      "input": "a b",
+      "argv": ["a", "b"]
+    },
+    {
+      "input": "a\u001fb",
+      "argv": ["a\u001fb"]
+    },
+    {
+      "input": "﻿obrigado statusline",
+      "argv": ["obrigado", "statusline"]
+    },
+    {
+      "input": "a b　c",
+      "argv": ["a", "b", "c"]
+    },
+    {
+      "input": "ab",
+      "argv": ["ab"]
+    },
+    {
+      "input": "a​b",
+      "argv": ["a​b"]
+    },
+    {
+      "input": " thin space ",
+      "argv": ["thin", "space"]
+    }
+  ],
+  "statuslineArgv": [
+    {
+      "agent": "jetbrains",
+      "override": null,
+      "argv": ["obrigado", "statusline", "--agent", "jetbrains", "--json"]
+    },
+    {
+      "agent": "jetbrains",
+      "override": "   ",
+      "argv": ["obrigado", "statusline", "--agent", "jetbrains", "--json"]
+    },
+    {
+      "agent": "jetbrains",
+      "override": "bun \"/Users/Jane Doe/cli.ts\" statusline",
+      "argv": ["bun", "/Users/Jane Doe/cli.ts", "statusline", "--agent", "jetbrains", "--json"]
+    },
+    {
+      "agent": "vscode",
+      "override": "obrigado statusline",
+      "json": false,
+      "argv": ["obrigado", "statusline", "--agent", "vscode"]
+    },
+    {
+      "agent": "jetbrains",
+      "override": "　/opt/obrigado statusline\n",
+      "argv": ["/opt/obrigado", "statusline", "--agent", "jetbrains", "--json"]
+    }
+  ],
+  "parseSponsored": [
+    {
+      "line": "{\"label\":\"oss-sponsor\",\"copy\":\"Ship faster with Acme\",\"url\":\"https://obrigado.dev/c/abc\",\"spans\":[{\"text\":\"Ship faster\",\"bold\":true,\"color\":\"cyan\",\"link\":true},{\"text\":\" with Acme\",\"italic\":true,\"highlight\":true}],\"style\":\"cyan\",\"effect\":\"italic\",\"brand\":{\"name\":\"Acme\",\"logo\":\"data:image/png;base64,iVBORw0KGgo=\"}}",
+      "sponsored": {
+        "label": "oss-sponsor",
+        "copy": "Ship faster with Acme",
+        "url": "https://obrigado.dev/c/abc",
+        "spans": [
+          {
+            "text": "Ship faster",
+            "bold": true,
+            "color": "cyan",
+            "link": true
+          },
+          {
+            "text": " with Acme",
+            "italic": true,
+            "highlight": true
+          }
+        ],
+        "style": "cyan",
+        "effect": "italic",
+        "brand": {
+          "name": "Acme",
+          "logo": "data:image/png;base64,iVBORw0KGgo="
+        }
+      }
+    },
+    {
+      "line": "{\"copy\":\"a\",\"url\":\"https://example.test/c/1\"}",
+      "sponsored": {
+        "label": null,
+        "copy": "a",
+        "url": "https://example.test/c/1",
+        "spans": [
+          {
+            "text": "a",
+            "link": true
+          }
+        ],
+        "style": "default",
+        "effect": "none",
+        "brand": null
+      }
+    },
+    {
+      "line": "{\"label\":null,\"copy\":\"a\",\"url\":\"u\"}",
+      "sponsored": {
+        "label": null,
+        "copy": "a",
+        "url": "u",
+        "spans": [
+          {
+            "text": "a",
+            "link": true
+          }
+        ],
+        "style": "default",
+        "effect": "none",
+        "brand": null
+      }
+    },
+    {
+      "line": "{\"label\":\"\",\"copy\":\"a\",\"url\":\"u\"}",
+      "sponsored": {
+        "label": null,
+        "copy": "a",
+        "url": "u",
+        "spans": [
+          {
+            "text": "a",
+            "link": true
+          }
+        ],
+        "style": "default",
+        "effect": "none",
+        "brand": null
+      }
+    },
+    {
+      "line": "{\"label\":5,\"copy\":\"a\",\"url\":\"u\"}",
+      "sponsored": null
+    },
+    {
+      "line": "{\"label\":\"oss-sponsor\",\"copy\":\"a\"}",
+      "sponsored": null
+    },
+    {
+      "line": "{\"label\":\"oss-sponsor\",\"copy\":\"\",\"url\":\"u\"}",
+      "sponsored": null
+    },
+    {
+      "line": "{\"label\":\"oss-sponsor\",\"copy\":\"a\",\"url\":\"\"}",
+      "sponsored": null
+    },
+    {
+      "line": "{\"copy\":7,\"url\":\"u\"}",
+      "sponsored": null
+    },
+    {
+      "line": "{\"copy\":\"a\",\"url\":\"u\",\"spans\":[]}",
+      "sponsored": {
+        "label": null,
+        "copy": "a",
+        "url": "u",
+        "spans": [
+          {
+            "text": "a",
+            "link": true
+          }
+        ],
+        "style": "default",
+        "effect": "none",
+        "brand": null
+      }
+    },
+    {
+      "line": "{\"copy\":\"a\",\"url\":\"u\",\"spans\":\"a\"}",
+      "sponsored": {
+        "label": null,
+        "copy": "a",
+        "url": "u",
+        "spans": [
+          {
+            "text": "a",
+            "link": true
+          }
+        ],
+        "style": "default",
+        "effect": "none",
+        "brand": null
+      }
+    },
+    {
+      "line": "{\"copy\":\"a\",\"url\":\"u\",\"style\":\"red\",\"effect\":\"blink\"}",
+      "sponsored": {
+        "label": null,
+        "copy": "a",
+        "url": "u",
+        "spans": [
+          {
+            "text": "a",
+            "link": true
+          }
+        ],
+        "style": "default",
+        "effect": "none",
+        "brand": null
+      }
+    },
+    {
+      "line": "{\"copy\":\"a\",\"url\":\"u\",\"style\":\"magenta\",\"effect\":\"none\"}",
+      "sponsored": {
+        "label": null,
+        "copy": "a",
+        "url": "u",
+        "spans": [
+          {
+            "text": "a",
+            "link": true
+          }
+        ],
+        "style": "magenta",
+        "effect": "none",
+        "brand": null
+      }
+    },
+    {
+      "line": "{\"copy\":\"a\",\"url\":\"u\",\"brand\":{\"logo\":\"data:image/png;base64,AAAA\"}}",
+      "sponsored": {
+        "label": null,
+        "copy": "a",
+        "url": "u",
+        "spans": [
+          {
+            "text": "a",
+            "link": true
+          }
+        ],
+        "style": "default",
+        "effect": "none",
+        "brand": null
+      }
+    },
+    {
+      "line": "{\"copy\":\"a\",\"url\":\"u\",\"brand\":\"Acme\"}",
+      "sponsored": {
+        "label": null,
+        "copy": "a",
+        "url": "u",
+        "spans": [
+          {
+            "text": "a",
+            "link": true
+          }
+        ],
+        "style": "default",
+        "effect": "none",
+        "brand": null
+      }
+    },
+    {
+      "line": "{\"copy\":\"a\",\"url\":\"u\",\"brand\":{\"name\":\"Acme\"}}",
+      "sponsored": {
+        "label": null,
+        "copy": "a",
+        "url": "u",
+        "spans": [
+          {
+            "text": "a",
+            "link": true
+          }
+        ],
+        "style": "default",
+        "effect": "none",
+        "brand": {
+          "name": "Acme",
+          "logo": null
+        }
+      }
+    },
+    {
+      "line": "{\"copy\":\"a\",\"url\":\"u\",\"brand\":{\"name\":\"Acme\",\"logo\":5}}",
+      "sponsored": {
+        "label": null,
+        "copy": "a",
+        "url": "u",
+        "spans": [
+          {
+            "text": "a",
+            "link": true
+          }
+        ],
+        "style": "default",
+        "effect": "none",
+        "brand": {
+          "name": "Acme",
+          "logo": null
+        }
+      }
+    },
+    {
+      "line": "{\"kind\":\"notice\",\"label\":\"obrigado\",\"copy\":\"Update available\",\"url\":\"https://obrigado.dev/n/1\",\"spans\":[{\"text\":\"Update available\",\"link\":true}],\"style\":\"default\",\"effect\":\"none\",\"brand\":null}",
+      "sponsored": {
+        "label": "obrigado",
+        "copy": "Update available",
+        "url": "https://obrigado.dev/n/1",
+        "spans": [
+          {
+            "text": "Update available",
+            "link": true
+          }
+        ],
+        "style": "default",
+        "effect": "none",
+        "brand": null
+      }
+    },
+    {
+      "line": "{\"copy\":\"first\",\"copy\":\"second\",\"url\":\"u\"}",
+      "sponsored": {
+        "label": null,
+        "copy": "second",
+        "url": "u",
+        "spans": [
+          {
+            "text": "second",
+            "link": true
+          }
+        ],
+        "style": "default",
+        "effect": "none",
+        "brand": null
+      }
+    },
+    {
+      "line": " \t{\"copy\":\"a\",\"url\":\"u\"}\r\n",
+      "sponsored": {
+        "label": null,
+        "copy": "a",
+        "url": "u",
+        "spans": [
+          {
+            "text": "a",
+            "link": true
+          }
+        ],
+        "style": "default",
+        "effect": "none",
+        "brand": null
+      }
+    },
+    {
+      "line": "{\"copy\":\"caf\\u00e9 \\\"q\\\" \\\\ \\/ \\ud83d\\ude80\",\"url\":\"u\"}",
+      "sponsored": {
+        "label": null,
+        "copy": "café \"q\" \\ / 🚀",
+        "url": "u",
+        "spans": [
+          {
+            "text": "café \"q\" \\ / 🚀",
+            "link": true
+          }
+        ],
+        "style": "default",
+        "effect": "none",
+        "brand": null
+      }
+    },
+    {
+      "line": "{\"copy\":\"a\",\"url\":\"u\",\"n\":-1.5e+3,\"t\":true,\"f\":false,\"z\":null,\"arr\":[1,[2,{}]]}",
+      "sponsored": {
+        "label": null,
+        "copy": "a",
+        "url": "u",
+        "spans": [
+          {
+            "text": "a",
+            "link": true
+          }
+        ],
+        "style": "default",
+        "effect": "none",
+        "brand": null
+      }
+    },
+    {
+      "line": "",
+      "sponsored": null
+    },
+    {
+      "line": "not json",
+      "sponsored": null
+    },
+    {
+      "line": "null",
+      "sponsored": null
+    },
+    {
+      "line": "[]",
+      "sponsored": null
+    },
+    {
+      "line": "42",
+      "sponsored": null
+    },
+    {
+      "line": "\"copy\"",
+      "sponsored": null
+    },
+    {
+      "line": "{",
+      "sponsored": null
+    },
+    {
+      "line": "{\"copy\":\"a\",\"url\":\"u\",}",
+      "sponsored": null
+    },
+    {
+      "line": "{'copy':'a','url':'u'}",
+      "sponsored": null
+    },
+    {
+      "line": "{\"copy\":\"a\u0001b\",\"url\":\"u\"}",
+      "sponsored": null
+    },
+    {
+      "line": "{\"copy\":\"a\",\"url\":\"u\",\"n\":01}",
+      "sponsored": null
+    },
+    {
+      "line": "{\"copy\":\"a\",\"url\":\"u\",\"n\":-}",
+      "sponsored": null
+    },
+    {
+      "line": "{\"copy\":\"a\",\"url\":\"u\",\"n\":1.}",
+      "sponsored": null
+    },
+    {
+      "line": "{\"copy\":\"a\",\"url\":\"u\",\"n\":NaN}",
+      "sponsored": null
+    },
+    {
+      "line": "﻿{\"copy\":\"a\",\"url\":\"u\"}",
+      "sponsored": null
+    },
+    {
+      "line": "{\"copy\":\"a\",\"url\":\"u\"} trailing",
+      "sponsored": null
+    },
+    {
+      "line": "{\"copy\":\"a\\x41\",\"url\":\"u\"}",
+      "sponsored": null
+    },
+    {
+      "line": "{\"copy\":\"a\\u12\",\"url\":\"u\"}",
+      "sponsored": null
+    }
+  ]
+}

@@ -115,11 +115,19 @@ The host decides this, not us. There are three precedents:
    `tui.json`, and the plugin renders into the host's `app_bottom` slot. Copy this when the
    host has a plugin API. See `packages/opencode-plugin/`.
 3. **The host has an extension gallery.** VS Code and Cursor install an extension that creates
-   a status bar item. See `packages/vscode-extension/`.
+   a status bar item. See `packages/vscode-extension/`. JetBrains IDEs install a plugin that
+   registers a status bar widget through `statusBarWidgetFactory`; see
+   `packages/jetbrains-plugin/`.
 
 Whichever applies, the rendering rules — the disclosure, the allowed styles, the
 control-character ban — live in `packages/shared` and are not per-host. Do not reimplement
 them; a surface that renders ad copy without the disclosure is not a surface we can ship.
+
+A host that draws its own UI takes the parts from `@obrigado/surface`. A host that cannot
+import TypeScript — the JetBrains plugin is Kotlin — ports that package and nothing more, and
+holds the port to `packages/surface/test/vectors.json`: the TypeScript tests keep the vectors
+true of the original, and the port's tests assert the same answers. Add a vector whenever the
+original changes behaviour, and both sides fail until they agree.
 
 Draw `label` from the line you are handed, never a word of your own. Most lines say
 `oss-sponsor`, but Obrigado's own notices (A30) arrive in the same shape labelled `obrigado`,
@@ -132,7 +140,8 @@ word of your own to fill the gap.
 If the host runs code of ours (a plugin, an extension, a copied file), write its version into
 the payload beside `session_id`: `{ "session_id": …, "cwd": …, "surface_version": "0.3.0" }`.
 Keep it a literal that a test holds to the package's manifest, as `SURFACE_VERSION` does in
-the existing hosts. Our shim updates on a different schedule from the binary, and this is how
+the existing hosts — or, where the host itself reports the running plugin's version, as the
+IntelliJ Platform does from the installed descriptor, read it from there. Our shim updates on a different schedule from the binary, and this is how
 the server can tell which of the two a developer needs to update. A host that runs the binary
 directly, as Claude Code does, sends nothing.
 

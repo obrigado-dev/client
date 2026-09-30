@@ -68,3 +68,16 @@ Each publishable package lists its files explicitly (`files` in `package.json`),
 condition, which is what OpenCode resolves), a bundled `dist/index.js` for Node, and
 `dist/index.d.ts` for TypeScript. Anything not on the list — tests, tsconfig, build state —
 does not go.
+
+## The JetBrains plugin
+
+Not npm, and not yet anywhere. `packages/jetbrains-plugin` builds a zip with
+`./gradlew buildPlugin`, which installs through **Settings → Plugins → ⚙ → Install Plugin from
+Disk…**. Before any release, run `./gradlew verifyPlugin`: the Plugin Verifier checks the build
+against the recommended IDE releases, which CI does not do because it downloads several of them.
+
+Listing it on the JetBrains Marketplace needs a vendor profile (unclaimed), a first upload by
+hand, and JetBrains' review, which every new plugin goes through. The approval guidelines
+exclude "features for additional promotion". A reviewer may read a sponsored line that way, so
+the listing is not a given. The fallback costs nothing on this side: every JetBrains IDE accepts
+a custom plugin repository, and obrigado.dev can serve one.

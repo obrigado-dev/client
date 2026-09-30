@@ -35,6 +35,7 @@ describe("the table", () => {
       "gemini-cli",
       "pi",
       "oh-my-pi",
+      "jetbrains",
     ]);
   });
 
@@ -82,6 +83,7 @@ describe("the derived views", () => {
       "opencode",
       "vscode",
       "pi",
+      "jetbrains",
     ]);
   });
 
@@ -116,7 +118,7 @@ describe("the derived views", () => {
   });
 
   test("editors are the hosts polled as editors", () => {
-    expect([...EDITOR_AGENT_IDS]).toEqual(["vscode", "cursor"]);
+    expect([...EDITOR_AGENT_IDS]).toEqual(["vscode", "cursor", "jetbrains"]);
   });
 
   test("every surfaced agent actually carries the sentence the demo prints", () => {

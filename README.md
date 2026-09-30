@@ -6,7 +6,8 @@ This repository contains the source for the developer-installed parts of
 - the `obrigado` CLI and status-line integrations;
 - the shared wire contract and rendering rules;
 - the OpenCode plugin;
-- the VS Code and Cursor extension.
+- the VS Code and Cursor extension;
+- the JetBrains IDEs plugin.
 
 This is where that code is developed. The private
 [`obrigado-dev/platform`](https://github.com/obrigado-dev/platform) repository holds the
@@ -31,6 +32,14 @@ Requires Bun 1.3.10 or newer.
 bun install --frozen-lockfile
 bun run check
 bun run package:vscode
+```
+
+The JetBrains plugin is Kotlin and builds with its own Gradle wrapper; it needs JDK 21. See
+[its README](./packages/jetbrains-plugin/README.md).
+
+```sh
+cd packages/jetbrains-plugin
+./gradlew check buildPlugin
 ```
 
 ## Supply chain

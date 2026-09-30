@@ -13,3 +13,9 @@ dist/
 
 # `bun pm pack` output.
 *.tgz
+
+# The JetBrains plugin's Gradle output and caches.
+packages/jetbrains-plugin/.gradle/
+packages/jetbrains-plugin/.intellijPlatform/
+packages/jetbrains-plugin/.kotlin/
+packages/jetbrains-plugin/build/

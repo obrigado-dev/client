@@ -34,6 +34,7 @@ describe("which hosts must prove an agent is running", () => {
   test("editor hosts do, agent hosts do not", () => {
     expect(isEditorAgent("vscode")).toBe(true);
     expect(isEditorAgent("cursor")).toBe(true);
+    expect(isEditorAgent("jetbrains")).toBe(true);
     expect(isEditorAgent("claude-code")).toBe(false);
     expect(isEditorAgent("opencode")).toBe(false);
   });

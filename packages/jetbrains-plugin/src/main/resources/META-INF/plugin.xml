@@ -1,0 +1,28 @@
+<idea-plugin>
+  <id>dev.obrigado</id>
+  <name>Obrigado</name>
+  <vendor url="https://obrigado.dev">Obrigado</vendor>
+
+  <description><![CDATA[
+    <p>One labeled sponsored line in your status bar while a coding agent is working.
+    70% of the revenue funds open source maintainers.</p>
+
+    <p>The line is rendered by the <code>obrigado</code> command-line client, which you install
+    and configure separately; this plugin draws what it prints. Until the client is installed,
+    the plugin shows nothing and sends nothing. The line appears only while an agent session is
+    live, always carries its disclosure, and can be hidden from the status bar's own menu.</p>
+
+    <p><a href="https://obrigado.dev">obrigado.dev</a></p>
+  ]]></description>
+
+  <depends>com.intellij.modules.platform</depends>
+
+  <extensions defaultExtensionNs="com.intellij">
+    <!-- First among the widgets: the right-hand end of the status bar is where the caret
+         position, encoding and inspections live, and a sponsored line should not sit among
+         the IDE's own state. -->
+    <statusBarWidgetFactory id="dev.obrigado.statusline"
+                            implementation="dev.obrigado.jetbrains.ObrigadoWidgetFactory"
+                            order="first"/>
+  </extensions>
+</idea-plugin>
