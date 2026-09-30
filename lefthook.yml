@@ -1,0 +1,30 @@
+# The gate, staged by cost — the same shape as the platform's. Both hooks and CI call the
+# SAME bun scripts, so "what runs locally" and "what runs in CI" cannot drift.
+#
+# CI is authoritative: hooks are bypassable with --no-verify, CI is not. This repository ran
+# with no hooks at all until 2026-09-29, and an unformatted commit reached main because only
+# CI stood between a push and the branch.
+
+pre-commit:
+  parallel: true
+  jobs:
+    - name: lint
+      glob: "*.{ts,tsx,js,mjs}"
+      run: bunx oxlint --fix --fix-suggestions {staged_files}
+      stage_fixed: true
+    # No `md` here. oxfmt does not format markdown — it silently excludes those files, and a
+    # commit touching ONLY markdown leaves oxfmt nothing to do, which it reports as an error.
+    - name: format
+      glob: "*.{ts,tsx,js,mjs,json,jsonc,yml,yaml}"
+      run: bunx oxfmt {staged_files}
+      stage_fixed: true
+
+pre-push:
+  parallel: false
+  jobs:
+    - name: gate
+      run: bun run check
+
+# `bun run check` is deliberately absent from pre-commit: types and tests are the heavy half
+# and belong before code leaves the machine, not between every commit. CI also runs
+# `bun run package:vscode`, which is too slow for a hook and only matters to a release.

@@ -13,6 +13,7 @@
   },
   "type": "module",
   "scripts": {
+    "prepare": "lefthook install",
     "check": "bun run check:lint && bun run check:fmt && bun run check:types && bun run check:test",
     "check:lint": "oxlint --deny-warnings .",
     "check:fmt": "oxfmt --check .",
@@ -24,6 +25,7 @@
   },
   "devDependencies": {
     "@types/bun": "1.3.14",
+    "lefthook": "2.1.14",
     "oxfmt": "0.60.0",
     "oxlint": "1.75.0",
     "typescript": "6.0.3"
