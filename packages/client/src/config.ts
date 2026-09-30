@@ -174,7 +174,20 @@ export function sharingSettings(config: ClientConfig | null): SharingSettings {
   };
 }
 
-export const DEFAULT_API_ORIGIN = "http://localhost:3000";
+/**
+ * Where the client finds the server when nothing overrides it.
+ *
+ * A release binary is compiled with `--define` naming the production origin
+ * (`scripts/build-binaries.ts`), so an install from obrigado.dev reports to obrigado.dev. From a
+ * source checkout nothing defines it and the default stays the local stack: a checkout must never
+ * register installs against production because somebody forgot an environment variable.
+ * `OBRIGADO_API_ORIGIN`, or the origin saved at install, overrides either.
+ */
+declare const OBRIGADO_RELEASE_API_ORIGIN: string | undefined;
+export const DEFAULT_API_ORIGIN =
+  typeof OBRIGADO_RELEASE_API_ORIGIN === "string"
+    ? OBRIGADO_RELEASE_API_ORIGIN
+    : "http://localhost:3000";
 
 export async function ensureDir(path: string): Promise<void> {
   await mkdir(path, { recursive: true, mode: 0o700 });

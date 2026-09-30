@@ -26,6 +26,8 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 
+import { RELEASE_DEFINES } from "../packages/client/src/release.ts";
+
 /**
  * The platforms, keyed by the name `install.sh` builds from `uname -s`/`uname -m`.
  *
@@ -44,6 +46,28 @@ export const TARGETS = {
 } as const;
 
 export const ENTRY = "packages/client/src/cli.ts";
+
+/**
+ * The `bun build` argv for one target, with the release's compiled-in defaults — the production
+ * server among them, so `curl … | sh` produces an install that works without anyone setting
+ * OBRIGADO_API_ORIGIN (`packages/client/src/release.ts`).
+ */
+function compileArgs(target: string, outfile: string): string[] {
+  const defines = Object.entries(RELEASE_DEFINES).flatMap(([name, value]) => [
+    "--define",
+    `${name}=${value}`,
+  ]);
+  return [
+    "bun",
+    "build",
+    "--compile",
+    `--target=${target}`,
+    ...defines,
+    ENTRY,
+    "--outfile",
+    outfile,
+  ];
+}
 export const OUT_DIR = "dist/binaries";
 
 /** `sha256  filename`, the format `sha256sum -c` reads. */
@@ -62,15 +86,7 @@ function main(): void {
 
   for (const [name, target] of Object.entries(TARGETS)) {
     const outfile = `${OUT_DIR}/obrigado-${name}`;
-    const built = Bun.spawnSync([
-      "bun",
-      "build",
-      "--compile",
-      `--target=${target}`,
-      ENTRY,
-      "--outfile",
-      outfile,
-    ]);
+    const built = Bun.spawnSync(compileArgs(target, outfile));
 
     if (built.exitCode !== 0) {
       process.stderr.write(built.stderr.toString());

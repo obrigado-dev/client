@@ -21,7 +21,7 @@ this passes on every laptop and fails on every runner.
 |---|---|---|---|
 | `@obrigado/surface` | npm | tag `surface-v<version>` → `publish.yml` stages → a person approves | 0.2.0 published |
 | `@obrigado/opencode-plugin` | npm | same (0.1.0 was published by hand; trusted publishing is set up) | 0.1.0 published; pins surface's exact version |
-| `obrigado` CLI binaries | GitHub Releases, fetched by `install.sh` | tag `v<version>` → `release.yml` | unreleased |
+| `obrigado` CLI binaries | GitHub Releases, fetched by `install.sh` | tag `v<version>` → `release.yml` | 0.1.0 released |
 | VS Code / Cursor extension | Marketplace | `bun run package:vscode` → `.vsix` | publisher `obrigado` unclaimed |
 | JetBrains plugin | JetBrains Marketplace | `./gradlew buildPlugin` in `packages/jetbrains-plugin` → `.zip` | vendor unclaimed; see `docs/PUBLISHING.md` |
 | Pi extension | copied into `~/.pi/agent/extensions` by the CLI | ships inside the CLI | n/a |
@@ -79,6 +79,9 @@ list goes.
 
 A `v<version>` tag runs `release.yml`: the gate, `bun run build:binaries` for every platform,
 a GitHub release with `SHA256SUMS`, and a download-and-verify of what was published.
+
+Release binaries are compiled with `packages/client/src/release.ts`'s defines, which point them at
+https://obrigado.dev; a checkout keeps defaulting to the local stack.
 
 Bump `packages/client/package.json` and `CLIENT_VERSION` in `packages/client/src/version.ts`
 together first (`version.test.ts` fails if they disagree). `release.yml` refuses a tag that is
