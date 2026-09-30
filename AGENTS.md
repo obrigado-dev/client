@@ -19,8 +19,8 @@ this passes on every laptop and fails on every runner.
 
 | What | Where it goes | How | State |
 |---|---|---|---|
-| `@obrigado/surface` | npm | tag `surface-v<version>` → `publish.yml` stages → a person approves | 0.1.0 published |
-| `@obrigado/opencode-plugin` | npm | same, once it is no longer `private` | unpublished; pins surface's exact version |
+| `@obrigado/surface` | npm | tag `surface-v<version>` → `publish.yml` stages → a person approves | 0.2.0 published |
+| `@obrigado/opencode-plugin` | npm | same (0.1.0 was published by hand; trusted publishing is set up) | 0.1.0 published; pins surface's exact version |
 | `obrigado` CLI binaries | GitHub Releases, fetched by `install.sh` | tag `v<version>` → `release.yml` | unreleased |
 | VS Code / Cursor extension | Marketplace | `bun run package:vscode` → `.vsix` | publisher `obrigado` unclaimed |
 | Pi extension | copied into `~/.pi/agent/extensions` by the CLI | ships inside the CLI | n/a |
