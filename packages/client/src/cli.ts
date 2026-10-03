@@ -43,7 +43,7 @@ const USAGE = `obrigado — sponsored status lines that fund open source maintai
   obrigado read --print-hook   report which packages your agent reads (off by default)
   obrigado doctor              diagnostics
 
-70% of gross revenue funds grants to open source maintainers. You earn nothing.
+70% of gross revenue funds open source maintainers. You earn nothing.
 https://obrigado.dev
 `;
 

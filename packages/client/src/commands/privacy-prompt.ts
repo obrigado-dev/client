@@ -268,6 +268,6 @@ export function reportStored(decision: SharingDecision): void {
     console.log("");
   }
 
-  console.log("70% of gross revenue funds grants to open source maintainers.");
+  console.log("70% of gross revenue funds open source maintainers.");
   if (!decision.asked) printTargetingOffer(decision.sharing);
 }
