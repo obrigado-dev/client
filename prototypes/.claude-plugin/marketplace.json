@@ -1,0 +1,12 @@
+{
+  "name": "obrigado-prototypes",
+  "owner": { "name": "Obrigado", "url": "https://obrigado.dev" },
+  "description": "Surfaces that work but are not shipped. Each one's README says why.",
+  "plugins": [
+    {
+      "name": "obrigado",
+      "source": "./claude-code-mod",
+      "description": "Parked: the sponsored line above the prompt in the Claude desktop app's Code tab"
+    }
+  ]
+}

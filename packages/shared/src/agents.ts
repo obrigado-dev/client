@@ -166,6 +166,19 @@ export const AGENTS = [
       "A status bar widget, registered through the documented `statusBarWidgetFactory` extension point.",
     inherits: null,
   },
+  {
+    // Claude Code again, through a mod rather than the status line: the band above the prompt in
+    // the desktop app's Code tab, while the terminal keeps the status line. A second surface of
+    // one host, so a second id, because the impression records which one rendered. PARKED in
+    // `prototypes/claude-code-mod`, so nothing installs it and it claims no surface yet; its
+    // README says why, and what picking it up takes.
+    id: "claude-code-mod",
+    label: "Claude Code (mod)",
+    installs: null,
+    kind: "terminal",
+    surface: null,
+    inherits: null,
+  },
 ] as const satisfies readonly AgentFacts[];
 
 /**

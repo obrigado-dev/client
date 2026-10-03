@@ -1,0 +1,11 @@
+{
+  "name": "obrigado",
+  "displayName": "Obrigado",
+  "version": "0.1.0",
+  "description": "A labeled sponsored line above the prompt. 70% of gross revenue funds open source maintainers.",
+  "author": { "name": "Obrigado", "url": "https://obrigado.dev" },
+  "homepage": "https://obrigado.dev",
+  "repository": "https://github.com/obrigado-dev/client",
+  "license": "Apache-2.0",
+  "keywords": ["obrigado", "open-source", "sponsored"]
+}

@@ -1,0 +1,4 @@
+{
+  "description": "Obrigado's hooks module: the sponsored line in the band above the prompt",
+  "modules": ["./register.ts"]
+}

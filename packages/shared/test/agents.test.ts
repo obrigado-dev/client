@@ -36,6 +36,7 @@ describe("the table", () => {
       "pi",
       "oh-my-pi",
       "jetbrains",
+      "claude-code-mod",
     ]);
   });
 

@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./hooks",
+    // Claude Code runs a hooks module with no Node or Bun APIs and no timers of its own, so the
+    // module is typed without them: reaching for one fails here rather than inside a session.
+    "types": []
+  },
+  "include": ["hooks/**/*.ts"],
+  "references": []
+}

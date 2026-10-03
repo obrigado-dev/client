@@ -1,0 +1,3 @@
+# Claude Code writes its type declarations here whenever it loads the mod from this directory.
+# They describe whichever version loaded it, so they are never committed.
+.claude-plugin/types/
