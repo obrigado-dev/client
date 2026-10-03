@@ -78,7 +78,11 @@ class VectorsTest {
             effect = fields.string("effect"),
             brand =
                 (fields["brand"] as? Json.Obj)?.fields?.let {
-                    SponsoredBrand(name = it.string("name"), logo = (it["logo"] as? Json.Str)?.value)
+                    SponsoredBrand(
+                        name = it.string("name"),
+                        logo = (it["logo"] as? Json.Str)?.value,
+                        icon = (it["icon"] as? Json.Str)?.value,
+                    )
                 },
         )
     }

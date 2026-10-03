@@ -306,10 +306,15 @@ export type WireSpan = z.infer<typeof WireSpanSchema>;
  * http(s) URL. A remote URL would make every render fetch the advertiser's origin from inside
  * a developer's editor, handing them an IP address and an activity signal they did not buy.
  * Surfaces that cannot show an image ignore this; nothing depends on it rendering.
+ *
+ * `icon` is the square mark, on the same terms: a wordmark strip suits a hover, and a line of
+ * type wants a square beside it. Optional on the wire, so a server older than the field and a
+ * client newer than it still agree — absent reads as none.
  */
 export const BatchBrandSchema = z.object({
   name: z.string().min(1).max(40),
   logo: z.string().startsWith("data:image/png;base64,").max(6000).nullable().default(null),
+  icon: z.string().startsWith("data:image/png;base64,").max(6000).nullable().default(null),
 });
 export type BatchBrand = z.infer<typeof BatchBrandSchema>;
 

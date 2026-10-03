@@ -47,6 +47,9 @@ internal data class SponsoredBrand(
     val name: String,
     /** A `data:image/png;base64,…` URI built server-side from validated bytes, or null. */
     val logo: String?,
+    /** The square mark, on the same terms as `logo`. Nothing here draws it yet; it is modelled
+     *  so the vectors, which carry it, read the same on both sides. */
+    val icon: String? = null,
 )
 
 /** One `--json` line from `obrigado statusline`. */
@@ -123,7 +126,11 @@ private fun spans(raw: Json?): List<SponsoredSpan>? {
 private fun brand(raw: Json?): SponsoredBrand? {
     val fields = (raw as? Json.Obj)?.fields ?: return null
     val name = (fields["name"] as? Json.Str)?.value ?: return null
-    return SponsoredBrand(name = name, logo = (fields["logo"] as? Json.Str)?.value)
+    return SponsoredBrand(
+        name = name,
+        logo = (fields["logo"] as? Json.Str)?.value,
+        icon = (fields["icon"] as? Json.Str)?.value,
+    )
 }
 
 /**

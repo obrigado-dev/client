@@ -109,13 +109,15 @@ describe("hover markdown", () => {
 
 describe("the brand logo in the hover", () => {
   test("a png data uri renders as an image, with the brand name as alt text", () => {
-    const md = tooltipMarkdown(ad({ brand: { name: "Kysely", logo: PNG } }));
+    const md = tooltipMarkdown(ad({ brand: { name: "Kysely", logo: PNG, icon: null } }));
     expect(md).toContain(`![Kysely](${PNG})`);
   });
 
   test("no brand and no logo both render nothing extra", () => {
     expect(tooltipMarkdown(ad({ brand: null }))).not.toContain("![");
-    expect(tooltipMarkdown(ad({ brand: { name: "Kysely", logo: null } }))).not.toContain("![");
+    expect(
+      tooltipMarkdown(ad({ brand: { name: "Kysely", logo: null, icon: null } })),
+    ).not.toContain("![");
   });
 
   test("a remote logo is refused, however valid it looks", () => {
@@ -123,7 +125,7 @@ describe("the brand logo in the hover", () => {
     // fetch the advertiser's origin from inside the editor — an IP address and an activity
     // signal nobody sold them. Verified renderable in this host, and refused anyway.
     const md = tooltipMarkdown(
-      ad({ brand: { name: "Kysely", logo: "https://cdn.example/l.png" } }),
+      ad({ brand: { name: "Kysely", logo: "https://cdn.example/l.png", icon: null } }),
     );
     expect(md).not.toContain("![");
     expect(md).not.toContain("cdn.example");
@@ -135,7 +137,7 @@ describe("the brand logo in the hover", () => {
       "data:text/html;base64,PHNjcmlwdD4=",
       "data:image/png,notbase64",
     ]) {
-      expect(tooltipMarkdown(ad({ brand: { name: "X", logo } }))).not.toContain("![");
+      expect(tooltipMarkdown(ad({ brand: { name: "X", logo, icon: null } }))).not.toContain("![");
     }
   });
 
@@ -145,7 +147,11 @@ describe("the brand logo in the hover", () => {
     // not a payload we produced — drop it rather than try to repair it.
     const md = tooltipMarkdown(
       ad({
-        brand: { name: "X", logo: "data:image/png;base64,AAA) [gotcha](https://evil.example)" },
+        brand: {
+          name: "X",
+          logo: "data:image/png;base64,AAA) [gotcha](https://evil.example)",
+          icon: null,
+        },
       }),
     );
     expect(md).not.toContain("![");
@@ -155,7 +161,7 @@ describe("the brand logo in the hover", () => {
   test("the brand name in alt text is escaped like any other advertiser string", () => {
     // Alt text sits inside `![…]`, so an unescaped `]` closes it and the rest becomes live
     // markdown. The name is advertiser-supplied and gets the same treatment as the copy.
-    const md = tooltipMarkdown(ad({ brand: { name: "A[b](c)", logo: PNG } }));
+    const md = tooltipMarkdown(ad({ brand: { name: "A[b](c)", logo: PNG, icon: null } }));
     expect(md).toContain(`![A\\[b\\]\\(c\\)](${PNG})`);
   });
 });

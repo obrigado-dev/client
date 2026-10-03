@@ -21,7 +21,7 @@ describe("parseSponsored", () => {
       spans: [{ text: "Postgres", bold: true, link: true }],
       style: "cyan",
       effect: "italic",
-      brand: { name: "Neon", logo: "data:image/png;base64,AAAA" },
+      brand: { name: "Neon", logo: "data:image/png;base64,AAAA", icon: null },
     });
   });
 

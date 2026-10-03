@@ -63,6 +63,8 @@ export interface SponsoredBrand {
   readonly name: string;
   /** A `data:image/png;base64,…` URI built server-side from validated bytes, or null. Never a URL. */
   readonly logo: string | null;
+  /** The square mark, on the same terms as `logo`: a wordmark suits a hover, a line wants this. */
+  readonly icon: string | null;
 }
 
 /** One `--json` line from `obrigado statusline`. */
@@ -123,7 +125,11 @@ export function parseSponsored(line: string): Sponsored | null {
     effect: isLineEffect(effect) ? effect : "none",
     brand:
       brand !== null && brand !== undefined && typeof brand.name === "string"
-        ? { name: brand.name, logo: typeof brand.logo === "string" ? brand.logo : null }
+        ? {
+            name: brand.name,
+            logo: typeof brand.logo === "string" ? brand.logo : null,
+            icon: typeof brand.icon === "string" ? brand.icon : null,
+          }
         : null,
   };
 }

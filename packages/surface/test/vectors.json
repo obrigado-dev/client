@@ -116,6 +116,34 @@
   ],
   "parseSponsored": [
     {
+      "line": "{\"label\":\"oss-sponsor\",\"copy\":\"Ship faster with Acme\",\"url\":\"https://obrigado.dev/c/abc\",\"spans\":[{\"text\":\"Ship faster\",\"bold\":true,\"color\":\"cyan\",\"link\":true},{\"text\":\" with Acme\",\"italic\":true,\"highlight\":true}],\"style\":\"cyan\",\"effect\":\"italic\",\"brand\":{\"name\":\"Acme\",\"logo\":\"data:image/png;base64,iVBORw0KGgo=\",\"icon\":\"data:image/png;base64,iVBORw0KGgoICON=\"}}",
+      "sponsored": {
+        "label": "oss-sponsor",
+        "copy": "Ship faster with Acme",
+        "url": "https://obrigado.dev/c/abc",
+        "spans": [
+          {
+            "text": "Ship faster",
+            "bold": true,
+            "color": "cyan",
+            "link": true
+          },
+          {
+            "text": " with Acme",
+            "italic": true,
+            "highlight": true
+          }
+        ],
+        "style": "cyan",
+        "effect": "italic",
+        "brand": {
+          "name": "Acme",
+          "logo": "data:image/png;base64,iVBORw0KGgo=",
+          "icon": "data:image/png;base64,iVBORw0KGgoICON="
+        }
+      }
+    },
+    {
       "line": "{\"label\":\"oss-sponsor\",\"copy\":\"Ship faster with Acme\",\"url\":\"https://obrigado.dev/c/abc\",\"spans\":[{\"text\":\"Ship faster\",\"bold\":true,\"color\":\"cyan\",\"link\":true},{\"text\":\" with Acme\",\"italic\":true,\"highlight\":true}],\"style\":\"cyan\",\"effect\":\"italic\",\"brand\":{\"name\":\"Acme\",\"logo\":\"data:image/png;base64,iVBORw0KGgo=\"}}",
       "sponsored": {
         "label": "oss-sponsor",
@@ -138,7 +166,8 @@
         "effect": "italic",
         "brand": {
           "name": "Acme",
-          "logo": "data:image/png;base64,iVBORw0KGgo="
+          "logo": "data:image/png;base64,iVBORw0KGgo=",
+          "icon": null
         }
       }
     },
@@ -331,7 +360,8 @@
         "effect": "none",
         "brand": {
           "name": "Acme",
-          "logo": null
+          "logo": null,
+          "icon": null
         }
       }
     },
@@ -351,7 +381,8 @@
         "effect": "none",
         "brand": {
           "name": "Acme",
-          "logo": null
+          "logo": null,
+          "icon": null
         }
       }
     },
