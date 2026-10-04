@@ -30,14 +30,14 @@
  */
 import { createInterface } from "node:readline/promises";
 
-import { API_VERSION } from "@obrigado/shared";
 import type { SharingSettings } from "@obrigado/shared";
 
 import { isCiEnvironment } from "../api.ts";
 import { OBRIGADO_DIR, sharingSettings } from "../config.ts";
 import type { ClientConfig } from "../config.ts";
 import { peekRetrieval } from "../retrieval.ts";
-import { DIMENSIONS, printTargetingOffer, wrapAt } from "./privacy.ts";
+import { tilde } from "./install-report.ts";
+import { DIMENSIONS, printTargetingOffer } from "./privacy.ts";
 import { apiOrigin } from "./shared.ts";
 
 /** Everything off — the answer given by saying nothing, and the shape the wire expects. */
@@ -98,18 +98,16 @@ export function requestPreview(sharing: SharingSettings, retrieved: readonly str
     sharing,
     ...(sharing.activity ? { retrieved: retrieved.slice(0, PREVIEW_IDS) } : {}),
   };
-  const lines = [`  "signals": ${JSON.stringify(signals, null, 2).replaceAll("\n", "\n  ")}`];
-
+  // One line: the bytes, not a layout of them.
+  const preview = `"signals": ${JSON.stringify(signals)}`;
   const hidden = retrieved.length - PREVIEW_IDS;
-  if (sharing.activity && hidden > 0) {
-    lines.push("", `  ${PREVIEW_IDS} of ${retrieved.length} shown.`);
-  }
-  return lines.join("\n");
+  return sharing.activity && hidden > 0
+    ? `${preview} (${PREVIEW_IDS} of ${retrieved.length} shown.)`
+    : preview;
 }
 
 function preamble(say: Say): void {
-  say("\nTargeting: 4 questions, all default no. Nothing is targetable until you say so.");
-  say("You earn nothing for saying yes; better targeting just raises what the line is worth.");
+  say("\nTargeting: 4 questions, all default to no. You earn nothing either way.");
 }
 
 /**
@@ -130,17 +128,14 @@ export async function runTargetingSetup(
   const sharing: SharingSettings = { ...NOTHING_SHARED };
 
   for (const dimension of DIMENSIONS) {
-    say(`\n  ${dimension.label}`);
-    for (const line of wrapAt(dimension.what, "    ")) say(line);
-    for (const line of wrapAt(dimension.stored, "    ")) say(line);
     if (dimension.key === "activity" && retrieved.length === 0) {
       // Said before the question, not after it: a developer deciding whether to share a list
       // deserves to know the list is currently empty, and why.
-      say("    Nothing queued yet; needs the `obrigado read --print-hook` hook.");
+      say("  Nothing queued yet: reading needs `obrigado read --print-hook`.");
     }
 
     // oxlint-disable-next-line eslint/no-await-in-loop -- a person answers one question at a time
-    const answer = parseAnswer(await ask(`  Allow ${dimension.label}? [y/N] `));
+    const answer = parseAnswer(await ask(`  ${dimension.ask} [y/N] `));
     if (answer === null) return null;
 
     sharing[dimension.key] = answer;
@@ -253,21 +248,12 @@ export async function decideSharing(
  * it always did: it is the thing left on screen when the install finishes.
  */
 export function reportStored(decision: SharingDecision): void {
-  const where = `${OBRIGADO_DIR}/config.json (mode 0600)`;
-  console.log(`\nShared install key stored in ${where}.`);
-
+  console.log("");
   if (decision.asked && decision.sharing !== undefined) {
-    console.log(`Your answers are in the same file, and every render sends them to`);
-    console.log(`${decision.origin}/api/${API_VERSION}/session:\n`);
-    console.log(requestPreview(decision.sharing, decision.retrieved));
-    console.log(
-      decision.sharing.activity
-        ? '\n  Only "sharing" is stored. "retrieved" is read fresh each render.'
-        : '\n  activity off: no "retrieved" key, not an empty one.',
-    );
-    console.log("");
+    console.log(`Saved to ${tilde(`${OBRIGADO_DIR}/config.json`)}. Each render sends:`);
+    console.log(`  ${requestPreview(decision.sharing, decision.retrieved)}`);
+  } else {
+    console.log(`Saved to ${tilde(`${OBRIGADO_DIR}/config.json`)}.`);
+    printTargetingOffer(decision.sharing);
   }
-
-  console.log("70% of gross revenue funds open source maintainers.");
-  if (!decision.asked) printTargetingOffer(decision.sharing);
 }

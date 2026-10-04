@@ -15,6 +15,7 @@ import {
   type PiHost,
 } from "../pi-extension.ts";
 import type { AdapterResult, Remover } from "./adapters.ts";
+import { tilde } from "./install-report.ts";
 
 function hostLabel(host: PiHost): string {
   return host === "pi" ? "Pi" : "oh-my-pi";
@@ -40,17 +41,27 @@ async function installPiAdapter(
       installed: true,
       installed_at: current?.installed_at ?? new Date().toISOString(),
     };
-    if (outcome.status === "already-installed") {
-      console.log(`${label} already installed.`);
-    } else {
-      console.log(`${label} installed — wrote ${outcome.path}`);
-      if (outcome.backup !== null) console.log(`  Backup: ${outcome.backup}`);
-    }
-    console.log(`  Restart ${label}; the sponsored line joins its footer status.`);
-    return { changed: true, failed: false };
+    const already = outcome.status === "already-installed";
+    return {
+      changed: true,
+      failed: false,
+      row: {
+        mark: "done",
+        host: label,
+        detail: `extension · ${tilde(outcome.path)} · ${already ? "already there" : `restart ${label}`}`,
+        backedUp: !already && outcome.backup !== null,
+      },
+    };
   } catch (error) {
-    console.error(`${label} install failed: ${error instanceof Error ? error.message : error}`);
-    return { changed: false, failed: true };
+    return {
+      changed: false,
+      failed: true,
+      row: {
+        mark: "failed",
+        host: label,
+        detail: `failed: ${error instanceof Error ? error.message : String(error)}`,
+      },
+    };
   }
 }
 

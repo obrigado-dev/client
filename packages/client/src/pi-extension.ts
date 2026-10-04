@@ -20,14 +20,14 @@
  * and an absolute path into `node_modules` breaks the moment the package is reinstalled.
  */
 import { existsSync } from "node:fs";
-import { readFile, realpath, rename, writeFile } from "node:fs/promises";
+import { realpath, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { BACKUP_DIR, ensureDir } from "./config.ts";
 import { rendererCommand } from "./renderer-command.ts";
 import { CLIENT_VERSION } from "./version.ts";
+import EXTENSION_MODULE from "@obrigado/pi-extension/extension" with { type: "text" };
 
 /** The two hosts that load this extension unmodified. */
 export type PiHost = "pi" | "oh-my-pi";
@@ -101,14 +101,17 @@ export function piExtensionTargets(
 }
 
 /**
- * The extension's source, read from the package that owns it.
+ * The extension's source, embedded at build time.
  *
- * Resolved through the package's own `exports` rather than by a relative path, so it works the
- * same from a workspace checkout and from an installed copy under `node_modules`.
+ * Read from disk it was found in a checkout and under `node_modules`, and nowhere in the release
+ * binary, where `bun build --compile` leaves no package files behind: every install of Pi from
+ * install.sh failed with "Cannot find module". A text import is the bundler's to resolve, so the
+ * binary carries the exact file a checkout reads.
  */
 async function extensionSource(): Promise<string> {
-  const resolved = import.meta.resolve("@obrigado/pi-extension/extension");
-  return await readFile(fileURLToPath(resolved), "utf8");
+  // A Bun text import hands over the file's contents as a string. TypeScript types the specifier
+  // by the module's exports, a function, because the loader is Bun's and not the language's.
+  return await Promise.resolve(EXTENSION_MODULE as unknown as string);
 }
 
 /**

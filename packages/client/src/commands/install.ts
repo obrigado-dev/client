@@ -18,17 +18,16 @@ import {
 } from "../codex-statusline.ts";
 import {
   installOpenCodePlugin,
-  OPENCODE_PLUGIN_SPEC,
   OPENCODE_TUI_CONFIG_PATH,
   uninstallOpenCodePlugin,
 } from "../opencode-plugin.ts";
 import { INSTALLABLE_AGENTS, type InstallableAgentId } from "@obrigado/shared/agents";
 
-import { installStatusLine, statusLineCommand, uninstallStatusLine } from "../statusline.ts";
-import type { InstallOutcome } from "../statusline.ts";
+import { installStatusLine, uninstallStatusLine } from "../statusline.ts";
 import { decideSharing, reportStored } from "./privacy-prompt.ts";
 import type { AdapterResult, Remover } from "./adapters.ts";
 import { installClaudeDesktopAdapter, removeClaudeDesktop } from "./install-desktop.ts";
+import { claudeRow, failedRow, printInstallRows, tilde } from "./install-report.ts";
 import { installPiHosts, removePiHost } from "./install-pi.ts";
 import { positionFromArgv, resolveClaudeState } from "./claude-state.ts";
 import { reportUpdates } from "../self-update.ts";
@@ -62,31 +61,6 @@ export function requestedAgent(argv: readonly string[]): InstallAgent | null {
   return value;
 }
 
-function reportRefusal(existing: unknown): void {
-  console.error(`Claude Code: ${CLAUDE_SETTINGS_PATH} already defines a statusLine:`);
-  console.error(`  ${JSON.stringify(existing)}\n`);
-  console.error("Obrigado left it untouched. Use --chain to keep it above ours, or --replace.");
-}
-
-function reportChained(command: string): void {
-  console.log("  Chained — your statusline still renders above ours:");
-  console.log(`    ${command.slice(0, 76)}${command.length > 76 ? "…" : ""}`);
-}
-
-function reportClaudeInstalled(
-  outcome: Extract<InstallOutcome, { status: "installed" }>,
-  chained: string | undefined,
-  previous: unknown,
-): void {
-  console.log(`Claude Code installed — wrote only "statusLine" in ${CLAUDE_SETTINGS_PATH}`);
-  console.log(`  Command: ${statusLineCommand()}`);
-  if (chained !== undefined) reportChained(chained);
-  else if (previous !== null && previous !== undefined) {
-    console.log(`  Previous statusline saved for restore: ${JSON.stringify(previous)}`);
-  }
-  if (outcome.backup !== null) console.log(`  Backup: ${outcome.backup}`);
-}
-
 function targetsForInstall(argv: readonly string[]): InstallAgent[] {
   const explicit = requestedAgent(argv);
   if (explicit !== null) return [explicit];
@@ -109,8 +83,7 @@ async function installClaudeAdapter(
   try {
     const { outcome, previous } = await installStatusLine(CLAUDE_SETTINGS_PATH, { replace });
     if (outcome.status === "refused") {
-      reportRefusal(outcome.existing);
-      return { changed: false, failed: true };
+      return { changed: false, failed: true, row: claudeRow(outcome, undefined, previous) };
     }
 
     const current = claudeIntegration(existing);
@@ -122,16 +95,17 @@ async function installClaudeAdapter(
       chained_command: chainedCommand,
       sponsored_position: position,
     };
-    if (outcome.status === "already-installed") {
-      console.log("Claude Code already installed.");
-      if (chain && chainedCommand !== undefined) reportChained(chainedCommand);
-    } else {
-      reportClaudeInstalled(outcome, chainedCommand, previous);
-    }
-    return { changed: true, failed: false };
+    return {
+      changed: true,
+      failed: false,
+      row: claudeRow(
+        outcome,
+        outcome.status === "already-installed" && !chain ? undefined : chainedCommand,
+        previous,
+      ),
+    };
   } catch (error) {
-    console.error(`Claude Code install failed: ${error instanceof Error ? error.message : error}`);
-    return { changed: false, failed: true };
+    return { changed: false, failed: true, row: failedRow("Claude Code", error) };
   }
 }
 
@@ -147,14 +121,22 @@ async function installClaudeAdapter(
  */
 function installCodexAdapter(explicit: boolean): AdapterResult {
   if (explicit) {
-    console.error(new CodexUnsupportedError().message);
-    return { changed: false, failed: true };
+    const reason = new CodexUnsupportedError().message.split("\n").filter((line) => line !== "");
+    return {
+      changed: false,
+      failed: true,
+      row: { mark: "failed", host: "Codex", detail: "nothing installed", notes: reason },
+    };
   }
-  console.log("Codex detected — it has no status-line extension point yet, so nothing was");
-  console.log("installed for it. Obrigado will not fall back to a noisier surface.");
-  console.log(`  Tracking upstream: ${CODEX_TRACKING_ISSUE}`);
-  console.log("  `obrigado install --agent codex` explains in full.");
-  return { changed: false, failed: false };
+  return {
+    changed: false,
+    failed: false,
+    row: {
+      mark: "skipped",
+      host: "Codex",
+      detail: `no status line to use yet · ${CODEX_TRACKING_ISSUE.replace("https://", "")}`,
+    },
+  };
 }
 
 async function installOpenCodeAdapter(
@@ -168,18 +150,19 @@ async function installOpenCodeAdapter(
       installed: true,
       installed_at: current?.installed_at ?? new Date().toISOString(),
     };
-    if (outcome.status === "already-installed") {
-      console.log("OpenCode already installed.");
-    } else {
-      console.log(`OpenCode installed — added one plugin entry to ${OPENCODE_TUI_CONFIG_PATH}`);
-      console.log(`  Plugin: ${OPENCODE_PLUGIN_SPEC}`);
-      if (outcome.backup !== null) console.log(`  Backup: ${outcome.backup}`);
-    }
-    console.log("  Restart OpenCode; the sponsored line appears in its bottom bar.");
-    return { changed: true, failed: false };
+    const already = outcome.status === "already-installed";
+    return {
+      changed: true,
+      failed: false,
+      row: {
+        mark: "done",
+        host: "OpenCode",
+        detail: `plugin · ${tilde(OPENCODE_TUI_CONFIG_PATH)} · ${already ? "already there" : "restart OpenCode"}`,
+        backedUp: !already && outcome.backup !== null,
+      },
+    };
   } catch (error) {
-    console.error(`OpenCode install failed: ${error instanceof Error ? error.message : error}`);
-    return { changed: false, failed: true };
+    return { changed: false, failed: true, row: failedRow("OpenCode", error) };
   }
 }
 
@@ -224,6 +207,9 @@ export async function install(argv: readonly string[] = []): Promise<number> {
     results.push(await installClaudeDesktopAdapter(existing, integrations));
   }
 
+  console.log("");
+  printInstallRows(results.flatMap((result) => (result.row === undefined ? [] : [result.row])));
+
   if (results.some((result) => result.changed)) {
     const decision = await decideSharing(existing, argv);
     const next: ClientConfig = {
@@ -240,6 +226,7 @@ export async function install(argv: readonly string[] = []): Promise<number> {
     await writeConfig(next);
     reportStored(decision);
     reportUpdates(next);
+    console.log("70% of gross revenue funds open source maintainers.");
   }
   return results.some((result) => result.failed) ? 1 : 0;
 }

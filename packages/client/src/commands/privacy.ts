@@ -45,6 +45,8 @@ interface Dimension {
   readonly label: string;
   readonly what: string;
   readonly stored: string;
+  /** The question install asks, on one line: what it allows, and the one thing to know. */
+  readonly ask: string;
 }
 
 /**
@@ -61,20 +63,23 @@ export const DIMENSIONS: readonly Dimension[] = [
     label: "packages",
     what: "Advertisers target the packages you depend on.",
     stored:
-      "Stores nothing new. Your lockfile is already sent, because it is what the payout " +
-      "makes an impression worth buying. This decides whether it can also pick the ad.",
+      "Stores nothing new. Your lockfile is already sent, because it is what makes an " +
+      "impression worth buying. This decides whether it can also pick the ad.",
+    ask: "Your packages? Lets your lockfile pick the ad; it is sent either way.",
   },
   {
     key: "region",
     label: "region",
     what: "Advertisers target your country.",
     stored: "Stores your country. Current value, no history.",
+    ask: "Your country? Stored as it is now, with no history.",
   },
   {
     key: "network",
     label: "network",
     what: "Advertisers match your IP against ranges they supply.",
     stored: "Stores nothing. Checked during the request, then dropped.",
+    ask: "Your network? Your IP against advertisers' ranges, never stored.",
   },
   {
     key: "activity",
@@ -83,6 +88,7 @@ export const DIMENSIONS: readonly Dimension[] = [
     stored:
       "Stores nothing new. Package ids `obrigado read` already reports, resolved locally. " +
       "No paths, no conversation.",
+    ask: "Your agent's reading? Package ids it read lately; no paths.",
   },
 ];
 
@@ -103,16 +109,18 @@ export const DIMENSIONS: readonly Dimension[] = [
  * their own lockfile.
  */
 export function printTargetingOffer(sharing: ClientConfig["sharing"]): void {
-  if (sharing?.region === true || sharing?.network === true || sharing?.activity === true) {
-    console.log("\nTargeting settings kept from your last install. See `obrigado privacy`.");
+  if (
+    sharing?.packages === true ||
+    sharing?.region === true ||
+    sharing?.network === true ||
+    sharing?.activity === true
+  ) {
+    console.log("Targeting: kept from your last install. `obrigado privacy` to change it.");
     return;
   }
-
   console.log(
-    "\nAdvertisers cannot target this install on anything. Lockfile, region, IP range\n" +
-      "and recently-read packages are all off, and stay off unless you say otherwise.\n" +
-      "You earn nothing for turning them on; better targeting just raises what the line is worth.\n\n" +
-      "  obrigado privacy    see what each one means",
+    "Targeting: off. No advertiser can aim at your lockfile, country, IP or reading.\n" +
+      "`obrigado privacy` explains each and turns it on.",
   );
 }
 

@@ -66,11 +66,13 @@ describe("runTargetingSetup", () => {
     const sharing = await runTargetingSetup(ask, [], () => {});
 
     expect(asked).toEqual([
-      "  Allow packages? [y/N] ",
-      "  Allow region? [y/N] ",
-      "  Allow network? [y/N] ",
-      "  Allow activity? [y/N] ",
+      "  Your packages? Lets your lockfile pick the ad; it is sent either way. [y/N] ",
+      "  Your country? Stored as it is now, with no history. [y/N] ",
+      "  Your network? Your IP against advertisers' ranges, never stored. [y/N] ",
+      "  Your agent's reading? Package ids it read lately; no paths. [y/N] ",
     ]);
+    // One line each, so the question is the screen rather than a paragraph above it.
+    for (const question of asked) expect(question.length).toBeLessThanOrEqual(80);
     expect(sharing).toEqual(NOTHING_SHARED);
   });
 

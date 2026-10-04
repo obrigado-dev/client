@@ -123,8 +123,9 @@ export function updatesItself(
 /** Said at install, because §3 asks that an update never be silent (A38). */
 export function reportUpdates(config: ClientConfig, target: string | null = releaseTarget()): void {
   if (!updatesItself(config, target)) return;
-  console.log("Obrigado keeps itself up to date, checking at most once a day, and says so in");
-  console.log("the line when it updates. `obrigado config auto_update false` turns that off.");
+  console.log(
+    "Updates itself daily and says so in the line; `obrigado config auto_update false` stops it.",
+  );
 }
 
 /**

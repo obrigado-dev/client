@@ -14,6 +14,7 @@ import {
   uninstallClaudeDesktopPlugin,
 } from "../claude-desktop.ts";
 import type { AdapterResult } from "./adapters.ts";
+import { tilde } from "./install-report.ts";
 
 /**
  * The Claude desktop app: its plugin enabled from our marketplace, and the renderer named by its
@@ -29,33 +30,47 @@ export async function installClaudeDesktopAdapter(
     const renderer = desktopRendererCommand();
     const outcome = await installClaudeDesktopPlugin(renderer, current?.renderer_command);
     if (outcome.status === "refused") {
-      console.error(`Claude desktop app: ${CLAUDE_SETTINGS_PATH}: ${outcome.reason}.`);
-      console.error("Obrigado left it untouched.");
-      return { changed: false, failed: true };
+      return {
+        changed: false,
+        failed: true,
+        row: {
+          mark: "failed",
+          host: HOST,
+          detail: `${outcome.reason} in ${tilde(CLAUDE_SETTINGS_PATH)}, left as it was`,
+        },
+      };
     }
     integrations["claude-desktop"] = {
       installed: true,
       installed_at: current?.installed_at ?? new Date().toISOString(),
       renderer_command: renderer,
     };
-    if (outcome.status === "already-installed") {
-      console.log("Claude desktop app already installed.");
-    } else {
-      console.log(
-        `Claude desktop app installed — enabled ${CLAUDE_DESKTOP_PLUGIN_ID} in ${CLAUDE_SETTINGS_PATH}`,
-      );
-      console.log(`  Renderer: ${renderer}`);
-      if (outcome.backup !== null) console.log(`  Backup: ${outcome.backup}`);
-    }
-    console.log("  Start a new session in the app's Code tab; the line appears above the prompt.");
-    return { changed: true, failed: false };
+    const already = outcome.status === "already-installed";
+    return {
+      changed: true,
+      failed: false,
+      row: {
+        mark: "done",
+        host: HOST,
+        detail: `plugin · ${tilde(CLAUDE_SETTINGS_PATH)} · ${already ? "already there" : "next new session in the app"}`,
+        backedUp: !already && outcome.backup !== null,
+      },
+    };
   } catch (error) {
-    console.error(
-      `Claude desktop app install failed: ${error instanceof Error ? error.message : error}`,
-    );
-    return { changed: false, failed: true };
+    return {
+      changed: false,
+      failed: true,
+      row: {
+        mark: "failed",
+        host: HOST,
+        detail: `failed: ${error instanceof Error ? error.message : String(error)}`,
+      },
+    };
   }
 }
+
+/** What the summary and the landing page call it. */
+const HOST = "Claude Desktop App";
 
 export async function removeClaudeDesktop(
   config: ClientConfig | null,
