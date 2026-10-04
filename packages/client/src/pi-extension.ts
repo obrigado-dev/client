@@ -20,14 +20,15 @@
  * and an absolute path into `node_modules` breaks the moment the package is reinstalled.
  */
 import { existsSync } from "node:fs";
-import { realpath, rename, writeFile } from "node:fs/promises";
+import { readFile, realpath, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { BACKUP_DIR, ensureDir } from "./config.ts";
 import { rendererCommand } from "./renderer-command.ts";
 import { CLIENT_VERSION } from "./version.ts";
-import EXTENSION_MODULE from "@obrigado/pi-extension/extension" with { type: "text" };
+import EXTENSION_TEXT from "@obrigado/pi-extension/extension" with { type: "text" };
 
 /** The two hosts that load this extension unmodified. */
 export type PiHost = "pi" | "oh-my-pi";
@@ -109,9 +110,15 @@ export function piExtensionTargets(
  * binary carries the exact file a checkout reads.
  */
 async function extensionSource(): Promise<string> {
-  // A Bun text import hands over the file's contents as a string. TypeScript types the specifier
+  // A Bun text import hands over the file's contents as a string; TypeScript types the specifier
   // by the module's exports, a function, because the loader is Bun's and not the language's.
-  return await Promise.resolve(EXTENSION_MODULE as unknown as string);
+  const embedded: unknown = EXTENSION_TEXT;
+  if (typeof embedded === "string") return embedded;
+  // Bun 1.3 caches a module by its path alone, so in a process that has already loaded the
+  // extension as code (the test runner, where the extension's own tests do) the text import
+  // hands back that module instead. Only a checkout runs that way, and a checkout has the file.
+  const path = fileURLToPath(import.meta.resolve("@obrigado/pi-extension/extension"));
+  return await readFile(path, "utf8");
 }
 
 /**
