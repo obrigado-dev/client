@@ -25,7 +25,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { CLAUDE_SETTINGS_PATH } from "./config.ts";
+import { BACKUP_DIR, CLAUDE_SETTINGS_PATH } from "./config.ts";
 import { absoluteRendererArgv } from "./renderer-command.ts";
 import { backupSettings, readSettings, writeSettingsAtomically } from "./statusline.ts";
 import type { SettingsObject } from "./statusline.ts";
@@ -107,6 +107,7 @@ export async function installClaudeDesktopPlugin(
   rendererCommand: string,
   recorded: string | undefined,
   path = CLAUDE_SETTINGS_PATH,
+  backupDir = BACKUP_DIR,
 ): Promise<DesktopInstallOutcome> {
   const settings = (await readSettings(path)) ?? {};
   const marketplaces = objectAt(settings, "extraKnownMarketplaces");
@@ -133,7 +134,7 @@ export async function installClaudeDesktopPlugin(
     return { status: "already-installed" };
   }
 
-  const backup = await backupSettings(path);
+  const backup = await backupSettings(path, backupDir);
   await writeSettingsAtomically(path, {
     ...settings,
     extraKnownMarketplaces: {
@@ -158,6 +159,7 @@ export type DesktopUninstallOutcome = "removed" | "not-installed";
 export async function uninstallClaudeDesktopPlugin(
   recorded: string | undefined,
   path = CLAUDE_SETTINGS_PATH,
+  backupDir = BACKUP_DIR,
 ): Promise<DesktopUninstallOutcome> {
   const settings = await readSettings(path);
   if (settings === null) return "not-installed";
@@ -168,7 +170,7 @@ export async function uninstallClaudeDesktopPlugin(
   const ours = isOurMarketplace(marketplaces[CLAUDE_DESKTOP_MARKETPLACE]);
   if (!ours && plugins[CLAUDE_DESKTOP_PLUGIN_ID] !== true) return "not-installed";
 
-  await backupSettings(path);
+  await backupSettings(path, backupDir);
   let next: SettingsObject = {
     ...settings,
     enabledPlugins: { ...plugins, [CLAUDE_DESKTOP_PLUGIN_ID]: false },

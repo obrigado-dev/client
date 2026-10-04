@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import {
   installStatusLine,
@@ -20,10 +20,12 @@ import {
 
 let dir: string;
 let settingsPath: string;
+let backups: string;
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "obrigado-statusline-"));
   settingsPath = join(dir, "settings.json");
+  backups = join(dir, "backups");
 });
 
 afterEach(async () => {
@@ -43,7 +45,7 @@ describe("installing", () => {
     };
     await write(original);
 
-    const { outcome } = await installStatusLine(settingsPath);
+    const { outcome } = await installStatusLine(settingsPath, {}, backups);
     expect(outcome.status).toBe("installed");
 
     const after = await readSettings(settingsPath);
@@ -63,7 +65,7 @@ describe("installing", () => {
   });
 
   test("creates the file when Claude Code has no settings yet", async () => {
-    const { outcome } = await installStatusLine(settingsPath);
+    const { outcome } = await installStatusLine(settingsPath, {}, backups);
     expect(outcome.status).toBe("installed");
     expect(isOurStatusLine((await readSettings(settingsPath))?.["statusLine"])).toBe(true);
   });
@@ -74,7 +76,7 @@ describe("installing", () => {
     const foreign = { type: "command", command: "some-other-tool render" };
     await write({ statusLine: foreign });
 
-    const { outcome } = await installStatusLine(settingsPath);
+    const { outcome } = await installStatusLine(settingsPath, {}, backups);
     expect(outcome.status).toBe("refused");
 
     // The file is untouched.
@@ -83,26 +85,27 @@ describe("installing", () => {
   });
 
   test("is idempotent — installing twice changes nothing", async () => {
-    await installStatusLine(settingsPath);
+    await installStatusLine(settingsPath, {}, backups);
     const first = await readFile(settingsPath, "utf8");
 
-    const second = await installStatusLine(settingsPath);
+    const second = await installStatusLine(settingsPath, {}, backups);
     expect(second.outcome.status).toBe("already-installed");
     expect(await readFile(settingsPath, "utf8")).toBe(first);
   });
 
-  test("backs the file up before writing", async () => {
+  test("backs the file up before writing, into the directory it is given", async () => {
     await write({ model: "opus" });
-    const { outcome } = await installStatusLine(settingsPath);
+    const { outcome } = await installStatusLine(settingsPath, {}, backups);
 
     expect(outcome.status).toBe("installed");
     if (outcome.status !== "installed" || outcome.backup === null) throw new Error("no backup");
+    expect(dirname(outcome.backup)).toBe(backups);
     expect(JSON.parse(await readFile(outcome.backup, "utf8"))).toEqual({ model: "opus" });
   });
 
   test("refuses a settings file that is not a JSON object", async () => {
     await writeFile(settingsPath, "[1, 2, 3]");
-    expect(installStatusLine(settingsPath)).rejects.toThrow();
+    expect(installStatusLine(settingsPath, {}, backups)).rejects.toThrow();
   });
 });
 
@@ -110,9 +113,9 @@ describe("uninstalling", () => {
   test("removes the key and leaves the rest of the file intact", async () => {
     const original = { model: "opus", permissions: { allow: [] } };
     await write(original);
-    await installStatusLine(settingsPath);
+    await installStatusLine(settingsPath, {}, backups);
 
-    expect(await uninstallStatusLine(null, settingsPath)).toBe("removed");
+    expect(await uninstallStatusLine(null, settingsPath, backups)).toBe("removed");
     expect(await readSettings(settingsPath)).toEqual(original);
   });
 
@@ -122,11 +125,11 @@ describe("uninstalling", () => {
 
     // Simulate the developer removing theirs, installing, then uninstalling.
     await write({ model: "opus" });
-    const { previous: recorded } = await installStatusLine(settingsPath);
+    const { previous: recorded } = await installStatusLine(settingsPath, {}, backups);
     expect(recorded).toBeNull();
 
     // Now the case that matters: uninstall with a recorded previous value.
-    expect(await uninstallStatusLine(previous, settingsPath)).toBe("restored");
+    expect(await uninstallStatusLine(previous, settingsPath, backups)).toBe("restored");
     expect((await readSettings(settingsPath))?.["statusLine"]).toEqual(previous);
   });
 
@@ -134,9 +137,9 @@ describe("uninstalling", () => {
     // Some installs recorded OUR command as the thing to put back — an older installer's
     // narrower recogniser judged the quoted-launcher form to be the developer's. Restoring
     // it would report "restored" and leave the ad exactly where it was.
-    await installStatusLine(settingsPath);
+    await installStatusLine(settingsPath, {}, backups);
     const ours = { type: "command", command: "obrigado statusline --agent claude-code" };
-    expect(await uninstallStatusLine(ours, settingsPath)).toBe("removed");
+    expect(await uninstallStatusLine(ours, settingsPath, backups)).toBe("removed");
     const settings = JSON.parse(await Bun.file(settingsPath).text()) as Record<string, unknown>;
     expect(settings["statusLine"]).toBeUndefined();
   });
@@ -145,13 +148,13 @@ describe("uninstalling", () => {
     const foreign = { type: "command", command: "other-tool" };
     await write({ statusLine: foreign });
 
-    expect(await uninstallStatusLine(null, settingsPath)).toBe("foreign");
+    expect(await uninstallStatusLine(null, settingsPath, backups)).toBe("foreign");
     expect((await readSettings(settingsPath))?.["statusLine"]).toEqual(foreign);
   });
 
   test("is a no-op when nothing is installed", async () => {
     await write({ model: "opus" });
-    expect(await uninstallStatusLine(null, settingsPath)).toBe("not-installed");
+    expect(await uninstallStatusLine(null, settingsPath, backups)).toBe("not-installed");
     expect(await readSettings(settingsPath)).toEqual({ model: "opus" });
   });
 
@@ -163,8 +166,8 @@ describe("uninstalling", () => {
     };
     await write(original);
 
-    await installStatusLine(settingsPath);
-    await uninstallStatusLine(null, settingsPath);
+    await installStatusLine(settingsPath, {}, backups);
+    await uninstallStatusLine(null, settingsPath, backups);
 
     expect(await readSettings(settingsPath)).toEqual(original);
   });
@@ -180,10 +183,10 @@ describe("--replace", () => {
     await write({ model: "opus", statusLine: foreign });
 
     // Default still refuses.
-    expect((await installStatusLine(settingsPath)).outcome.status).toBe("refused");
+    expect((await installStatusLine(settingsPath, {}, backups)).outcome.status).toBe("refused");
     expect((await readSettings(settingsPath))?.["statusLine"]).toEqual(foreign);
 
-    const { outcome, previous } = await installStatusLine(settingsPath, { replace: true });
+    const { outcome, previous } = await installStatusLine(settingsPath, { replace: true }, backups);
     expect(outcome.status).toBe("installed");
     expect(previous).toEqual(foreign);
     expect(isOurStatusLine((await readSettings(settingsPath))?.["statusLine"])).toBe(true);
@@ -193,8 +196,8 @@ describe("--replace", () => {
     await write({ model: "opus", permissions: { allow: ["Bash(ls:*)"] }, statusLine: foreign });
     const original = await readFile(settingsPath, "utf8");
 
-    const { previous } = await installStatusLine(settingsPath, { replace: true });
-    expect(await uninstallStatusLine(previous, settingsPath)).toBe("restored");
+    const { previous } = await installStatusLine(settingsPath, { replace: true }, backups);
+    expect(await uninstallStatusLine(previous, settingsPath, backups)).toBe("restored");
 
     // Byte-for-byte, including key order and the surrounding settings.
     expect(JSON.parse(await readFile(settingsPath, "utf8"))).toEqual(JSON.parse(original));
@@ -228,10 +231,10 @@ describe("the installed command must be runnable", () => {
   test("whatever form is written is recognised as ours", async () => {
     // Otherwise uninstall refuses to clean up its own work and a reinstall
     // reports the slot as belonging to a stranger.
-    await installStatusLine(settingsPath);
+    await installStatusLine(settingsPath, {}, backups);
     const written = (await readSettings(settingsPath))?.["statusLine"];
     expect(isOurStatusLine(written)).toBe(true);
-    expect(await uninstallStatusLine(null, settingsPath)).toBe("removed");
+    expect(await uninstallStatusLine(null, settingsPath, backups)).toBe("removed");
   });
 });
 

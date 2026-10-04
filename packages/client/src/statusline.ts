@@ -99,14 +99,23 @@ export async function readSettings(path = CLAUDE_SETTINGS_PATH): Promise<Setting
   return parsed as SettingsObject;
 }
 
-/** Copy the current settings file aside before touching it. */
-export async function backupSettings(path = CLAUDE_SETTINGS_PATH): Promise<string | null> {
+/**
+ * Copy the current settings file aside before touching it.
+ *
+ * `backupDir` is a parameter, as in `opencode-plugin.ts` and `pi-extension.ts`, so that tests
+ * writing a scratch settings file also keep its backups out of the developer's own
+ * `~/.obrigado/backups`.
+ */
+export async function backupSettings(
+  path = CLAUDE_SETTINGS_PATH,
+  backupDir = BACKUP_DIR,
+): Promise<string | null> {
   const file = Bun.file(path);
   if (!(await file.exists())) return null;
 
-  await ensureDir(BACKUP_DIR);
+  await ensureDir(backupDir);
   const stamp = new Date().toISOString().replaceAll(/[:.]/gu, "-");
-  const destination = join(BACKUP_DIR, `claude-settings-${stamp}.json`);
+  const destination = join(backupDir, `claude-settings-${stamp}.json`);
   await Bun.write(destination, await file.text());
   return destination;
 }
@@ -163,6 +172,7 @@ export interface InstallOptions {
 export async function installStatusLine(
   path = CLAUDE_SETTINGS_PATH,
   options: InstallOptions = {},
+  backupDir = BACKUP_DIR,
 ): Promise<{ outcome: InstallOutcome; previous: unknown }> {
   const settings = (await readSettings(path)) ?? {};
   const existing = settings["statusLine"];
@@ -176,7 +186,7 @@ export async function installStatusLine(
     }
   }
 
-  const backup = await backupSettings(path);
+  const backup = await backupSettings(path, backupDir);
 
   // Only this key is added or changed. Every other key is carried through
   // untouched.
@@ -194,6 +204,7 @@ export type UninstallOutcome = "removed" | "restored" | "not-installed" | "forei
 export async function uninstallStatusLine(
   previous: unknown,
   path = CLAUDE_SETTINGS_PATH,
+  backupDir = BACKUP_DIR,
 ): Promise<UninstallOutcome> {
   const settings = await readSettings(path);
   if (settings === null) return "not-installed";
@@ -202,7 +213,7 @@ export async function uninstallStatusLine(
   if (existing === undefined || existing === null) return "not-installed";
   if (!isOurStatusLine(existing)) return "foreign";
 
-  await backupSettings(path);
+  await backupSettings(path, backupDir);
 
   const next: SettingsObject = { ...settings };
   // Never restore OUR OWN command as "what was there before". An older installer's narrower
