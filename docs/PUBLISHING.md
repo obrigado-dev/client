@@ -43,8 +43,8 @@ Provenance is CI-only (`--provenance` in the workflow), so it is not in `publish
 npm refuses to publish from a laptop when it is.
 
 Then, on npmjs.com, open the package → Settings → Trusted publishing, and add this repository
-(`obrigado-dev/client`) with workflow `publish.yml`. Leave "Allow `npm publish`" unchecked: the
-workflow only stages, and a person approves. Every later version goes through CI.
+(`obrigado-dev/client`) with workflow `publish.yml`. Check "Allow `npm publish`": the workflow
+publishes directly. Every later version goes through CI.
 
 ## Every later version
 
@@ -52,11 +52,14 @@ workflow only stages, and a person approves. Every later version goes through CI
    Then bump the same package's `"version"` in `bun.lock` by hand — `bun install` leaves it,
    and packing pins dependents from it. `version.test.ts` holds the two together.
 2. Commit, then tag `<pkg>-v<version>` on that commit and push the tag.
-3. `.github/workflows/publish.yml` runs the gate, packs with bun, and STAGES the version with
-   `npm stage publish --provenance`. It refuses if the tag's version is not the manifest's.
-4. Approve it, with 2FA, from a laptop: `npm stage list @obrigado/<pkg>` then
-   `npm stage approve <stage-id>` (or the package page on npmjs.com). Nothing is public until
-   this step, so a compromised workflow or a stray tag cannot ship a release by itself.
+3. `.github/workflows/publish.yml` runs the gate, packs with bun, and publishes the version
+   with `npm publish --provenance`. It refuses if the tag's version is not the manifest's.
+
+There is no approval step: the tag is the release. Until 2026-10-03 the workflow staged each
+version with `npm stage publish` and a maintainer approved it with 2FA, so that a compromised
+workflow or a stray tag could not ship on its own. That was dropped as friction on every
+release; what stands in for it now is the gate, the tag having to match a committed version,
+and the provenance attestation on each version.
 
 `workflow_dispatch` on the same workflow publishes a package by name, for a re-run or a
 `next` dist-tag.

@@ -13,11 +13,12 @@ name: Publish
 # that does not exist yet cannot have one, so the first version of each package is
 # published by hand — see docs/PUBLISHING.md.
 #
-# It STAGES rather than publishes. The trusted publisher is deliberately not allowed to run
-# `npm publish`, so a compromised workflow — or a tag pushed by anyone with push access —
-# cannot ship a release on its own. The staged version becomes public when a maintainer
-# approves it with 2FA (`npm stage approve`, or the package page). That is the one step a
-# person keeps.
+# It publishes directly: the trusted publisher on npmjs.com allows `npm publish`, so a tag is
+# a release, with no approval after it. What stands between a tag and the registry is what
+# runs here — the full gate, and a tag that must name the version the manifest already
+# commits — and the provenance attestation records which workflow run built the tarball.
+# Until 2026-10-03 it staged instead and a maintainer approved each version with 2FA; that
+# step was dropped as friction on every release.
 
 on:
   push:
@@ -99,9 +100,7 @@ jobs:
 
       # A version that is already on the registry is done, not an error. The first version of
       # a package is published by hand (see docs/PUBLISHING.md) and then tagged, and that tag
-      # must not fail this workflow; a re-run of a tag must not either. A version that is
-      # staged but not yet approved is invisible here and fails the stage step with "already
-      # staged", which is the honest answer: approve or reject it, then re-run.
+      # must not fail this workflow; a re-run of a tag must not either.
       - name: Already on the registry?
         id: registry
         env:
@@ -123,23 +122,13 @@ jobs:
           rm -rf ../../dist/npm && mkdir -p ../../dist/npm
           bun pm pack --destination ../../dist/npm
 
-      - name: Stage
+      - name: Publish
         if: steps.registry.outputs.published != 'true'
-        run: npm stage publish dist/npm/*.tgz --provenance --access public --tag "${{ steps.target.outputs.dist_tag }}"
+        run: npm publish dist/npm/*.tgz --provenance --access public --tag "${{ steps.target.outputs.dist_tag }}"
 
-      # The trust token can stage and nothing else, so the listing is the maintainer's to run.
-      - name: What happens next
+      - name: Summary
         if: steps.registry.outputs.published != 'true'
         env:
           SPEC: ${{ steps.target.outputs.name }}@${{ steps.target.outputs.version }}
         run: |
-          {
-            echo "## Staged: \`$SPEC\`"
-            echo
-            echo "Not public yet. Approve it with 2FA:"
-            echo
-            echo '```sh'
-            echo "npm stage list ${SPEC%@*}"
-            echo "npm stage approve <stage-id>"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          echo "## Published: \`$SPEC\`" >> "$GITHUB_STEP_SUMMARY"

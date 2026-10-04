@@ -19,9 +19,9 @@ this passes on every laptop and fails on every runner.
 
 | What | Where it goes | How | State |
 |---|---|---|---|
-| `@obrigado/surface` | npm | tag `surface-v<version>` → `publish.yml` stages → a person approves | 0.2.0 published |
+| `@obrigado/surface` | npm | tag `surface-v<version>` → `publish.yml` publishes | 0.3.0 published |
 | `@obrigado/opencode-plugin` | npm | same (0.1.0 was published by hand; trusted publishing is set up) | 0.1.0 published; pins surface's exact version |
-| `obrigado` CLI binaries | GitHub Releases, fetched by `install.sh` | tag `v<version>` → `release.yml` | 0.1.0 released |
+| `obrigado` CLI binaries | GitHub Releases, fetched by `install.sh` | tag `v<version>` → `release.yml` | 0.2.0 released |
 | VS Code / Cursor extension | Marketplace | `bun run package:vscode` → `.vsix` | publisher `obrigado` unclaimed |
 | JetBrains plugin | JetBrains Marketplace | `./gradlew buildPlugin` in `packages/jetbrains-plugin` → `.zip` | vendor unclaimed; see `docs/PUBLISHING.md` |
 | Pi extension | copied into `~/.pi/agent/extensions` by the CLI | ships inside the CLI | n/a |
@@ -36,16 +36,11 @@ this passes on every laptop and fails on every runner.
    entry under `client/packages/<pkg>`; fix it in the pin commit.
 2. Commit. Tag that commit `<pkg>-v<version>`. Push the branch, then the tag.
 3. `.github/workflows/publish.yml` runs the gate, packs with `bun pm pack` (which rewrites
-   `workspace:*` to the exact version and runs `prepack`, the build), and **stages** the
-   version with `npm stage publish --provenance` through npm trusted publishing. It refuses if
-   the tag's version is not the manifest's. It cannot publish directly: the trusted publisher
-   on npmjs.com allows staging only, so a compromised workflow or a stray tag cannot ship a
-   release by itself.
-4. A maintainer approves from a laptop, with 2FA: `npm stage list @obrigado/<pkg>`, then
-   `npm stage approve <stage-id>` (or the package page on npmjs.com). Nothing is public until
-   this step. **An agent cannot do this step; ask the user to.**
-5. Re-running a tag whose version is already public is a no-op. One that is staged but not yet
-   approved fails with "already staged": approve or reject it first.
+   `workspace:*` to the exact version and runs `prepack`, the build), and **publishes** the
+   version with `npm publish --provenance` through npm trusted publishing. It refuses if the
+   tag's version is not the manifest's. There is no approval after it: **pushing the tag is
+   the release**, so push one only for a version that should be public.
+4. Re-running a tag whose version is already public is a no-op.
 
 ### The first version of a new package
 
@@ -59,7 +54,7 @@ npm publish dist/npm/*.tgz --access public  # the USER runs this: it opens a bro
 ```
 
 Then the user adds the trusted publisher on npmjs.com: repository `obrigado-dev/client`,
-workflow `publish.yml`, and "Allow `npm publish`" left unchecked.
+workflow `publish.yml`, and "Allow `npm publish`" checked, which every later version needs.
 
 Things that look like shortcuts and are not:
 - `bun publish` cannot complete this account's browser authentication (Bun 1.3.10 polls
