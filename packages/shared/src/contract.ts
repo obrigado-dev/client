@@ -24,12 +24,38 @@ export const API_VERSION = "v1";
  * constant was individually reasonable.
  *
  * The server sizes a batch from these, so a batch nominally covers its own TTL.
+ *
+ * Five minutes, down from fifteen (A39). The length changes nothing about how many impressions
+ * are counted, since a batch covers its own life whatever that is. What it decides is how long a
+ * session keeps showing what it was handed: a campaign approved, paused or out of budget reaches
+ * open sessions within one batch, and the bid book already reloads every rotation for that.
  */
 export const ROTATION_SECONDS = 30;
-export const BATCH_TTL_SECONDS = 900;
+export const BATCH_TTL_SECONDS = 300;
 
 /** Creatives per batch — enough to cover the TTL at the rotation period. */
 export const BATCH_SIZE = Math.ceil(BATCH_TTL_SECONDS / ROTATION_SECONDS);
+
+/**
+ * How long an EMPTY answer is good for (A39).
+ *
+ * An empty batch carries no nonces: nothing is held against a budget, and nothing is lost when
+ * it is replaced early. Caching it for a batch's whole life only delays the first ad a session
+ * sees after a campaign goes live. A refusal (the killswitch, a machine session) is not this:
+ * nothing about it changes in a minute, so it keeps `BATCH_TTL_SECONDS`.
+ */
+export const EMPTY_BATCH_TTL_SECONDS = 60;
+
+/**
+ * How long a minted impression can still be confirmed, and is held against its campaign's
+ * budget until it is (A39).
+ *
+ * Longer than a batch on purpose. A beacon from a laptop that went offline is retried, and this
+ * is how long the retry still counts. Fifteen minutes, what it was while it equalled the batch's
+ * life, so no confirmation that counted before is refused now — and an item from the end of a
+ * batch, which used to have thirty seconds of it, now has ten minutes.
+ */
+export const NONCE_TTL_SECONDS = 900;
 
 /** Continuous, focused browser exposure required before a website impression is confirmed. */
 export const WEBSITE_VIEWABLE_MS = 1_000;
@@ -131,9 +157,9 @@ export const SessionSignalsSchema = z.object({
    * never a path — the client resolves paths locally and drops what does not resolve, because
    * "the project is the private part" (see the client's `retrieval.ts`).
    *
-   * Worth knowing what this is NOT: a batch is rotated locally for `BATCH_TTL_SECONDS`, so
-   * anything read after the request cannot reach the batch it already returned. This is
-   * recent intent, up to fifteen minutes stale, not live intent.
+   * Worth knowing what this is NOT: a batch is rotated locally, so anything read after the
+   * request cannot reach the batch it already returned. It reaches the next one, which the
+   * client fetches early when the reading changes (`activityMoved` in `rotation.ts`).
    */
   retrieved: z.array(z.string().max(200)).max(500).optional(),
   tty: z.boolean().optional(),

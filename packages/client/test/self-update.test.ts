@@ -363,6 +363,30 @@ describe("the host files a release carries", () => {
     expect(refreshed).toEqual(["pi"]);
   });
 
+  test("repair OpenCode's entry, only where this install put one", async () => {
+    let repairs = 0;
+    const repairOpenCode = (): Promise<void> => {
+      repairs += 1;
+      return Promise.resolve();
+    };
+    const options = {
+      target: "darwin-arm64",
+      path: statePath,
+      refresh: neverRefresh,
+      repairOpenCode,
+    };
+
+    const off: ClientConfig = { ...CONFIG, integrations: { opencode: { installed: false } } };
+    await refreshIntegrations(off, {}, options);
+    expect(repairs).toBe(0);
+
+    const on: ClientConfig = { ...CONFIG, integrations: { opencode: { installed: true } } };
+    expect(await refreshIntegrations(on, {}, options)).toBe(true);
+    expect(repairs).toBe(1);
+    expect(await refreshIntegrations(on, await readUpdateState(statePath), options)).toBe(false);
+    expect(repairs).toBe(1);
+  });
+
   test("never from a checkout", async () => {
     expect(
       await refreshIntegrations(

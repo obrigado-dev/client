@@ -1,5 +1,6 @@
 import {
   claudeDesktopIntegration,
+  editorIntegration,
   claudeIntegration,
   piIntegration,
   CLAUDE_SETTINGS_PATH,
@@ -21,7 +22,6 @@ import {
   OPENCODE_TUI_CONFIG_PATH,
   uninstallOpenCodePlugin,
 } from "../opencode-plugin.ts";
-import { INSTALLABLE_AGENTS, type InstallableAgentId } from "@obrigado/shared/agents";
 
 import { installStatusLine, uninstallStatusLine } from "../statusline.ts";
 import { decideSharing, reportStored } from "./privacy-prompt.ts";
@@ -29,49 +29,15 @@ import type { AdapterResult, Remover } from "./adapters.ts";
 import { installClaudeDesktopAdapter, removeClaudeDesktop } from "./install-desktop.ts";
 import { claudeRow, failedRow, printInstallRows, tilde } from "./install-report.ts";
 import { installPiHosts, removePiHost } from "./install-pi.ts";
+import { editorsForInstall, installEditorHosts, removeEditor } from "./install-editors.ts";
 import { positionFromArgv, resolveClaudeState } from "./claude-state.ts";
 import { reportUpdates } from "../self-update.ts";
-import { detectInstalledAgents } from "./detect.ts";
+import { requestedAgent, SUPPORTED_INSTALL_AGENTS, targetsForInstall } from "./detect.ts";
+import type { InstallAgent } from "./detect.ts";
 import { apiOrigin } from "./shared.ts";
 
-/**
- * Derived, not listed: an agent is installable here exactly when the shared table says this
- * client is what puts it there. `vscode` and `cursor` are absent because they arrive from a
- * marketplace, which is a fact about them rather than a decision taken in this file.
- */
-const SUPPORTED_INSTALL_AGENTS: readonly InstallableAgentId[] = INSTALLABLE_AGENTS.map(
-  (agent) => agent.id,
-);
-export type InstallAgent = InstallableAgentId;
-
-function isInstallAgent(value: string): value is InstallAgent {
-  return (SUPPORTED_INSTALL_AGENTS as readonly string[]).includes(value);
-}
-
-export function requestedAgent(argv: readonly string[]): InstallAgent | null {
-  const equals = argv.find((value) => value.startsWith("--agent="));
-  const index = argv.indexOf("--agent");
-  const value = equals?.slice("--agent=".length) ?? (index >= 0 ? argv[index + 1] : undefined);
-  if (value === undefined) return null;
-  if (!isInstallAgent(value)) {
-    throw new Error(
-      `Unsupported agent "${value}". Supported: ${SUPPORTED_INSTALL_AGENTS.join(", ")}`,
-    );
-  }
-  return value;
-}
-
-function targetsForInstall(argv: readonly string[]): InstallAgent[] {
-  const explicit = requestedAgent(argv);
-  if (explicit !== null) return [explicit];
-  const detected = detectInstalledAgents();
-  if (detected.length === 0) {
-    throw new Error(
-      "No supported agent detected. Use `obrigado install --agent claude-code` or `--agent codex`.",
-    );
-  }
-  return detected;
-}
+// Lives beside the detectors it needs since A40; still read from here.
+export { requestedAgent } from "./detect.ts";
 
 async function installClaudeAdapter(
   existing: ClientConfig | null,
@@ -178,6 +144,8 @@ export async function install(argv: readonly string[] = []): Promise<number> {
   }
 
   const existing = await readConfig();
+  // The editors are asked about first (A40), so a bare install's questions come before any write.
+  if (requestedAgent(argv) === null) targets.push(...(await editorsForInstall(argv, existing)));
   const integrations: ClientIntegrations = { ...existing?.integrations };
   const results: AdapterResult[] = [];
 
@@ -206,6 +174,8 @@ export async function install(argv: readonly string[] = []): Promise<number> {
   if (targets.includes("claude-desktop")) {
     results.push(await installClaudeDesktopAdapter(existing, integrations));
   }
+
+  results.push(...(await installEditorHosts(targets, existing, integrations)));
 
   console.log("");
   printInstallRows(results.flatMap((result) => (result.row === undefined ? [] : [result.row])));
@@ -246,6 +216,8 @@ const INSTALLED_CHECK: Record<InstallAgent, (config: ClientConfig) => boolean> =
   pi: (config) => piIntegration(config, "pi")?.installed === true,
   "oh-my-pi": (config) => piIntegration(config, "oh-my-pi")?.installed === true,
   "claude-desktop": (config) => claudeDesktopIntegration(config)?.installed === true,
+  vscode: (config) => editorIntegration(config, "vscode")?.installed === true,
+  cursor: (config) => editorIntegration(config, "cursor")?.installed === true,
 };
 
 function installedTargets(config: ClientConfig | null): InstallAgent[] {
@@ -314,6 +286,8 @@ const REMOVERS: Record<InstallAgent, Remover> = {
   pi: removePiHost("pi"),
   "oh-my-pi": removePiHost("oh-my-pi"),
   "claude-desktop": removeClaudeDesktop,
+  vscode: removeEditor("vscode"),
+  cursor: removeEditor("cursor"),
 };
 
 /**

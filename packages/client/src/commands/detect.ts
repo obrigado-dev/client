@@ -28,8 +28,52 @@ const DETECTORS: Record<InstallableAgentId, () => boolean> = {
   pi: piDetected,
   "oh-my-pi": ohMyPiDetected,
   "claude-desktop": claudeDesktopDetected,
+  // Asked about, never detected into (A40). An editor on this machine says nothing about whether
+  // an agent runs in it, so a bare install asks (`install-editors.ts`), and
+  // `--agent vscode|cursor` installs into one without asking.
+  vscode: () => false,
+  cursor: () => false,
 };
 
-export function detectInstalledAgents(): InstallableAgentId[] {
+function detectInstalledAgents(): InstallableAgentId[] {
   return INSTALLABLE_AGENTS.map((agent) => agent.id).filter((agent) => DETECTORS[agent]());
+}
+
+/**
+ * Derived, not listed: an agent is installable here exactly when the shared table says this
+ * client is what puts it there. JetBrains IDEs are absent because they install from their own
+ * plugin manager (A40), which is a fact about them rather than a decision taken in this file.
+ */
+export const SUPPORTED_INSTALL_AGENTS: readonly InstallableAgentId[] = INSTALLABLE_AGENTS.map(
+  (agent) => agent.id,
+);
+export type InstallAgent = InstallableAgentId;
+
+function isInstallAgent(value: string): value is InstallAgent {
+  return (SUPPORTED_INSTALL_AGENTS as readonly string[]).includes(value);
+}
+
+export function requestedAgent(argv: readonly string[]): InstallAgent | null {
+  const equals = argv.find((value) => value.startsWith("--agent="));
+  const index = argv.indexOf("--agent");
+  const value = equals?.slice("--agent=".length) ?? (index >= 0 ? argv[index + 1] : undefined);
+  if (value === undefined) return null;
+  if (!isInstallAgent(value)) {
+    throw new Error(
+      `Unsupported agent "${value}". Supported: ${SUPPORTED_INSTALL_AGENTS.join(", ")}`,
+    );
+  }
+  return value;
+}
+
+export function targetsForInstall(argv: readonly string[]): InstallAgent[] {
+  const explicit = requestedAgent(argv);
+  if (explicit !== null) return [explicit];
+  const detected = detectInstalledAgents();
+  if (detected.length === 0) {
+    throw new Error(
+      "No supported agent detected. Use `obrigado install --agent claude-code` or `--agent codex`.",
+    );
+  }
+  return detected;
 }

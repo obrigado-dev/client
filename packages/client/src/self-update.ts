@@ -26,17 +26,18 @@
  * version but the `User-Agent` GitHub requires.
  */
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
 import { chmod, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import type { ClientNotice } from "@obrigado/shared";
 
 import { isCiEnvironment } from "./api.ts";
-import { ensureDir, OBRIGADO_DIR, piIntegration } from "./config.ts";
+import { ensureDir, OBRIGADO_DIR, opencodeIntegration, piIntegration } from "./config.ts";
 import type { ClientConfig } from "./config.ts";
+import { repairOpenCodePlugin } from "./opencode-plugin.ts";
 import { installPiExtension } from "./pi-extension.ts";
-import { SIGNATURE_ASSET, verifySums } from "./release-signature.ts";
+import { latestReleaseTag, parseVersion, REPO, verifiedAsset } from "./release-assets.ts";
+import type { ReleaseDeps } from "./release-assets.ts";
 import type { PiHost } from "./pi-extension.ts";
 import { CLIENT_VERSION } from "./version.ts";
 
@@ -48,7 +49,6 @@ export function releaseTarget(): string | null {
   return typeof OBRIGADO_RELEASE_TARGET === "string" ? OBRIGADO_RELEASE_TARGET : null;
 }
 
-const REPO = "obrigado-dev/client";
 const UPDATE_PATH = join(OBRIGADO_DIR, "update.json");
 const UPDATE_LOCK_PATH = join(OBRIGADO_DIR, "update.lock");
 
@@ -56,9 +56,6 @@ const UPDATE_LOCK_PATH = join(OBRIGADO_DIR, "update.lock");
 export const CHECK_EVERY_MS = 24 * 60 * 60 * 1000;
 /** A lock older than this is a run that died, not one still going. */
 const LOCK_STALE_MS = 10 * 60 * 1000;
-const REQUEST_TIMEOUT_MS = 20_000;
-/** A release binary is about 60MB. */
-const DOWNLOAD_TIMEOUT_MS = 5 * 60 * 1000;
 
 export interface UpdateState {
   /** When a render last started a check, so that a day passes between them. */
@@ -87,11 +84,9 @@ async function writeUpdateState(state: UpdateState, path = UPDATE_PATH): Promise
   await rename(temporary, path);
 }
 
-/** `1.2.3` or `v1.2.3` as three numbers; null for anything else, a pre-release included. */
-export function parseVersion(text: string): readonly [number, number, number] | null {
-  const match = /^v?(\d+)\.(\d+)\.(\d+)$/u.exec(text.trim());
-  return match === null ? null : [Number(match[1]), Number(match[2]), Number(match[3])];
-}
+// Moved to `release-assets.ts` with the rest of a release's reading, and still exported here
+// for the callers that read them as the update's own.
+export { checksumFor, parseVersion } from "./release-assets.ts";
 
 export function isNewer(candidate: string, current: string): boolean {
   const next = parseVersion(candidate);
@@ -101,15 +96,6 @@ export function isNewer(candidate: string, current: string): boolean {
     if (next[index] !== now[index]) return next[index] > now[index];
   }
   return false;
-}
-
-/** The digest SHA256SUMS lists for `asset`, in the `digest  name` form `sha256sum` writes. */
-export function checksumFor(sums: string, asset: string): string | null {
-  for (const line of sums.split("\n")) {
-    const match = /^([0-9a-f]{64}) [ *]?(\S+)$/u.exec(line.trim());
-    if (match?.[2] === asset) return match[1] ?? null;
-  }
-  return null;
 }
 
 /** Whether this install updates itself: a release binary, installed, and not turned off. */
@@ -166,19 +152,15 @@ function startBackgroundUpdate(): void {
   child.unref();
 }
 
-export interface UpdateDeps {
-  readonly fetch: (input: string, init?: RequestInit) => Promise<Response>;
+export interface UpdateDeps extends ReleaseDeps {
   /** The release asset this binary is, `darwin-arm64` and the like. */
   readonly target: string;
-  readonly current: string;
   /** The file to replace: this binary, through any symlink. */
   readonly binary: string;
   /** What a binary prints for `obrigado version`. */
   readonly reportedVersion: (path: string) => Promise<string>;
   readonly now?: () => number;
   readonly statePath?: string;
-  /** The keys a release must be signed with; the compiled-in `RELEASE_KEYS` when not given. */
-  readonly keys?: readonly string[];
 }
 
 export type UpdateOutcome =
@@ -188,38 +170,6 @@ export type UpdateOutcome =
 
 const failed = (reason: string): UpdateOutcome => ({ status: "failed", reason });
 
-async function latestRelease(deps: UpdateDeps): Promise<string | null> {
-  try {
-    const response = await deps.fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
-      headers: { accept: "application/vnd.github+json", "user-agent": `obrigado/${deps.current}` },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-    if (!response.ok) return null;
-    const body = (await response.json()) as { tag_name?: unknown; prerelease?: unknown };
-    const tag = body.tag_name;
-    return typeof tag === "string" && body.prerelease !== true && parseVersion(tag) !== null
-      ? tag
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-async function download(deps: UpdateDeps, url: string): Promise<Uint8Array | null> {
-  try {
-    const response = await deps.fetch(url, {
-      headers: { "user-agent": `obrigado/${deps.current}` },
-      signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
-    });
-    // HTTPS from the first byte to the last, as install.sh insists: a redirect to plain http
-    // would otherwise be followed silently, and the checksums travel the same way.
-    if (!response.ok || !response.url.startsWith("https://")) return null;
-    return new Uint8Array(await response.arrayBuffer());
-  } catch {
-    return null;
-  }
-}
-
 /**
  * One update, start to finish. Returns what happened; never throws.
  *
@@ -227,29 +177,14 @@ async function download(deps: UpdateDeps, url: string): Promise<Uint8Array | nul
  * and the binary is the old file or the new one, never half of either.
  */
 export async function runUpdate(deps: UpdateDeps): Promise<UpdateOutcome> {
-  const latest = await latestRelease(deps);
+  const latest = await latestReleaseTag(deps);
   if (latest === null) return failed("could not read the latest release from GitHub");
   if (!isNewer(latest, deps.current)) return { status: "current", version: deps.current };
 
   const version = latest.replace(/^v/u, "");
-  const asset = `obrigado-${deps.target}`;
-  const base = `https://github.com/${REPO}/releases/download/${latest}`;
-  const [bytes, sums, signature] = await Promise.all([
-    download(deps, `${base}/${asset}`),
-    download(deps, `${base}/SHA256SUMS`),
-    download(deps, `${base}/${SIGNATURE_ASSET}`),
-  ]);
-  if (bytes === null || sums === null) return failed(`could not download ${latest}`);
-  // The checksums are only as good as their signature: they arrive from the same release as the
-  // binary they describe, so unsigned they would vouch for whatever was published.
-  if (signature === null || !verifySums(sums, new TextDecoder().decode(signature), deps.keys)) {
-    return failed(`${latest} is not signed by a release key: not installed`);
-  }
-
-  const expected = checksumFor(new TextDecoder().decode(sums), asset);
-  if (expected === null) return failed(`${latest} publishes no checksum for ${asset}`);
-  const actual = createHash("sha256").update(bytes).digest("hex");
-  if (actual !== expected) return failed(`checksum mismatch for ${asset}: not installed`);
+  const fetched = await verifiedAsset(deps, latest, `obrigado-${deps.target}`);
+  if (!fetched.ok) return failed(fetched.reason);
+  const { bytes } = fetched;
 
   const staged = `${deps.binary}.obrigado-update-${process.pid}`;
   try {
@@ -332,10 +267,13 @@ const PI_HOSTS: readonly PiHost[] = ["pi", "oh-my-pi"];
 /**
  * Rewrite the host files a release carries inside itself, once per version (A38).
  *
- * The Pi extension is the one: the CLI copies it into Pi's extensions directory at install,
+ * The Pi extension is one: the CLI copies it into Pi's extensions directory at install,
  * stamped with the version that wrote it, so a binary that updated itself would otherwise leave
  * the old copy running. Only for hosts this install put it in, and `installPiExtension` writes
  * only when the bytes differ.
+ *
+ * OpenCode's entry is the other: installs before 0.3.3 named the plugin in a form OpenCode
+ * cannot load, and `repairOpenCodePlugin` rewrites that form where it finds it and nothing else.
  */
 export async function refreshIntegrations(
   config: ClientConfig | null,
@@ -344,6 +282,7 @@ export async function refreshIntegrations(
     readonly target?: string | null;
     readonly path?: string;
     readonly refresh?: (host: PiHost) => Promise<unknown>;
+    readonly repairOpenCode?: () => Promise<unknown>;
   } = {},
 ): Promise<boolean> {
   const target = options.target === undefined ? releaseTarget() : options.target;
@@ -352,6 +291,9 @@ export async function refreshIntegrations(
   for (const host of PI_HOSTS) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- two hosts, and one may share the other's directory
     if (piIntegration(config, host)?.installed === true) await refresh(host);
+  }
+  if (opencodeIntegration(config)?.installed === true) {
+    await (options.repairOpenCode ?? repairOpenCodePlugin)();
   }
   await writeUpdateState(
     { ...(await readUpdateState(options.path)), refreshed_for: CLIENT_VERSION },

@@ -13,8 +13,14 @@ describe("agent targeting", () => {
     expect(requestedAgent(["--agent=claude-code"])).toBe("claude-code");
   });
 
-  test("rejects hosts without an implemented adapter", () => {
-    expect(() => requestedAgent(["--agent", "cursor"])).toThrow(/Unsupported agent/u);
+  test("rejects hosts this client does not install into", () => {
+    // JetBrains IDEs install from their own plugin manager, from obrigado.dev's repository (A40).
+    expect(() => requestedAgent(["--agent", "jetbrains"])).toThrow(/Unsupported agent/u);
+  });
+
+  test("installs the VS Code extension into either editor", () => {
+    expect(requestedAgent(["--agent", "vscode"])).toBe("vscode");
+    expect(requestedAgent(["--agent=cursor"])).toBe("cursor");
   });
 });
 

@@ -72,15 +72,28 @@ condition, which is what OpenCode resolves), a bundled `dist/index.js` for Node,
 `dist/index.d.ts` for TypeScript. Anything not on the list — tests, tsconfig, build state —
 does not go.
 
-## The JetBrains plugin
+## The editors (A40)
 
-Not npm, and not yet anywhere. `packages/jetbrains-plugin` builds a zip with
-`./gradlew buildPlugin`, which installs through **Settings → Plugins → ⚙ → Install Plugin from
-Disk…**. Before any release, run `./gradlew verifyPlugin`: the Plugin Verifier checks the build
-against the recommended IDE releases, which CI does not do because it downloads several of them.
+Not npm. Every `v<version>` release carries both editor builds beside the binaries, stamped with
+the release's version by `scripts/build-editors.ts`: `obrigado-vscode-<v>.vsix`,
+`obrigado-jetbrains-<v>.zip`, and `editors.json`, which names them and the JetBrains plugin's
+since/until builds. All three are in SHA256SUMS before it is signed. Both manifests stay `0.0.0`
+in the repository; a release is the only thing that gives either a version.
 
-Listing it on the JetBrains Marketplace needs a vendor profile (unclaimed), a first upload by
-hand, and JetBrains' review, which every new plugin goes through. The approval guidelines
-exclude "features for additional promotion". A reviewer may read a sponsored line that way, so
-the listing is not a given. The fallback costs nothing on this side: every JetBrains IDE accepts
-a custom plugin repository, and obrigado.dev can serve one.
+- **VS Code and Cursor** install the `.vsix` through `obrigado install --agent vscode|cursor`,
+  which checks it against the signed checksums and runs the editor's own `--install-extension`,
+  and the daily background update installs the next one. By hand: the release's `.vsix`, or
+  https://obrigado.dev/vscode/obrigado.vsix, then **Extensions: Install from VSIX…**.
+- **JetBrains IDEs** add https://obrigado.dev/jetbrains/updatePlugins.xml under **Settings →
+  Plugins → ⚙ → Manage Plugin Repositories**, then install and update from it. The feed is built
+  from the latest release's `editors.json`.
+
+Before a release that changes the JetBrains plugin, run `./gradlew verifyPlugin` in
+`packages/jetbrains-plugin`: the Plugin Verifier checks the build against the recommended IDE
+releases, which neither CI nor the release does because it downloads several of them.
+
+The stores are still worth listing on, and nothing here changes when they do. The VS Code
+Marketplace and Open VSX need the `obrigado` publisher claimed. The JetBrains Marketplace needs a
+vendor profile, a first upload by hand, and JetBrains' review, whose guidelines exclude "features
+for additional promotion"; a reviewer may read a sponsored line that way, so that listing is not
+a given.

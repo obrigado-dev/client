@@ -45,11 +45,15 @@ const OPEN_COMMAND = "obrigado.openSponsor";
 /**
  * This extension's own version, reported on every render (A30).
  *
- * The Marketplace updates the extension and the developer updates the binary, on their own
- * schedules, so the server needs both numbers to know which one to ask about. `package.json` must
- * agree; a test holds them together.
+ * The extension and the binary update on their own schedules, so the server needs both numbers
+ * to know which one to ask about. Read from the manifest the editor actually loaded rather than
+ * written down here: a release stamps its version into the package (A40), so a literal in this
+ * file could only ever disagree with what is installed.
  */
-const SURFACE_VERSION = "0.0.0";
+function surfaceVersion(context: vscode.ExtensionContext): string {
+  const version: unknown = (context.extension.packageJSON as { version?: unknown }).version;
+  return typeof version === "string" ? version : "0.0.0";
+}
 
 /**
  * Which host this is, as the wire records it.
@@ -85,7 +89,7 @@ function command(): readonly string[] {
  * extension was installed. An error surfaced into someone's status bar would be worse than
  * showing no ad at all.
  */
-function fetchSponsored(cwd: string): Promise<Sponsored | null> {
+function fetchSponsored(cwd: string, version: string): Promise<Sponsored | null> {
   const [bin, ...args] = command();
   if (bin === undefined) return Promise.resolve(null);
 
@@ -141,7 +145,7 @@ function fetchSponsored(cwd: string): Promise<Sponsored | null> {
       JSON.stringify({
         session_id: `${host()}-${vscode.env.sessionId}-${cwd}`,
         cwd,
-        surface_version: SURFACE_VERSION,
+        surface_version: version,
       }),
     );
   });
@@ -151,6 +155,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // Left-aligned and low priority: the right side is where language servers and problem
   // counts live, and a sponsored line should not compete with the editor's own state.
   const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, -100);
+  const version = surfaceVersion(context);
   let current: Sponsored | null = null;
   // Everything disposable, registered once. The interval is wrapped so it is torn down by
   // the same mechanism as the rest rather than needing its own deactivate() path.
@@ -166,7 +171,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const refresh = async (): Promise<void> => {
     const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
-    current = await fetchSponsored(cwd);
+    current = await fetchSponsored(cwd, version);
     if (current === null) {
       item.hide();
       return;

@@ -111,8 +111,9 @@ The host decides this, not us. There are three precedents:
 1. **The host calls a command.** Claude Code is configured to run `obrigado statusline`, and
    the client prints one line to stdout. This is the simplest case and the one to copy when
    the host supports a status-line command. See `packages/client/src/commands/statusline.ts`.
-2. **The host loads a plugin.** OpenCode registers `@obrigado/opencode-plugin/tui` in its own
-   `tui.json`, and the plugin renders into the host's `app_bottom` slot. Copy this when the
+2. **The host loads a plugin.** OpenCode registers `@obrigado/opencode-plugin` in its own
+   `tui.json`, loads the package's `./tui` export, and the plugin renders into the host's
+   `app_bottom` slot. Copy this when the
    host has a plugin API. See `packages/opencode-plugin/`.
 3. **The host has an extension gallery.** VS Code and Cursor install an extension that creates
    a status bar item. See `packages/vscode-extension/`. JetBrains IDEs install a plugin that

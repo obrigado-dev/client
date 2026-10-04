@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { BATCH_SIZE, BATCH_TTL_SECONDS, ROTATION_SECONDS } from "@obrigado/shared";
+import {
+  BATCH_SIZE,
+  BATCH_TTL_SECONDS,
+  EMPTY_BATCH_TTL_SECONDS,
+  NONCE_TTL_SECONDS,
+  ROTATION_SECONDS,
+} from "@obrigado/shared";
 import type { BatchItem, SessionResponse } from "@obrigado/shared";
 
 import {
@@ -150,6 +156,13 @@ describe("a batch must cover its own TTL", () => {
 
   test("ROTATE_AFTER_MS is derived from the shared constant, not restated", () => {
     expect(ROTATE_AFTER_MS).toBe(ROTATION_SECONDS * 1000);
+  });
+
+  test("a nonce outlives the batch it came in, and an empty answer is the shortest-lived", () => {
+    // A39. The last creative of a batch is shown just before the batch expires, so a nonce that
+    // died with its batch would leave that impression seconds in which to be confirmed.
+    expect(NONCE_TTL_SECONDS).toBeGreaterThan(BATCH_TTL_SECONDS);
+    expect(EMPTY_BATCH_TTL_SECONDS).toBeLessThan(BATCH_TTL_SECONDS);
   });
 });
 

@@ -5,6 +5,19 @@ by being a VS Code fork.
 
 **It renders only alongside a live agent session — see "When it shows" below.**
 
+## Installing
+
+Not on the Marketplace or Open VSX yet (see `docs/PUBLISHING.md`). Every release carries the
+`.vsix`, and the CLI installs it (A40):
+
+```sh
+obrigado install --agent vscode    # or --agent cursor; a bare install asks when it finds one
+```
+
+It checks the download against the release's signed checksums, installs it with the editor's own
+`--install-extension`, and the daily update installs the next one. By hand:
+https://obrigado.dev/vscode/obrigado.vsix, then **Extensions: Install from VSIX…**.
+
 ## Why a status bar item
 
 `vscode.window.createStatusBarItem` is a documented API giving persistent text, a tooltip,

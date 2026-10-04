@@ -22,12 +22,13 @@ import { afterRender } from "./self-update.ts";
 const USAGE = `obrigado — sponsored status lines that fund open source maintainers
 
   obrigado install             configure every detected supported agent
-  obrigado install --agent claude-code|claude-desktop|opencode|codex
+  obrigado install --agent <host>  just one: claude-code, claude-desktop, opencode, pi,
+                               oh-my-pi, vscode, cursor or codex
   obrigado install --chain     keep your existing statusline, add ours beneath
   obrigado install --above     put ours above your line instead (with --chain)
   obrigado install --replace   take over an existing statusline (reversible)
-  obrigado install --no-input  skip the targeting questions; everything stays off
-  obrigado uninstall [--agent claude-code|claude-desktop|opencode|codex]
+  obrigado install --no-input  skip the questions: targeting stays off, no editor is touched
+  obrigado uninstall [--agent <host>]
   obrigado status              what this install has contributed, this month and all time
   obrigado link                verify an email or GitHub to appear on obrigado.dev/obrigado
   obrigado link github         sign in with GitHub; your login lists at once

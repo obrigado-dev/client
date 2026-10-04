@@ -1,6 +1,6 @@
 {
   "name": "@obrigado/opencode-plugin",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "homepage": "https://obrigado.dev",
   "bugs": {
     "url": "https://github.com/obrigado-dev/client/issues"
@@ -13,14 +13,18 @@
   },
   "files": [
     "LICENSE",
-    "src/tui.tsx"
+    "dist/tui.js"
   ],
   "type": "module",
   "exports": {
-    "./tui": "./src/tui.tsx"
+    "./tui": "./dist/tui.js"
   },
   "publishConfig": {
     "access": "public"
+  },
+  "scripts": {
+    "build": "bun build.ts",
+    "prepack": "bun run build"
   },
   "dependencies": {
     "@obrigado/surface": "workspace:*"

@@ -13,7 +13,6 @@ import { surfaceVersionFromPayload } from "../src/api.ts";
 /** Hosts whose shim ships on its own schedule, and so carries its own manifest version. */
 const PUBLISHED_SHIMS = [
   { name: "opencode-plugin", source: "../../opencode-plugin/src/tui.tsx" },
-  { name: "vscode-extension", source: "../../vscode-extension/src/extension.ts" },
   { name: "claude-code-mod", source: "../../claude-code-mod/hooks/register.ts" },
 ] as const;
 
@@ -34,6 +33,24 @@ describe("a published shim reports its manifest's version", () => {
       expect(source).toContain("surface_version: SURFACE_VERSION");
     });
   }
+});
+
+describe("an editor whose release stamps the version reports what was installed", () => {
+  // The VS Code extension and the JetBrains plugin take the release's version when it is built
+  // (A40), so the source carries no literal to drift. Each reads its own loaded manifest instead.
+  test("vscode-extension", async () => {
+    const source = await text("../../vscode-extension/src/extension.ts");
+    expect(source).toContain("context.extension.packageJSON");
+    expect(source).toContain("surface_version: version");
+    expect(source).not.toContain("const SURFACE_VERSION");
+  });
+
+  test("jetbrains-plugin", async () => {
+    const source = await text(
+      "../../jetbrains-plugin/src/main/kotlin/dev/obrigado/jetbrains/ObrigadoWidget.kt",
+    );
+    expect(source).toContain("PluginManagerCore.getPlugin(PluginId.getId(PLUGIN_ID))?.version");
+  });
 });
 
 describe("reading the version back out of a payload", () => {

@@ -7,8 +7,10 @@
  */
 import { realpath } from "node:fs/promises";
 
+import { readConfig } from "../config.ts";
 import { releaseTarget, runUpdate, withUpdateLock } from "../self-update.ts";
 import { CLIENT_VERSION } from "../version.ts";
+import { refreshEditors } from "./install-editors.ts";
 
 /** What a downloaded binary says it is, for `runUpdate` to check before swapping it in. */
 async function reportedVersion(path: string): Promise<string> {
@@ -36,15 +38,19 @@ export async function update(argv: readonly string[]): Promise<number> {
     return background ? 0 : 1;
   }
 
-  const outcome = await withUpdateLock(async () =>
-    runUpdate({
+  const outcome = await withUpdateLock(async () => {
+    const updated = await runUpdate({
       fetch: (input, init) => fetch(input, init),
       target,
       current: CLIENT_VERSION,
       binary: await realpath(process.execPath),
       reportedVersion,
-    }),
-  );
+    });
+    // A sideloaded extension does not update itself (A40): the newest release's goes in after the
+    // binary, in each editor this install put it in, and is skipped where it is already current.
+    await refreshEditors(await readConfig(), background ? () => {} : (line) => console.log(line));
+    return updated;
+  });
   if (background) return 0;
 
   if (outcome === null) {

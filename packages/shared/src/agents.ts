@@ -40,7 +40,13 @@
  * it without either being wrong.
  */
 
-/** How Obrigado gets into a host. `null` when nothing installs it yet. */
+/**
+ * How Obrigado gets into a host. `null` when nothing installs it yet.
+ *
+ * `marketplace` is a host that installs from its own plugin manager rather than from this client.
+ * JetBrains IDEs do, from the plugin repository obrigado.dev serves until a store lists the
+ * plugin (A40); VS Code and Cursor became `cli` when the CLI took over installing their `.vsix`.
+ */
 export type InstallMethod = "cli" | "marketplace";
 
 export interface AgentFacts {
@@ -103,7 +109,8 @@ export const AGENTS = [
   {
     id: "vscode",
     label: "VS Code",
-    installs: "marketplace",
+    // The `.vsix` each release carries, through the editor's own tool (A40). No store lists it.
+    installs: "cli",
     kind: "editor",
     surface: "A status bar item created with `vscode.window.createStatusBarItem`.",
     inherits: null,
@@ -111,7 +118,7 @@ export const AGENTS = [
   {
     id: "cursor",
     label: "Cursor",
-    installs: "marketplace",
+    installs: "cli",
     kind: "editor",
     surface: null,
     inherits: "vscode",

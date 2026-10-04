@@ -8,6 +8,16 @@ line in the status bar.
 see that package's README under "When it shows". The gate is the renderer's, not this
 plugin's.
 
+## Installing
+
+Not on the JetBrains Marketplace (see `docs/PUBLISHING.md`). Every release carries the plugin, and
+obrigado.dev serves it as a plugin repository (A40):
+
+1. Install the CLI: `curl -fsSL https://obrigado.dev/install.sh | sh`. The widget runs it.
+2. In the IDE, **Settings → Plugins → ⚙ → Manage Plugin Repositories**, add
+   `https://obrigado.dev/jetbrains/updatePlugins.xml`.
+3. Install **Obrigado** from the Marketplace tab. Updates arrive the same way.
+
 ## Why a status bar widget
 
 `com.intellij.statusBarWidgetFactory` is a documented extension point

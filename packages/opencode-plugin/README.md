@@ -59,21 +59,30 @@ Restart OpenCode after installing. By hand, the entry is:
 ```jsonc
 {
   "$schema": "https://opencode.ai/tui.json",
-  "plugin": ["@obrigado/opencode-plugin/tui"]
+  "plugin": ["@obrigado/opencode-plugin"]
 }
 ```
+
+The package, not `@obrigado/opencode-plugin/tui`: OpenCode finds `./tui` in the package's
+`exports` itself, and npm's spec parser reads a spec with a subpath as a local directory, so
+OpenCode installs nothing and says nothing. Installs before 0.3.3 wrote that form; 0.3.3 rewrites
+it on install and after updating.
 
 From a source checkout, point the plugin at your client with `OBRIGADO_STATUSLINE_COMMAND`.
 
 ## Verified against a running OpenCode
 
-`opencode` 1.18.10, Ghostty (via cmux), 2026-08-08:
+`opencode` 1.18.10, Ghostty (via cmux), 2026-08-08, with the plugin loaded from a local path
+rather than from npm:
 
 - **`app_bottom` renders**, on the home screen and mid-session, persisting across both.
 - **The link works.** Cmd+click on the copy opens the signed `/c/:token` URL. This was the
   open question the whole integration turned on — it is what Codex could not do — and the
   answer is yes.
-- OpenCode compiles the plugin from TypeScript source; no build step was needed.
+- OpenCode compiled the plugin from TypeScript source, so no build step was needed. That holds
+  only from a local path: OpenTUI's Solid transform skips everything under `node_modules`, where
+  an npm install puts the package, so from npm the source never loaded. Since 0.2.0 the package
+  ships `dist/tui.js`, compiled by `build.ts` with the host's modules left external.
 
 ## Known defects
 

@@ -20,10 +20,10 @@ this passes on every laptop and fails on every runner.
 | What | Where it goes | How | State |
 |---|---|---|---|
 | `@obrigado/surface` | npm | tag `surface-v<version>` → `publish.yml` publishes | 0.3.0 published |
-| `@obrigado/opencode-plugin` | npm | same (0.1.0 was published by hand; trusted publishing is set up) | 0.1.0 published; pins surface's exact version |
-| `obrigado` CLI binaries | GitHub Releases, fetched by `install.sh` | tag `v<version>` → `release.yml` | 0.2.0 released |
-| VS Code / Cursor extension | Marketplace | `bun run package:vscode` → `.vsix` | publisher `obrigado` unclaimed |
-| JetBrains plugin | JetBrains Marketplace | `./gradlew buildPlugin` in `packages/jetbrains-plugin` → `.zip` | vendor unclaimed; see `docs/PUBLISHING.md` |
+| `@obrigado/opencode-plugin` | npm | same (0.1.0 was published by hand; trusted publishing is set up) | 0.2.0, a built `dist/tui.js` (0.1.0 shipped source, which OpenCode cannot load from npm); pins surface's exact version |
+| `obrigado` CLI binaries | GitHub Releases, fetched by `install.sh` | tag `v<version>` → `release.yml` | 0.3.3 released |
+| VS Code / Cursor extension | each GitHub release; installed by `obrigado install --agent vscode\|cursor` (A40) | built by `release.yml` with the binaries, stamped with the release version | Marketplace publisher `obrigado` unclaimed; see `docs/PUBLISHING.md` |
+| JetBrains plugin | each GitHub release; served as a plugin repository at obrigado.dev/jetbrains/updatePlugins.xml (A40) | the same | Marketplace vendor unclaimed; see `docs/PUBLISHING.md` |
 | Pi extension | copied into `~/.pi/agent/extensions` by the CLI | ships inside the CLI | n/a |
 | Claude Code mod (the desktop app) | the `obrigado` marketplace at this repository's root | tag `claude-code-mod-v<version>`, pushed atomically with the commit whose marketplace names it; see `packages/claude-code-mod/README.md` | 0.1.0 not yet tagged |
 
@@ -74,8 +74,9 @@ list goes.
 ### Binaries
 
 A `v<version>` tag runs `release.yml`: the gate, `bun run build:binaries` for every platform,
+`bun run build:editors` for the VS Code `.vsix` and the JetBrains zip (A40),
 `SHA256SUMS` signed into `SHA256SUMS.sig` with the secret `RELEASE_SIGNING_KEY`, a GitHub release
-with all three, and a download-and-verify of what was published, signature included. The secret
+with all of it, and a download-and-verify of what was published, signature included. The secret
 is required: installs that update themselves refuse an unsigned release (A38), so the workflow
 does too. The public key is `RELEASE_KEYS` in `packages/client/src/release-signature.ts`; its
 header says how one is replaced, and the platform's RUNBOOK what to do if it is lost.

@@ -7,7 +7,7 @@
 import { readdir, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import { BATCH_TTL_SECONDS } from "@obrigado/shared";
+import { NONCE_TTL_SECONDS } from "@obrigado/shared";
 import type { BatchItem } from "@obrigado/shared";
 import type { CachedBatch } from "@obrigado/shared/rotation";
 
@@ -167,7 +167,12 @@ async function stateFiles(root: string): Promise<StateFile[]> {
   return byAgent.flat();
 }
 
-/** Remove old state only when no still-valid pending impression depends on it. */
+/**
+ * Remove old state only when no still-valid pending impression depends on it.
+ *
+ * Valid for `NONCE_TTL_SECONDS`, not for a batch's life: a pending impression can still be
+ * confirmed after the batch it came from has been replaced (A39).
+ */
 export async function pruneSessionState(
   now = Date.now(),
   location: StateLocation = {},
@@ -179,8 +184,8 @@ export async function pruneSessionState(
         const state = (await Bun.file(path).json()) as AgentSessionState;
         const pendingAt = state.pending?.shown_at;
         const pendingExpired =
-          pendingAt === undefined || now - pendingAt > BATCH_TTL_SECONDS * 1000;
-        shouldRemove = pendingExpired && now - state.updated_at > BATCH_TTL_SECONDS * 1000;
+          pendingAt === undefined || now - pendingAt > NONCE_TTL_SECONDS * 1000;
+        shouldRemove = pendingExpired && now - state.updated_at > NONCE_TTL_SECONDS * 1000;
       } catch {
         shouldRemove = true;
       }

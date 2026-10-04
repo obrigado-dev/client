@@ -20,6 +20,7 @@
     "check:types": "tsc --build --force",
     "check:test": "bun test",
     "build:binaries": "bun run scripts/build-binaries.ts",
+    "build:editors": "bun run scripts/build-editors.ts",
     "build:vscode": "bun run --filter obrigado-vscode build",
     "package:vscode": "bun run --filter obrigado-vscode package"
   },

@@ -26,9 +26,9 @@ export interface CachedBatch {
    * What the agent had been reading when this batch was chosen, as a stable digest.
    *
    * Activity targeting selects on recently-read packages, and a batch is rotated locally for
-   * `BATCH_TTL_SECONDS` — so without this, an agent that opened the Postgres docs one minute
-   * after fetching kept seeing the previous fifteen minutes' ads. The signal was live and the
-   * inventory was not.
+   * its whole TTL — so without this, an agent that opened the Postgres docs one minute after
+   * fetching kept seeing the ads chosen before it until the batch ran out. The signal was live
+   * and the inventory was not.
    *
    * Absent on a batch fetched with activity sharing off, where retrieval is not sent and
    * therefore cannot have influenced anything.

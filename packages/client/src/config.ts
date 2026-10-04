@@ -91,6 +91,12 @@ export interface ClaudeDesktopIntegrationConfig {
   readonly renderer_command?: string;
 }
 
+/** The VS Code extension in one editor (A40). */
+export interface EditorIntegrationConfig {
+  readonly installed: boolean;
+  readonly installed_at?: string;
+}
+
 export interface ClientIntegrations {
   "claude-code"?: ClaudeIntegrationConfig;
   codex?: CodexIntegrationConfig;
@@ -99,6 +105,9 @@ export interface ClientIntegrations {
   pi?: PiIntegrationConfig;
   "oh-my-pi"?: PiIntegrationConfig;
   "claude-desktop"?: ClaudeDesktopIntegrationConfig;
+  /* One extension, two editors, each with its own command-line tool — two install records. */
+  vscode?: EditorIntegrationConfig;
+  cursor?: EditorIntegrationConfig;
 }
 
 export interface ClientConfig {
@@ -254,6 +263,13 @@ export function piIntegration(
   host: "pi" | "oh-my-pi",
 ): PiIntegrationConfig | null {
   return config?.integrations?.[host] ?? null;
+}
+
+export function editorIntegration(
+  config: ClientConfig | null,
+  editor: "vscode" | "cursor",
+): EditorIntegrationConfig | null {
+  return config?.integrations?.[editor] ?? null;
 }
 
 export async function writeConfig(config: ClientConfig): Promise<void> {

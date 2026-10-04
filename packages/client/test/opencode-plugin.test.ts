@@ -9,8 +9,12 @@ import {
   installOpenCodePlugin,
   OPENCODE_PLUGIN_SPEC,
   readTuiConfig,
+  repairOpenCodePlugin,
   uninstallOpenCodePlugin,
 } from "../src/opencode-plugin.ts";
+
+/** What every install wrote before 0.3.3, which OpenCode cannot load. */
+const LEGACY = "@obrigado/opencode-plugin/tui";
 
 function scratch(): Promise<string> {
   return mkdtemp(join(tmpdir(), "obrigado-opencode-"));
@@ -131,5 +135,68 @@ describe("uninstalling", () => {
     expect(await uninstallOpenCodePlugin(join(dir, "tui.json"), join(dir, "backups"))).toBe(
       "not-installed",
     );
+  });
+});
+
+describe("the entry earlier installs wrote, which OpenCode cannot load", () => {
+  test("names the package, whose exports OpenCode reads `./tui` from", () => {
+    // A subpath is read by npm's spec parser as a local directory, so the install fails silently.
+    expect(OPENCODE_PLUGIN_SPEC).toBe("@obrigado/opencode-plugin");
+  });
+
+  test("install replaces it where it stands, and then has nothing left to do", async () => {
+    const { dir, path } = await withConfig({ plugin: ["first", LEGACY, "last"] });
+    const backups = join(dir, "backups");
+
+    expect((await installOpenCodePlugin(path, backups)).status).toBe("installed");
+    expect((await read(path))["plugin"]).toEqual(["first", OPENCODE_PLUGIN_SPEC, "last"]);
+    expect((await readdir(backups)).some((name) => name.startsWith("opencode-tui-"))).toBe(true);
+    expect((await installOpenCodePlugin(path, backups)).status).toBe("already-installed");
+  });
+
+  test("install drops it beside a current entry rather than writing ours twice", async () => {
+    const pinned = `${OPENCODE_PLUGIN_SPEC}@0.1.0`;
+    const { dir, path } = await withConfig({ plugin: [LEGACY, pinned] });
+
+    await installOpenCodePlugin(path, join(dir, "backups"));
+    expect((await read(path))["plugin"]).toEqual([pinned]);
+  });
+
+  test("the repair rewrites it in place, options and all, once", async () => {
+    const { dir, path } = await withConfig({ plugin: [[LEGACY, { verbose: true }], "theirs"] });
+    const backups = join(dir, "backups");
+
+    expect(await repairOpenCodePlugin(path, backups)).toBe("repaired");
+    expect((await read(path))["plugin"]).toEqual([
+      [OPENCODE_PLUGIN_SPEC, { verbose: true }],
+      "theirs",
+    ]);
+    expect(await repairOpenCodePlugin(path, backups)).toBe("unchanged");
+  });
+
+  test("the repair never adds ours to a list that does not have it", async () => {
+    const document = { plugin: ["theirs"] };
+    const { dir, path } = await withConfig(document);
+
+    expect(await repairOpenCodePlugin(path, join(dir, "backups"))).toBe("unchanged");
+    expect(await read(path)).toEqual(document);
+    expect(await repairOpenCodePlugin(join(dir, "absent.json"), join(dir, "backups"))).toBe(
+      "unchanged",
+    );
+  });
+
+  test("the repair leaves a current or pinned entry alone", async () => {
+    const document = { plugin: [OPENCODE_PLUGIN_SPEC, `${OPENCODE_PLUGIN_SPEC}@0.1.0`] };
+    const { dir, path } = await withConfig(document);
+
+    expect(await repairOpenCodePlugin(path, join(dir, "backups"))).toBe("unchanged");
+    expect(await read(path)).toEqual(document);
+  });
+
+  test("uninstall takes it out like any other form of ours", async () => {
+    const { dir, path } = await withConfig({ plugin: ["theirs", LEGACY] });
+
+    expect(await uninstallOpenCodePlugin(path, join(dir, "backups"))).toBe("removed");
+    expect((await read(path))["plugin"]).toEqual(["theirs"]);
   });
 });

@@ -19,7 +19,9 @@ permissions:
 jobs:
   binaries:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The editors' builds share the job (A40): the JetBrains one downloads its IDE platform on a
+    # cold Gradle cache, which is most of the time added here.
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v5
@@ -61,6 +63,17 @@ jobs:
       # matrix and no chance of five jobs disagreeing about which commit they built.
       - run: bun run build:binaries
 
+      # The editor surfaces ship in the same release, stamped with its version, and their sums
+      # join the binaries' before the signature is made (A40). The toolchain is the CI job's.
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - run: bun run build:editors
+
       # Signed before anything is published (§3, A38). The private key exists only as this
       # secret, and without it this step fails rather than publish a release every self-updating
       # install would refuse. It checks its own signature against the keys compiled into the
@@ -81,6 +94,7 @@ jobs:
             --generate-notes \
             --verify-tag \
             dist/binaries/obrigado-* \
+            dist/binaries/editors.json \
             dist/binaries/SHA256SUMS \
             dist/binaries/SHA256SUMS.sig
 
@@ -92,6 +106,6 @@ jobs:
           TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           mkdir -p verify && cd verify
-          gh release download "$TAG" --repo "${{ github.repository }}" --pattern 'obrigado-*' --pattern 'SHA256SUMS' --pattern 'SHA256SUMS.sig'
+          gh release download "$TAG" --repo "${{ github.repository }}" --pattern 'obrigado-*' --pattern 'editors.json' --pattern 'SHA256SUMS' --pattern 'SHA256SUMS.sig'
           sha256sum -c SHA256SUMS
           bun ../scripts/sign-release.ts --verify .
