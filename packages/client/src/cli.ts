@@ -15,16 +15,19 @@ import { privacy } from "./commands/privacy.ts";
 import { printRetrievalHook, read, summary } from "./commands/projects.ts";
 import { doctor, status } from "./commands/status.ts";
 import { statusline } from "./commands/statusline.ts";
+import { update, version } from "./commands/update.ts";
+import { readConfig } from "./config.ts";
+import { afterRender } from "./self-update.ts";
 
 const USAGE = `obrigado — sponsored status lines that fund open source maintainers
 
   obrigado install             configure every detected supported agent
-  obrigado install --agent claude-code|opencode|codex
+  obrigado install --agent claude-code|claude-desktop|opencode|codex
   obrigado install --chain     keep your existing statusline, add ours beneath
   obrigado install --above     put ours above your line instead (with --chain)
   obrigado install --replace   take over an existing statusline (reversible)
   obrigado install --no-input  skip the targeting questions; everything stays off
-  obrigado uninstall [--agent claude-code|opencode|codex]
+  obrigado uninstall [--agent claude-code|claude-desktop|opencode|codex]
   obrigado status              what this install has contributed, this month and all time
   obrigado link                verify an email or GitHub to appear on obrigado.dev/obrigado
   obrigado link github         sign in with GitHub; your login lists at once
@@ -35,6 +38,8 @@ const USAGE = `obrigado — sponsored status lines that fund open source maintai
   obrigado privacy             what advertisers may target you on (all off by default)
   obrigado privacy <name> on|off   packages, region, network or activity
   obrigado refresh             discard the cached batch and fetch a new one
+  obrigado update              update to the latest release now (it also checks once a day)
+  obrigado version             print this client's version
   obrigado statusline          render one line (called by the host)
   obrigado statusline --agent <host>  the same line, attributed to that host
   obrigado statusline --json   the line's parts, for a host that draws its own UI
@@ -72,8 +77,17 @@ const commands: Record<string, (argv: readonly string[]) => Promise<number>> = {
     return read(argv[0]);
   },
   privacy: (argv) => privacy(argv),
-  statusline: (argv) => statusline(argv),
+  statusline: async (argv) => {
+    const code = await statusline(argv);
+    // A38, once the render has drawn whatever it drew: here rather than inside it, so the render
+    // stays the delivery path and an install the server had nothing for still stays current.
+    await afterRender(await readConfig());
+    return code;
+  },
   doctor: () => doctor(),
+  update: (argv) => update(argv),
+  version: () => version(),
+  "--version": () => version(),
 };
 
 const name = process.argv[2] ?? "help";
@@ -92,6 +106,7 @@ try {
   // runs after every file the agent reads, where a nonzero exit puts a "hook error" notice
   // and the first line of stderr into the session's transcript.
   if (name === "statusline" || name === "summary" || name === "read") process.exit(0);
+  if (name === "update" && process.argv.includes("--background")) process.exit(0);
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
 }

@@ -6,7 +6,8 @@
  * same file: the rules it holds — the label, the URL, the styles a host may draw — must not
  * differ between this host and the others.
  *
- * Parked or not, these run in the gate, so the mod is still ready to go when it is picked up.
+ * Claude Code installs the mod from the marketplace at the client repository's root, pinned to a
+ * tag, so the version has three places to agree: the two manifests and that pin.
  */
 import { describe, expect, test } from "bun:test";
 
@@ -16,10 +17,8 @@ function text(relative: string): Promise<string> {
 
 describe("the vendored surface", () => {
   test("is byte for byte the package's source", async () => {
-    // To refresh it: cp packages/surface/src/index.ts prototypes/claude-code-mod/hooks/surface.ts
-    expect(await text("../hooks/surface.ts")).toBe(
-      await text("../../../packages/surface/src/index.ts"),
-    );
+    // To refresh it: cp packages/surface/src/index.ts packages/claude-code-mod/hooks/surface.ts
+    expect(await text("../hooks/surface.ts")).toBe(await text("../../surface/src/index.ts"));
   });
 });
 
@@ -33,14 +32,21 @@ describe("the version", () => {
     expect(plugin.version).toBe(workspace.version);
   });
 
-  test("is the one the mod reports on every render (A30)", async () => {
-    // What `surface-versions.test.ts` holds every published shim to, held here while this one
-    // is not published.
-    const source = await text("../hooks/register.ts");
+  test("is the tag the marketplace installs", async () => {
+    // The marketplace is read from the default branch, so a plugin installed from a path in it
+    // would be whatever was last pushed there, under whatever version string it carried. Pinned
+    // to the release's tag, what users get is what was released and nothing pushed since.
     const plugin = JSON.parse(await text("../.claude-plugin/plugin.json")) as { version: string };
+    const marketplace = JSON.parse(await text("../../../.claude-plugin/marketplace.json")) as {
+      plugins: { name: string; source: unknown }[];
+    };
+    const entry = marketplace.plugins.find((candidate) => candidate.name === "obrigado");
 
-    expect(source).toContain(`const SURFACE_VERSION = ${JSON.stringify(plugin.version)};`);
-    // Declared and never sent is the quiet version of the same bug.
-    expect(source).toContain("surface_version: SURFACE_VERSION");
+    expect(entry?.source).toEqual({
+      source: "git-subdir",
+      url: "https://github.com/obrigado-dev/client.git",
+      path: "packages/claude-code-mod",
+      ref: `claude-code-mod-v${plugin.version}`,
+    });
   });
 });

@@ -7,6 +7,7 @@
 import { existsSync } from "node:fs";
 import { dirname } from "node:path";
 
+import { claudeDesktopDetected } from "../claude-desktop.ts";
 import { codexDetected } from "../codex-statusline.ts";
 import { CLAUDE_SETTINGS_PATH } from "../config.ts";
 import { opencodeDetected } from "../opencode-plugin.ts";
@@ -26,6 +27,7 @@ const DETECTORS: Record<InstallableAgentId, () => boolean> = {
   opencode: opencodeDetected,
   pi: piDetected,
   "oh-my-pi": ohMyPiDetected,
+  "claude-desktop": claudeDesktopDetected,
 };
 
 export function detectInstalledAgents(): InstallableAgentId[] {

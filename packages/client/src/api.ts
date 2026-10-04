@@ -33,6 +33,7 @@ import type {
   StatsResponse,
   TimingSignals,
 } from "@obrigado/shared";
+import { DESKTOP_APP_ID } from "@obrigado/shared/agents";
 
 import { CLIENT_VERSION } from "./version.ts";
 
@@ -318,12 +319,33 @@ export interface SignalContext {
   readonly retrieved?: readonly string[] | undefined;
 }
 
+/** What Claude Code's `CLAUDE_CODE_ENTRYPOINT` says when the desktop app started it. */
+const DESKTOP_APP_ENTRYPOINT = "claude-desktop";
+
+/**
+ * Whether there is a terminal to ask about (A37).
+ *
+ * Not in the Claude desktop app, which runs Claude Code with no terminal at all: no `TERM`, and
+ * the mod's `$.process.run` captures stderr. Probed there, `tty` reads `false` on every render,
+ * and a session that says so is never served. Left out instead, which the contract reads as
+ * undetermined rather than as a machine. Only where Claude Code itself says the app started it:
+ * `--agent claude-desktop` run from anywhere else is probed like any other host.
+ */
+function hasTerminal(agent: string, env: NodeJS.ProcessEnv): boolean {
+  return !(agent === DESKTOP_APP_ID && env["CLAUDE_CODE_ENTRYPOINT"] === DESKTOP_APP_ENTRYPOINT);
+}
+
 export function collectSignals(context: SignalContext): SessionSignals {
   const env = process.env;
 
   const signals: SessionSignals = {
     ci: isCiEnvironment(env),
-    tty: process.stderr.isTTY === true || (env["TERM"] !== undefined && env["TERM"] !== "dumb"),
+    ...(hasTerminal(context.agent, env)
+      ? {
+          tty:
+            process.stderr.isTTY === true || (env["TERM"] !== undefined && env["TERM"] !== "dumb"),
+        }
+      : {}),
     display: env["DISPLAY"] !== undefined || env["WAYLAND_DISPLAY"] !== undefined,
     // Passed in rather than hardcoded. This was the literal string "claude-code" until a
     // second host was on the horizon, at which point the field would have quietly lied about

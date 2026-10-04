@@ -169,17 +169,31 @@ export const AGENTS = [
   {
     // Claude Code again, through a mod rather than the status line: the band above the prompt in
     // the desktop app's Code tab, while the terminal keeps the status line. A second surface of
-    // one host, so a second id, because the impression records which one rendered. PARKED in
-    // `prototypes/claude-code-mod`, so nothing installs it and it claims no surface yet; its
-    // README says why, and what picking it up takes.
-    id: "claude-code-mod",
-    label: "Claude Code (mod)",
-    installs: null,
+    // one host, so a second id, because the impression records which one rendered. Named for
+    // what rendered, in Claude Code's own word for the app (its `CLAUDE_CODE_ENTRYPOINT`).
+    //
+    // `terminal` in the sense `kind` means it: an agent host whose line exists only while Claude
+    // Code runs, not an editor that stays open without one. It has no terminal at all, which the
+    // renderer and the classifier both know by `DESKTOP_APP_ID` (A37).
+    id: "claude-desktop",
+    label: "Claude Desktop App",
+    installs: "cli",
     kind: "terminal",
-    surface: null,
+    surface:
+      "The band above the prompt in the Code tab, drawn by a mod at the documented `AbovePrompt` site.",
     inherits: null,
   },
 ] as const satisfies readonly AgentFacts[];
+
+/**
+ * The Claude desktop app, which runs Claude Code with no terminal in it at all.
+ *
+ * Named apart because a rule in each tier keys on it (A37). The renderer does not probe for a
+ * terminal there, since an answer of "none" would mark every render a machine's, and the
+ * classifier lets the app stand where the terminal stands in the evidence that a person was
+ * present.
+ */
+export const DESKTOP_APP_ID = "claude-desktop" satisfies AgentId;
 
 /**
  * Every id, in declaration order.

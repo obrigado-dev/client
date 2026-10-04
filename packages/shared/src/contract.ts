@@ -346,9 +346,10 @@ export const NOTICE_MAX_LENGTH = 120;
  * reports one and the server never bills one. Operators write them (`client_notices`); nothing
  * an advertiser can reach produces one.
  *
- * It exists because nothing else can reach an install that is already out there. The client
- * never updates itself (§3), so a binary installed today renders what it renders until somebody
- * replaces it, and this is the only channel that can ask them to.
+ * It exists because nothing else can reach an install that is already out there and does not
+ * update itself: a checkout, one whose developer turned updates off, or anything from before
+ * A38. Such a binary renders what it renders until somebody replaces it, and this is the only
+ * channel that can ask them to.
  */
 export const ClientNoticeSchema = z.object({
   /** Stable per notice. Pacing is per install, not per notice, but the id is what a log shows. */

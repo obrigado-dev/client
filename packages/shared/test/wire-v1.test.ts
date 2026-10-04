@@ -4,8 +4,8 @@
  * These fixtures are what a client in the wild sends. They are checked in, not generated, and
  * they exist to fail loudly when somebody tightens a schema — because once the backend
  * deploys separately from the extensions, tightening is the one change that cannot be taken
- * back. §3 forbids silent auto-update and releases are signed, so an old client keeps sending
- * the old shape for as long as the developer leaves it installed.
+ * back. Not every install updates itself (A38: a checkout, one that turned it off, anything from
+ * before it), so an old client keeps sending the old shape for as long as it stays installed.
  *
  * The cost of getting that wrong is not theoretical. `session_s` had a 24-hour bound; a real
  * session passed it; the beacon rejected the whole batch because it validates the request

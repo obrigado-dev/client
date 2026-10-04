@@ -36,6 +36,20 @@ function isCompiledBinary(path = import.meta.path): boolean {
  * command states which agent it attributes to. A default that some callers rely on and others
  * override is a default that eventually mis-attributes revenue.
  */
+/**
+ * The renderer as argv, for a host that does not start with the installing shell's PATH.
+ *
+ * The same three cases, with `obrigado` named by its full path. The Claude desktop app starts
+ * Claude Code with the PATH the app itself was started with, and on a Mac opened from the Dock
+ * that did not include `~/.local/bin`, where install.sh puts the binary (A37).
+ */
+export function absoluteRendererArgv(): string[] {
+  const onPath = Bun.which("obrigado");
+  if (onPath !== null) return [onPath, "statusline"];
+  if (isCompiledBinary()) return [process.execPath, "statusline"];
+  return [process.execPath, join(dirname(import.meta.path), "cli.ts"), "statusline"];
+}
+
 export function rendererCommand(agent?: string): string {
   const suffix = agent === undefined ? "" : ` --agent ${agent}`;
   if (Bun.which("obrigado") !== null) return `obrigado statusline${suffix}`;

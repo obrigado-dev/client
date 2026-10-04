@@ -17,6 +17,8 @@ import type { ClientNotice } from "@obrigado/shared";
 import { ROTATE_AFTER_MS } from "@obrigado/shared/rotation";
 
 import { ensureDir, NOTICE_PATH } from "./config.ts";
+import { readUpdateState, updateNotice } from "./self-update.ts";
+import type { UpdateState } from "./self-update.ts";
 import { hyperlink, stripControlCharacters, supportsHyperlinks } from "./link.ts";
 import type { LinkEnvironment } from "./link.ts";
 import { underline } from "./style.ts";
@@ -75,10 +77,14 @@ async function writeLedger(ledger: NoticeLedger, path: string): Promise<boolean>
  * pacing at all, and an unpaced notice would take the slot on every render.
  */
 export async function noticeForRender(
-  notice: ClientNotice | undefined,
+  served: ClientNotice | undefined,
   now = Date.now(),
   path = NOTICE_PATH,
+  updates?: UpdateState,
 ): Promise<ClientNotice | null> {
+  // This install's own news comes before the server's: an update it made itself is what A38 says
+  // must be announced, and the server cannot know it happened.
+  const notice = updateNotice(updates ?? (await readUpdateState()), now) ?? served;
   if (notice === undefined) return null;
 
   const ledger = await readLedger(path);

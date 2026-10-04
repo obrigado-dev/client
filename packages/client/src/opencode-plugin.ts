@@ -35,7 +35,13 @@ const OPENCODE_CONFIG_HOME =
 /** Where the TUI plugin list lives. */
 export const OPENCODE_TUI_CONFIG_PATH = join(OPENCODE_CONFIG_HOME, "tui.json");
 
-/** The published entry point OpenCode resolves and loads. */
+/**
+ * The published entry point OpenCode resolves and loads.
+ *
+ * Unpinned on purpose (A38): OpenCode treats a spec with no version as `latest` and refreshes it
+ * when its cached copy is stale, while one with `@1.2.3` is held at that version for good. So
+ * leaving the version off is how this plugin updates itself.
+ */
 export const OPENCODE_PLUGIN_SPEC = "@obrigado/opencode-plugin/tui";
 
 const SCHEMA_URL = "https://opencode.ai/tui.json";

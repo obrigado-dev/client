@@ -29,6 +29,10 @@ const SETTINGS = {
     values: ["true", "false"],
     describe: "end-of-session summary line (§14 Phase 1; not yet rendered)",
   },
+  auto_update: {
+    values: ["true", "false"],
+    describe: "keep this binary on the latest release; it says so when it does (A38)",
+  },
 } as const;
 
 type SettingName = keyof typeof SETTINGS;
@@ -43,6 +47,7 @@ function show(current: ClientConfig): void {
   console.log(`  label            ${current.label ?? "on"}`);
   console.log(`  api_origin       ${apiOrigin(current)}`);
   console.log(`  session_summary  ${current.session_summary ?? true}`);
+  console.log(`  auto_update      ${current.auto_update ?? true}`);
 
   console.log("\n  Effective right now, in this terminal:");
   console.log(
@@ -103,6 +108,9 @@ export async function config(): Promise<number> {
       break;
     case "session_summary":
       await writeConfig({ ...next, session_summary: value === "true" });
+      break;
+    case "auto_update":
+      await writeConfig({ ...next, auto_update: value === "true" });
       break;
   }
 

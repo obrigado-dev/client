@@ -36,7 +36,7 @@ describe("the table", () => {
       "pi",
       "oh-my-pi",
       "jetbrains",
-      "claude-code-mod",
+      "claude-desktop",
     ]);
   });
 
@@ -75,6 +75,7 @@ describe("the derived views", () => {
       "opencode",
       "pi",
       "oh-my-pi",
+      "claude-desktop",
     ]);
   });
 
@@ -85,6 +86,7 @@ describe("the derived views", () => {
       "vscode",
       "pi",
       "jetbrains",
+      "claude-desktop",
     ]);
   });
 

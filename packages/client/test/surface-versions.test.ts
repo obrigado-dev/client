@@ -14,6 +14,7 @@ import { surfaceVersionFromPayload } from "../src/api.ts";
 const PUBLISHED_SHIMS = [
   { name: "opencode-plugin", source: "../../opencode-plugin/src/tui.tsx" },
   { name: "vscode-extension", source: "../../vscode-extension/src/extension.ts" },
+  { name: "claude-code-mod", source: "../../claude-code-mod/hooks/register.ts" },
 ] as const;
 
 function text(relative: string): Promise<string> {

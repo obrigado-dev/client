@@ -38,6 +38,22 @@ const PAYLOAD = JSON.stringify({
   exceeds_200k_tokens: false,
 });
 
+/** Runs `body` with the environment the app gives Claude Code: no TERM, its entrypoint. */
+function asTheApp(entrypoint: string | undefined, body: () => void): void {
+  const saved = { TERM: process.env["TERM"], ENTRY: process.env["CLAUDE_CODE_ENTRYPOINT"] };
+  delete process.env["TERM"];
+  if (entrypoint === undefined) delete process.env["CLAUDE_CODE_ENTRYPOINT"];
+  else process.env["CLAUDE_CODE_ENTRYPOINT"] = entrypoint;
+  try {
+    body();
+  } finally {
+    if (saved.TERM === undefined) delete process.env["TERM"];
+    else process.env["TERM"] = saved.TERM;
+    if (saved.ENTRY === undefined) delete process.env["CLAUDE_CODE_ENTRYPOINT"];
+    else process.env["CLAUDE_CODE_ENTRYPOINT"] = saved.ENTRY;
+  }
+}
+
 describe("timing extraction", () => {
   test("reads the two durations and rounds to whole seconds", () => {
     expect(timingFromPayload(PAYLOAD)).toEqual({ session_s: 45, api_s: 2 });
@@ -144,6 +160,33 @@ describe("environment signals", () => {
       if (previous === undefined) delete process.env["TERM"];
       else process.env["TERM"] = previous;
     }
+  });
+
+  describe("in the Claude desktop app (A37)", () => {
+    test("there is no terminal to ask about, so tty is left out rather than false", () => {
+      // Probed, it would read false on every render, and a session that says so is never served.
+      asTheApp("claude-desktop", () => {
+        const signals = collectSignals({ agent: "claude-desktop" });
+        expect("tty" in signals).toBe(false);
+      });
+    });
+
+    test("only where Claude Code says the app started it", () => {
+      // The flag alone, from a shell or a CI job, is probed like any other host.
+      asTheApp(undefined, () => {
+        expect(collectSignals({ agent: "claude-desktop" }).tty).toBe(process.stderr.isTTY === true);
+      });
+      asTheApp("cli", () => {
+        expect(collectSignals({ agent: "claude-desktop" }).tty).toBe(process.stderr.isTTY === true);
+      });
+    });
+
+    test("and only for the app's own agent", () => {
+      // The status line under the app's Claude Code is still asked; it is not this surface.
+      asTheApp("claude-desktop", () => {
+        expect(collectSignals({ agent: "claude-code" }).tty).toBe(process.stderr.isTTY === true);
+      });
+    });
   });
 
   test("CI is detected from vendor variables, not just CI=1", () => {

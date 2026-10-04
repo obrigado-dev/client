@@ -24,9 +24,6 @@ self-contained change this repository takes. [Adding a surface](./docs/ADDING-A-
 covers what counts as a surface, the one row that declares a host, and the per-host behaviour
 the compiler will ask you for.
 
-`prototypes/` holds surfaces that work but are not shipped, each with a README saying why and
-what picking it up takes. The gate still lints, typechecks and tests them.
-
 ## Development
 
 Requires Bun 1.3.10 or newer.

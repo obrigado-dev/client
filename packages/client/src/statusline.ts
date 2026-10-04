@@ -16,8 +16,9 @@
  *      so uninstall restores byte-for-byte what was there.
  *   5. The write is atomic (temp file + rename), so an interrupted install
  *      cannot leave Claude Code with a truncated settings file.
- *   6. No auto-update, no background mutation. Install and uninstall are the
- *      only two operations that write, and both are explicit user commands.
+ *   6. No background mutation of the file. Install and uninstall are the only
+ *      two operations that write it, and both are explicit user commands. The
+ *      binary's own updates (A38) replace the binary and never touch this file.
  */
 import { realpath, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -99,7 +100,7 @@ export async function readSettings(path = CLAUDE_SETTINGS_PATH): Promise<Setting
 }
 
 /** Copy the current settings file aside before touching it. */
-async function backupSettings(path = CLAUDE_SETTINGS_PATH): Promise<string | null> {
+export async function backupSettings(path = CLAUDE_SETTINGS_PATH): Promise<string | null> {
   const file = Bun.file(path);
   if (!(await file.exists())) return null;
 
@@ -117,7 +118,10 @@ async function backupSettings(path = CLAUDE_SETTINGS_PATH): Promise<string | nul
  * exactly the class of harm §3 forbids. Temp file plus rename means the file is
  * either the old one or the new one.
  */
-async function writeSettingsAtomically(path: string, settings: SettingsObject): Promise<void> {
+export async function writeSettingsAtomically(
+  path: string,
+  settings: SettingsObject,
+): Promise<void> {
   // Onto the file the path RESOLVES to. Under chezmoi, stow or a hand-rolled dotfiles repo
   // `settings.json` is a symlink, and renaming over the link replaced it with a plain file —
   // detaching the developer's managed config, which uninstall then could not put back.

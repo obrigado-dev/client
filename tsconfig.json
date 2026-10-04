@@ -23,10 +23,10 @@
       "path": "./packages/vscode-extension"
     },
     {
-      "path": "./prototypes/claude-code-mod"
+      "path": "./packages/claude-code-mod"
     },
     {
-      "path": "./prototypes/claude-code-mod/tsconfig.test.json"
+      "path": "./packages/claude-code-mod/tsconfig.test.json"
     }
   ]
 }

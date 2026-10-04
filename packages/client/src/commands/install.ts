@@ -1,4 +1,5 @@
 import {
+  claudeDesktopIntegration,
   claudeIntegration,
   piIntegration,
   CLAUDE_SETTINGS_PATH,
@@ -27,8 +28,10 @@ import { installStatusLine, statusLineCommand, uninstallStatusLine } from "../st
 import type { InstallOutcome } from "../statusline.ts";
 import { decideSharing, reportStored } from "./privacy-prompt.ts";
 import type { AdapterResult, Remover } from "./adapters.ts";
+import { installClaudeDesktopAdapter, removeClaudeDesktop } from "./install-desktop.ts";
 import { installPiHosts, removePiHost } from "./install-pi.ts";
 import { positionFromArgv, resolveClaudeState } from "./claude-state.ts";
+import { reportUpdates } from "../self-update.ts";
 import { detectInstalledAgents } from "./detect.ts";
 import { apiOrigin } from "./shared.ts";
 
@@ -217,6 +220,10 @@ export async function install(argv: readonly string[] = []): Promise<number> {
 
   results.push(...(await installPiHosts(targets, requestedAgent(argv), existing, integrations)));
 
+  if (targets.includes("claude-desktop")) {
+    results.push(await installClaudeDesktopAdapter(existing, integrations));
+  }
+
   if (results.some((result) => result.changed)) {
     const decision = await decideSharing(existing, argv);
     const next: ClientConfig = {
@@ -232,6 +239,7 @@ export async function install(argv: readonly string[] = []): Promise<number> {
     };
     await writeConfig(next);
     reportStored(decision);
+    reportUpdates(next);
   }
   return results.some((result) => result.failed) ? 1 : 0;
 }
@@ -250,6 +258,7 @@ const INSTALLED_CHECK: Record<InstallAgent, (config: ClientConfig) => boolean> =
   opencode: (config) => opencodeIntegration(config)?.installed === true,
   pi: (config) => piIntegration(config, "pi")?.installed === true,
   "oh-my-pi": (config) => piIntegration(config, "oh-my-pi")?.installed === true,
+  "claude-desktop": (config) => claudeDesktopIntegration(config)?.installed === true,
 };
 
 function installedTargets(config: ClientConfig | null): InstallAgent[] {
@@ -317,6 +326,7 @@ const REMOVERS: Record<InstallAgent, Remover> = {
   opencode: removeOpenCode,
   pi: removePiHost("pi"),
   "oh-my-pi": removePiHost("oh-my-pi"),
+  "claude-desktop": removeClaudeDesktop,
 };
 
 /**

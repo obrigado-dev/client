@@ -28,6 +28,11 @@ async function read(path: string): Promise<Record<string, unknown>> {
 }
 
 describe("installing into tui.json", () => {
+  test("writes the plugin unpinned, which is how OpenCode keeps it current (A38)", () => {
+    // `@obrigado/opencode-plugin@1.2.3` would hold every install at 1.2.3 for good.
+    expect(OPENCODE_PLUGIN_SPEC).not.toMatch(/^@obrigado\/opencode-plugin@/u);
+  });
+
   test("creates the file when OpenCode has no TUI config yet", async () => {
     const { dir, path } = await withConfig();
     const outcome = await installOpenCodePlugin(path, join(dir, "backups"));

@@ -25,6 +25,7 @@ this passes on every laptop and fails on every runner.
 | VS Code / Cursor extension | Marketplace | `bun run package:vscode` → `.vsix` | publisher `obrigado` unclaimed |
 | JetBrains plugin | JetBrains Marketplace | `./gradlew buildPlugin` in `packages/jetbrains-plugin` → `.zip` | vendor unclaimed; see `docs/PUBLISHING.md` |
 | Pi extension | copied into `~/.pi/agent/extensions` by the CLI | ships inside the CLI | n/a |
+| Claude Code mod (the desktop app) | the `obrigado` marketplace at this repository's root | tag `claude-code-mod-v<version>`, pushed atomically with the commit whose marketplace names it; see `packages/claude-code-mod/README.md` | 0.1.0 not yet tagged |
 
 ### A new version of an npm package
 
@@ -73,7 +74,11 @@ list goes.
 ### Binaries
 
 A `v<version>` tag runs `release.yml`: the gate, `bun run build:binaries` for every platform,
-a GitHub release with `SHA256SUMS`, and a download-and-verify of what was published.
+`SHA256SUMS` signed into `SHA256SUMS.sig` with the secret `RELEASE_SIGNING_KEY`, a GitHub release
+with all three, and a download-and-verify of what was published, signature included. The secret
+is required: installs that update themselves refuse an unsigned release (A38), so the workflow
+does too. The public key is `RELEASE_KEYS` in `packages/client/src/release-signature.ts`; its
+header says how one is replaced, and the platform's RUNBOOK what to do if it is lost.
 
 Release binaries are compiled with `packages/client/src/release.ts`'s defines, which point them at
 https://obrigado.dev; a checkout keeps defaulting to the local stack.
@@ -81,8 +86,10 @@ https://obrigado.dev; a checkout keeps defaulting to the local stack.
 Bump `packages/client/package.json` and `CLIENT_VERSION` in `packages/client/src/version.ts`
 together first (`version.test.ts` fails if they disagree). `release.yml` refuses a tag that is
 not `v` plus that version, and refuses `0.0.0`. The version is how the server knows what an
-install is running, and the client never updates itself, so a release that reported the wrong
-number could never be asked to update.
+install is running and how the self-update (A38) decides a release is newer: a release that
+reported a lower number than its tag would download itself again every day, and one that reported
+a higher number would never take the next release. Installs on a release binary pick up a new tag
+within a day of it publishing, so `release.yml` is the release in the fullest sense.
 
 ## The platform pin
 

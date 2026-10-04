@@ -50,13 +50,14 @@ export const ENTRY = "packages/client/src/cli.ts";
 /**
  * The `bun build` argv for one target, with the release's compiled-in defaults — the production
  * server among them, so `curl … | sh` produces an install that works without anyone setting
- * OBRIGADO_API_ORIGIN (`packages/client/src/release.ts`).
+ * OBRIGADO_API_ORIGIN (`packages/client/src/release.ts`) — and which asset it is, which is what
+ * the self-update downloads its successor as (A38).
  */
-function compileArgs(target: string, outfile: string): string[] {
-  const defines = Object.entries(RELEASE_DEFINES).flatMap(([name, value]) => [
-    "--define",
-    `${name}=${value}`,
-  ]);
+export function compileArgs(name: string, target: string, outfile: string): string[] {
+  const defines = Object.entries({
+    ...RELEASE_DEFINES,
+    OBRIGADO_RELEASE_TARGET: JSON.stringify(name),
+  }).flatMap(([define, value]) => ["--define", `${define}=${value}`]);
   return [
     "bun",
     "build",
@@ -86,7 +87,7 @@ function main(): void {
 
   for (const [name, target] of Object.entries(TARGETS)) {
     const outfile = `${OUT_DIR}/obrigado-${name}`;
-    const built = Bun.spawnSync(compileArgs(target, outfile));
+    const built = Bun.spawnSync(compileArgs(name, target, outfile));
 
     if (built.exitCode !== 0) {
       process.stderr.write(built.stderr.toString());

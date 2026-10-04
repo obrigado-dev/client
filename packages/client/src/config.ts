@@ -84,6 +84,13 @@ export interface PiIntegrationConfig {
   readonly installed_at?: string;
 }
 
+export interface ClaudeDesktopIntegrationConfig {
+  readonly installed: boolean;
+  readonly installed_at?: string;
+  /** The renderer command written into the app's settings, so uninstall takes back only ours. */
+  readonly renderer_command?: string;
+}
+
 export interface ClientIntegrations {
   "claude-code"?: ClaudeIntegrationConfig;
   codex?: CodexIntegrationConfig;
@@ -91,6 +98,7 @@ export interface ClientIntegrations {
   /* One extension, two hosts, two directories — so two independent install records. */
   pi?: PiIntegrationConfig;
   "oh-my-pi"?: PiIntegrationConfig;
+  "claude-desktop"?: ClaudeDesktopIntegrationConfig;
 }
 
 export interface ClientConfig {
@@ -102,6 +110,11 @@ export interface ClientConfig {
   readonly installed_at?: string;
   /** §14 Phase 1: the end-of-session summary is opt-out. */
   readonly session_summary?: boolean;
+  /**
+   * Whether a release binary keeps itself current (A38). On unless set to false; a checkout
+   * never updates itself whatever this says. See `self-update.ts`.
+   */
+  readonly auto_update?: boolean;
   /**
    * Colour for the sponsored copy. "off" wins over any advertiser choice, as
    * does NO_COLOR — the developer's terminal is theirs.
@@ -127,8 +140,8 @@ export interface ClientConfig {
    * The session `obrigado link github` signed this install in with (A33): who the developer is
    * to Obrigado, for a later feature to present as `Authorization: Bearer`.
    *
-   * Nothing sends it today. It is kept because the client never updates itself, so the release
-   * that first uses it should find the person already signed in rather than ask again. The
+   * Nothing sends it today. It is kept so that the release that first uses it finds the person
+   * already signed in rather than asking again. The
    * server stores only its sha256; `obrigado unlink github` ends it there and removes it here.
    */
   readonly developer_session?: {
@@ -228,6 +241,12 @@ export function sponsoredPosition(config: ClientConfig | null): SponsoredPositio
 
 export function opencodeIntegration(config: ClientConfig | null): OpenCodeIntegrationConfig | null {
   return config?.integrations?.opencode ?? null;
+}
+
+export function claudeDesktopIntegration(
+  config: ClientConfig | null,
+): ClaudeDesktopIntegrationConfig | null {
+  return config?.integrations?.["claude-desktop"] ?? null;
 }
 
 export function piIntegration(

@@ -61,6 +61,12 @@ describe("the config we will write", () => {
     expect(agentFromArgv(["--agent=codex"])).toBe("codex");
     // Every existing install runs the flagless command; it must keep meaning Claude.
     expect(agentFromArgv([])).toBe("claude-code");
-    expect(agentFromArgv(["--agent", "nonsense"])).toBe("claude-code");
+  });
+
+  test("and refuses a host it does not know rather than calling it Claude Code", () => {
+    // A host newer than this client would otherwise bill its lines as the status line's.
+    expect(agentFromArgv(["--agent", "nonsense"])).toBeNull();
+    expect(agentFromArgv(["--agent=nonsense"])).toBeNull();
+    expect(agentFromArgv(["--agent"])).toBeNull();
   });
 });

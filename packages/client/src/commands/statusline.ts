@@ -61,12 +61,18 @@ const SPONSOR_LABEL = "oss-sponsor";
  * side on one install key cannot consume each other's batch or nonces, and it
  * rides the impression so revenue attributes to the host that actually showed
  * the line.
+ *
+ * So a flag naming a host this build does not know is refused (null), not read as
+ * Claude Code: a host newer than the installed client would otherwise have its
+ * lines billed as the status line's, and the developer's chained command run on a
+ * payload it was never written for.
  */
-export function agentFromArgv(argv: readonly string[]): Agent {
+export function agentFromArgv(argv: readonly string[]): Agent | null {
   const equals = argv.find((value) => value.startsWith("--agent="));
   const index = argv.indexOf("--agent");
-  const value = equals?.slice("--agent=".length) ?? (index >= 0 ? argv[index + 1] : undefined);
-  return isAgent(value) ? value : DEFAULT_AGENT;
+  if (equals === undefined && index < 0) return DEFAULT_AGENT;
+  const value = equals?.slice("--agent=".length) ?? argv[index + 1];
+  return isAgent(value) ? value : null;
 }
 
 /**
@@ -233,6 +239,8 @@ export async function statusline(argv: readonly string[] = []): Promise<number> 
   if (config === null) return 0;
 
   const agent = agentFromArgv(argv);
+  // A host this build does not know gets nothing, not somebody else's line. See `agentFromArgv`.
+  if (agent === null) return 0;
   // Hosts that draw their own UI ask for the parts rather than a rendered line.
   const structured = argv.includes("--json");
 

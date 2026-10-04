@@ -1,5 +1,5 @@
 /**
- * Obrigado's Claude Code mod. Parked: see the README for why, and for what picking it up takes.
+ * Obrigado's Claude Code mod: the sponsored line in the Claude desktop app.
  *
  * Claude Code v2.1.287 made mods generally available: a plugin with a hooks module that Claude
  * Code calls when events happen, including each time it draws its own interface. One of the
@@ -11,24 +11,27 @@
  * This draws in the app and nowhere else. The terminal keeps the status line, and the split
  * follows what each can do. In the terminal the band can be collapsed (`ctrl+x ctrl+a`, or its
  * `[-]`), after which Claude Code goes on asking this hook to draw with the same props, so a
- * line counted there may be a line nobody saw; the status line cannot be collapsed, and it
- * carries the turn timing the classifier reads. The app's band has no way to collapse it. So a
- * session gets one line, from whichever of the two can count it honestly.
+ * line counted there may be a line nobody saw; the status line cannot be collapsed. The app's
+ * band has no way to collapse it. So a session gets one line, from whichever of the two can
+ * count it honestly.
  *
  * Not `$.ui.status`, although that is the call named like a status line: every line a mod pins
  * there starts with `⚠` and the mod's name. A sponsored line drawn as a warning is what A5's
  * palette rules forbid, and the reason the session summary stays out of `systemMessage` too.
  *
  * Delivery is not reimplemented here, as in every other host. This runs `obrigado statusline
- * --agent claude-code-mod --json` and draws the parts it is handed; rotation, batching,
- * beacons, dwell and the disclosure all stay in the one renderer.
+ * --agent claude-desktop --json` and draws the parts it is handed; rotation, batching, beacons,
+ * dwell and the disclosure all stay in the one renderer.
  *
- * Why it is parked rather than a surface:
+ * The status line is also handed the session's timing, which the classifier reads for a person's
+ * time, and the mods API hands a hook no such figures. So this keeps them itself (`timing.ts`)
+ * and passes them on in the status line's own fields (A37).
+ *
+ * Two things stay true of this surface that are not of the status line, and both are accepted
+ * rather than solved (A37):
  *
  *   - A mod earlier in the chain receives our tree after the renderer has counted the line, and
  *     may drop it.
- *   - The payload carries no turn timing. Claude Code hands its status line
- *     `cost.total_duration_ms` and `cost.total_api_duration_ms`; the mods API has neither.
  *   - That the app's band cannot be collapsed was seen on 2.1.288, not promised anywhere. A
  *     version that adds a way would put the terminal's problem back (anthropics/claude-code#98986).
  */
@@ -36,8 +39,10 @@ import { sponsoredRow } from "./line.ts";
 import type { RowElements } from "./line.ts";
 import { parseSponsored, statuslineArgv } from "./surface.ts";
 import type { Sponsored } from "./surface.ts";
+import { sessionTiming } from "./timing.ts";
 
-const AGENT = "claude-code-mod";
+/** The app's own name for itself, `CLAUDE_CODE_ENTRYPOINT`, and the id impressions carry. */
+const AGENT = "claude-desktop";
 
 /** This mod's own version, reported on every render (A30). Held to both manifests by a test. */
 const SURFACE_VERSION = "0.1.0";
@@ -73,6 +78,7 @@ interface BandEvent {
 
 interface Mods<Node = unknown> {
   readonly clock: {
+    now(): Promise<number>;
     after(ms: number, fn: () => void): Timer;
     every(ms: number, fn: () => void): Timer;
   };
@@ -96,14 +102,23 @@ interface Mods<Node = unknown> {
 
 type Hook<E, R> = ($: Mods, e: E, next: (e: E) => Promise<R>) => Promise<R>;
 
+/** A streaming event's hook: an async generator over the stream beneath it. */
+type StreamHook<E> = (
+  $: Mods,
+  e: E,
+  next: (e: E) => AsyncIterable<unknown, unknown>,
+) => AsyncGenerator<unknown, unknown, unknown>;
+
 interface On {
   (event: "session.start" | "session.end" | "session.attach", hook: Hook<unknown, unknown>): void;
+  (event: "turn.step", hook: StreamHook<unknown>): void;
   (event: "ui.render", matcher: { component: "AbovePrompt" }, hook: Hook<BandEvent, unknown>): void;
 }
 
 /** The line on screen, or null for none. Every failure lands here as null. */
 let sponsored: Sponsored | null = null;
 let ticking: Timer | null = null;
+const timing = sessionTiming();
 
 /**
  * One render, as the other hosts do it: the payload Claude Code would send its status line,
@@ -116,11 +131,13 @@ async function render($: Mods): Promise<Sponsored | null> {
   const [command, ...args] = statuslineArgv(AGENT, await $.env.get("OBRIGADO_STATUSLINE_COMMAND"));
   if (command === undefined) return null;
   try {
+    const cost = timing.cost(await $.clock.now());
     const { stdout } = await $.process.run([command, ...args], {
       stdin: JSON.stringify({
         session_id: await $.session.id(),
         cwd: await $.session.cwd(),
         surface_version: SURFACE_VERSION,
+        ...(cost === undefined ? {} : { cost }),
       }),
       timeoutMs: RENDER_TIMEOUT_MS,
     });
@@ -150,8 +167,11 @@ async function refresh($: Mods): Promise<void> {
 }
 
 export function register(on: On): void {
-  on("session.start", ($, e, next) => {
-    // `session.start` fires again on every reload of the module: one interval, not one per save.
+  on("session.start", async ($, e, next) => {
+    // Also fired on every reload of the module. The clock starts over, so the session reads as
+    // younger than it is (less of a person's time, never more), and one interval replaces the
+    // last rather than one more per save.
+    timing.start(await $.clock.now());
     ticking?.cancel();
     ticking = $.clock.every(REFRESH_MS, () => {
       void refresh($);
@@ -161,6 +181,17 @@ export function register(on: On): void {
       void refresh($);
     });
     return next(e);
+  });
+
+  // Every model request of the session, the main loop's and its subagents', timed while it is in
+  // flight and passed on untouched. This is the status line's `total_api_duration_ms`.
+  on("turn.step", async function* ($, e, next) {
+    const startedAt = await $.clock.now();
+    try {
+      return yield* next(e);
+    } finally {
+      timing.request(startedAt, await $.clock.now());
+    }
   });
 
   // The app connecting is the moment a session becomes one this draws in, so the first line comes
