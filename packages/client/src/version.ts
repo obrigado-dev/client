@@ -12,7 +12,7 @@
  * string. Two places to bump is one place to forget — so `version.test.ts` asserts they
  * agree, which buys the same guarantee without the build gymnastics.
  */
-export const CLIENT_VERSION = "0.3.0";
+export const CLIENT_VERSION = "0.3.1";
 
 /**
  * Which host this client was installed into.
