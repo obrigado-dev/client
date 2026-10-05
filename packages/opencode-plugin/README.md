@@ -59,14 +59,17 @@ Restart OpenCode after installing. By hand, the entry is:
 ```jsonc
 {
   "$schema": "https://opencode.ai/tui.json",
-  "plugin": ["@obrigado/opencode-plugin"]
+  "plugin": ["@obrigado/opencode-plugin@0.2.0"]
 }
 ```
 
 The package, not `@obrigado/opencode-plugin/tui`: OpenCode finds `./tui` in the package's
 `exports` itself, and npm's spec parser reads a spec with a subpath as a local directory, so
-OpenCode installs nothing and says nothing. Installs before 0.3.3 wrote that form; 0.3.3 rewrites
-it on install and after updating.
+OpenCode installs nothing and says nothing. Installs before 0.3.3 wrote that form.
+
+At a version, because OpenCode never asks npm again about a plugin it has installed: an unpinned
+spec stays on the first version it got. Change the version to update. The CLI does this for you
+(A41): it writes the version it shipped with, and moves the pin after it updates itself.
 
 From a source checkout, point the plugin at your client with `OBRIGADO_STATUSLINE_COMMAND`.
 

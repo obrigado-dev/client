@@ -27,6 +27,17 @@ export function parseVersion(text: string): readonly [number, number, number] | 
   return match === null ? null : [Number(match[1]), Number(match[2]), Number(match[3])];
 }
 
+/** Whether `candidate` is a later version than `current`; false when either is not one. */
+export function isNewer(candidate: string, current: string): boolean {
+  const next = parseVersion(candidate);
+  const now = parseVersion(current);
+  if (next === null || now === null) return false;
+  for (const index of [0, 1, 2] as const) {
+    if (next[index] !== now[index]) return next[index] > now[index];
+  }
+  return false;
+}
+
 /** The digest SHA256SUMS lists for `asset`, in the `digest  name` form `sha256sum` writes. */
 export function checksumFor(sums: string, asset: string): string | null {
   for (const line of sums.split("\n")) {

@@ -21,6 +21,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { BACKUP_DIR, ensureDir } from "./config.ts";
+import { isNewer, parseVersion } from "./release-assets.ts";
 
 /**
  * OpenCode's config home.
@@ -35,23 +36,32 @@ const OPENCODE_CONFIG_HOME =
 /** Where the TUI plugin list lives. */
 export const OPENCODE_TUI_CONFIG_PATH = join(OPENCODE_CONFIG_HOME, "tui.json");
 
+const PACKAGE = "@obrigado/opencode-plugin";
+
 /**
- * What `tui.json` names for OpenCode to load.
+ * The plugin version this CLI release ships with. `test/opencode-plugin.test.ts` holds it to the
+ * plugin's manifest, so a plugin release that forgets it fails the gate.
+ */
+export const OPENCODE_PLUGIN_VERSION = "0.2.0";
+
+/**
+ * What `tui.json` names for OpenCode to load: the package, at this release's version (A41).
  *
  * The package, not its `./tui` entry: OpenCode installs the spec with npm and then finds `./tui`
  * in the package's own `exports`. Given `@obrigado/opencode-plugin/tui`, npm's spec parser reads
  * a local directory rather than a package, the install fails without a word, and OpenCode loads
- * nothing (verified against OpenCode 1.18.34, `plugin/shared.ts`). Every install wrote that until
- * 0.3.3, so it is replaced wherever it is found: `LEGACY_SPECS`.
+ * nothing (verified against OpenCode 1.18.34, `plugin/shared.ts`).
  *
- * Unpinned on purpose (A38): OpenCode treats a spec with no version as `latest` and refreshes it
- * when its cached copy is stale, while one with `@1.2.3` is held at that version for good. So
- * leaving the version off is how this plugin updates itself.
+ * At a version, because OpenCode never asks npm again about a plugin it has installed: its
+ * `Npm.add` returns the cached copy whenever there is one (1.18.34, `core/src/npm.ts`), so an
+ * unpinned spec stays on whatever version it first got, for good. A pin is its own install, so
+ * moving the pin is how the plugin updates: install writes this one, and the CLI moves it forward
+ * after it updates itself (`repairOpenCodePlugin`). A41 corrects A38, which said OpenCode would.
  */
-export const OPENCODE_PLUGIN_SPEC = "@obrigado/opencode-plugin";
+export const OPENCODE_PLUGIN_SPEC = `${PACKAGE}@${OPENCODE_PLUGIN_VERSION}`;
 
 /** What earlier installers wrote that OpenCode cannot load. Exact strings: see the spec above. */
-const LEGACY_SPECS: ReadonlySet<string> = new Set(["@obrigado/opencode-plugin/tui"]);
+const LEGACY_SPECS: ReadonlySet<string> = new Set([`${PACKAGE}/tui`]);
 
 const SCHEMA_URL = "https://opencode.ai/tui.json";
 
@@ -77,30 +87,43 @@ function specOf(entry: unknown): unknown {
   return Array.isArray(entry) ? entry[0] : entry;
 }
 
-/** The spec as written now, or pinned to a version, which OpenCode loads either way. */
-function isCurrentPlugin(entry: unknown): boolean {
+/** The version an entry of ours is pinned to, or null for any other form. */
+function pinnedVersion(entry: unknown): string | null {
   const spec = specOf(entry);
-  return (
-    typeof spec === "string" &&
-    (spec === OPENCODE_PLUGIN_SPEC || spec.startsWith(`${OPENCODE_PLUGIN_SPEC}@`))
-  );
+  if (typeof spec !== "string" || !spec.startsWith(`${PACKAGE}@`)) return null;
+  const version = spec.slice(PACKAGE.length + 1);
+  return parseVersion(version) === null ? null : version;
 }
 
-function isLegacyPlugin(entry: unknown): boolean {
-  const spec = specOf(entry);
-  return typeof spec === "string" && LEGACY_SPECS.has(spec);
+/** Pinned to this release's version or a later one: OpenCode has, or will install, a current copy. */
+function isCurrentPlugin(entry: unknown): boolean {
+  const pinned = pinnedVersion(entry);
+  return pinned !== null && !isNewer(OPENCODE_PLUGIN_VERSION, pinned);
 }
 
 /**
- * The list with every legacy entry gone and the current spec where the first of them stood, so
+ * An older form of ours, which this release rewrites: the `/tui` spec OpenCode cannot load, the
+ * unpinned one it never updates, or a pin to an earlier version. Never a local path, which a
+ * developer wrote on purpose, and never a later pin.
+ */
+function isStalePlugin(entry: unknown): boolean {
+  const spec = specOf(entry);
+  if (typeof spec !== "string") return false;
+  if (LEGACY_SPECS.has(spec) || spec === PACKAGE) return true;
+  const pinned = pinnedVersion(entry);
+  return pinned !== null && isNewer(OPENCODE_PLUGIN_VERSION, pinned);
+}
+
+/**
+ * The list with every stale entry gone and the current spec where the first of them stood, so
  * the developer's order is kept. Not added again where a current entry is already there, and an
  * entry's options travel with it.
  */
-function withLegacyReplaced(plugins: readonly unknown[]): unknown[] {
+function withStaleReplaced(plugins: readonly unknown[]): unknown[] {
   let placed = plugins.some((entry) => isCurrentPlugin(entry));
   const out: unknown[] = [];
   for (const entry of plugins) {
-    if (!isLegacyPlugin(entry)) out.push(entry);
+    if (!isStalePlugin(entry)) out.push(entry);
     else if (!placed) {
       out.push(
         Array.isArray(entry) ? [OPENCODE_PLUGIN_SPEC, ...entry.slice(1)] : OPENCODE_PLUGIN_SPEC,
@@ -172,8 +195,8 @@ export async function installOpenCodePlugin(
 ): Promise<OpenCodeInstallOutcome> {
   const document = (await readTuiConfig(path)) ?? {};
   const plugins = pluginList(document);
-  const legacy = plugins.some((entry) => isLegacyPlugin(entry));
-  if (!legacy && plugins.some((entry) => isOurPlugin(entry))) {
+  const stale = plugins.some((entry) => isStalePlugin(entry));
+  if (!stale && plugins.some((entry) => isOurPlugin(entry))) {
     return { status: "already-installed" };
   }
 
@@ -183,9 +206,9 @@ export async function installOpenCodePlugin(
     ...(document["$schema"] === undefined ? { $schema: SCHEMA_URL } : {}),
     ...document,
     // Appended, never prepended: another plugin that was already drawing gets to keep
-    // its position, and ours registers at a late order anyway. A legacy entry is replaced
+    // its position, and ours registers at a late order anyway. A stale entry is replaced
     // where it stands instead.
-    plugin: legacy ? withLegacyReplaced(plugins) : [...plugins, OPENCODE_PLUGIN_SPEC],
+    plugin: stale ? withStaleReplaced(plugins) : [...plugins, OPENCODE_PLUGIN_SPEC],
   });
   return { status: "installed", backup: backupPath };
 }
@@ -193,10 +216,10 @@ export async function installOpenCodePlugin(
 export type OpenCodeRepairOutcome = "repaired" | "unchanged";
 
 /**
- * Rewrite an entry an earlier installer wrote that OpenCode cannot load (`LEGACY_SPECS`).
+ * Bring OpenCode's entry to this release's plugin: rewrite a stale form (`isStalePlugin`).
  *
- * Run after an update as well as by `obrigado install`, so an install made before the fix starts
- * drawing without anybody running anything (A38). It only replaces an entry that is there: a
+ * Run after the CLI updates itself, as well as by `obrigado install`, because OpenCode installs a
+ * new plugin version only when the pin moves (A41). It only replaces an entry that is there: a
  * developer who took ours out of the list is not given it back.
  */
 export async function repairOpenCodePlugin(
@@ -212,10 +235,10 @@ export async function repairOpenCodePlugin(
   } catch {
     return "unchanged";
   }
-  if (!plugins.some((entry) => isLegacyPlugin(entry))) return "unchanged";
+  if (!plugins.some((entry) => isStalePlugin(entry))) return "unchanged";
 
   await backup(path, backupDir);
-  await writeAtomic(path, { ...document, plugin: withLegacyReplaced(plugins) });
+  await writeAtomic(path, { ...document, plugin: withStaleReplaced(plugins) });
   return "repaired";
 }
 

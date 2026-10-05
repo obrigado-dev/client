@@ -36,7 +36,7 @@ import { ensureDir, OBRIGADO_DIR, opencodeIntegration, piIntegration } from "./c
 import type { ClientConfig } from "./config.ts";
 import { repairOpenCodePlugin } from "./opencode-plugin.ts";
 import { installPiExtension } from "./pi-extension.ts";
-import { latestReleaseTag, parseVersion, REPO, verifiedAsset } from "./release-assets.ts";
+import { isNewer, latestReleaseTag, REPO, verifiedAsset } from "./release-assets.ts";
 import type { ReleaseDeps } from "./release-assets.ts";
 import type { PiHost } from "./pi-extension.ts";
 import { CLIENT_VERSION } from "./version.ts";
@@ -86,17 +86,7 @@ async function writeUpdateState(state: UpdateState, path = UPDATE_PATH): Promise
 
 // Moved to `release-assets.ts` with the rest of a release's reading, and still exported here
 // for the callers that read them as the update's own.
-export { checksumFor, parseVersion } from "./release-assets.ts";
-
-export function isNewer(candidate: string, current: string): boolean {
-  const next = parseVersion(candidate);
-  const now = parseVersion(current);
-  if (next === null || now === null) return false;
-  for (const index of [0, 1, 2] as const) {
-    if (next[index] !== now[index]) return next[index] > now[index];
-  }
-  return false;
-}
+export { checksumFor, isNewer, parseVersion } from "./release-assets.ts";
 
 /** Whether this install updates itself: a release binary, installed, and not turned off. */
 export function updatesItself(
