@@ -26,7 +26,7 @@ the compiler will ask you for.
 
 ## Development
 
-Requires Bun 1.3.10 or newer.
+Requires Bun 1.4 or newer.
 
 ```sh
 bun install --frozen-lockfile

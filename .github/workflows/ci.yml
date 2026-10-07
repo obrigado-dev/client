@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -29,12 +29,12 @@ jobs:
       - run: bun run check
       # vsce runs under Node, not Bun (its bin is `#!/usr/bin/env node`), and 4.0 requires
       # Node 22. Pinned rather than left to whatever the runner image ships.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       - run: bun run package:vscode
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: obrigado-vscode-${{ github.sha }}
           path: packages/vscode-extension/dist/obrigado-vscode.vsix
@@ -52,7 +52,7 @@ jobs:
         working-directory: packages/jetbrains-plugin
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-java@v6
         with:
@@ -64,7 +64,7 @@ jobs:
 
       - run: ./gradlew check buildPlugin
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: obrigado-jetbrains-${{ github.sha }}
           path: packages/jetbrains-plugin/build/distributions/*.zip

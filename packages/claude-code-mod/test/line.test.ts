@@ -63,6 +63,10 @@ function row(line: Sponsored): TextProps<Node> {
   return root.props;
 }
 
+function branded(icon: string): Sponsored {
+  return ad({ brand: { name: "Acme", logo: null, icon } });
+}
+
 describe("the disclosure", () => {
   test("comes first, as plain text outside every link", () => {
     const [first, ...rest] = row(ad()).children;
@@ -135,8 +139,6 @@ describe("the palette", () => {
 });
 
 describe("the mark", () => {
-  const branded = (icon: string): Sponsored => ad({ brand: { name: "Acme", logo: null, icon } });
-
   test("sits between the disclosure and the copy, named for the brand, linking nowhere", () => {
     const drawn = sponsoredRow(branded(ICON), app);
 
