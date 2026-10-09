@@ -1,6 +1,7 @@
 package dev.obrigado.jetbrains
 
 import com.intellij.ide.BrowserUtil
+import com.intellij.ide.IdeEventQueue
 import com.intellij.ide.plugins.PluginManagerCore
 import com.intellij.openapi.application.ApplicationInfo
 import com.intellij.openapi.application.ApplicationManager
@@ -12,6 +13,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.StatusBar
 import com.intellij.openapi.wm.StatusBarWidget
 import com.intellij.openapi.wm.StatusBarWidgetFactory
+import com.intellij.openapi.wm.WindowManager
 import com.intellij.util.Consumer
 import com.intellij.util.EnvironmentUtil
 import com.intellij.util.concurrency.AppExecutorUtil
@@ -134,6 +136,11 @@ internal class ObrigadoWidget(private val project: Project) : StatusBarWidget, S
                     // The running descriptor's, so it cannot disagree with what is installed.
                     surfaceVersion = PluginManagerCore.getPlugin(PluginId.getId(PLUGIN_ID))?.version,
                     hostVersion = ApplicationInfo.getInstance().build.asString(),
+                    // This project's own frame, not just the IDE: another project's window in
+                    // front is not someone looking at this one.
+                    focused = WindowManager.getInstance().getFrame(project)?.isActive == true,
+                    // The IDE's own measure: milliseconds since the last key or mouse event.
+                    inputAt = System.currentTimeMillis() - IdeEventQueue.getInstance().idleTime,
                 ),
             shellEnvironment = shell,
         )

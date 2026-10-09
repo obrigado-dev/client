@@ -142,9 +142,28 @@ export function splitCommand(text: string): string[] {
  * `session_id`. Omitting it would collapse every Pi window into one shared rotation cursor, so
  * two sessions would consume each other's inventory.
  */
-function payloadFor(sessionId: string, cwd: string): string {
-  return JSON.stringify({ session_id: sessionId, cwd, surface_version: SURFACE_VERSION });
+function payloadFor(sessionId: string, cwd: string, prompt: TypedPrompt | null): string {
+  return JSON.stringify({
+    session_id: sessionId,
+    cwd,
+    surface_version: SURFACE_VERSION,
+    ...(prompt === null ? {} : { prompt_id: prompt.id, prompt_at: prompt.at }),
+  });
 }
+
+/** Something the person typed: when it was sent, and an id the renderer can tell apart. */
+interface TypedPrompt {
+  readonly id: string;
+  readonly at: number;
+}
+
+/**
+ * The person's latest typed prompt, for the renderer's prompt signal, which the server's attention
+ * rule reads: a line counts as seen only for a few minutes after one. Set by `input` events whose
+ * source is Pi's own interface (`interactive`), never by input from an RPC client or another
+ * extension, and never from the text, which is not read.
+ */
+let lastPrompt: TypedPrompt | null = null;
 
 /**
  * The environment the renderer runs in, with hyperlinks turned OFF.
@@ -178,7 +197,11 @@ function spawnEnvironment(): Record<string, string> {
  * extension was installed. An error surfaced into the developer's chrome would be a worse
  * outcome than showing no ad.
  */
-async function fetchLine(sessionId: string, cwd: string): Promise<string | null> {
+async function fetchLine(
+  sessionId: string,
+  cwd: string,
+  prompt: TypedPrompt | null,
+): Promise<string | null> {
   const [command, ...args] = statuslineCommand();
   if (command === undefined) return null;
 
@@ -232,7 +255,7 @@ async function fetchLine(sessionId: string, cwd: string): Promise<string | null>
     child.stdin.on("error", () => {
       finish(null);
     });
-    child.stdin.end(payloadFor(sessionId, cwd));
+    child.stdin.end(payloadFor(sessionId, cwd, prompt));
   });
 }
 
@@ -258,7 +281,7 @@ export default function (pi: ExtensionApi): void {
     if (rendering) return;
     rendering = true;
     try {
-      const line = await fetchLine(ctx.sessionManager.getSessionId(), ctx.cwd);
+      const line = await fetchLine(ctx.sessionManager.getSessionId(), ctx.cwd, lastPrompt);
       if (line !== null) ctx.ui.setStatus(STATUS_KEY, line);
     } catch {
       // A broken render leaves the previous line in place rather than clearing the footer.
@@ -269,6 +292,13 @@ export default function (pi: ExtensionApi): void {
 
   pi.on("session_start", async (_event, ctx) => {
     await refresh(ctx);
+  });
+
+  // Returns nothing, so the input goes on unchanged; the handler only notes that it was typed.
+  pi.on("input", (event) => {
+    if ((event as { readonly source?: unknown }).source !== "interactive") return;
+    const at = Date.now();
+    lastPrompt = { id: `prompt-${at}`, at };
   });
 
   /*

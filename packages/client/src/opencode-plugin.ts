@@ -42,7 +42,7 @@ const PACKAGE = "@obrigado/opencode-plugin";
  * The plugin version this CLI release ships with. `test/opencode-plugin.test.ts` holds it to the
  * plugin's manifest, so a plugin release that forgets it fails the gate.
  */
-export const OPENCODE_PLUGIN_VERSION = "0.2.0";
+export const OPENCODE_PLUGIN_VERSION = "0.3.0";
 
 /**
  * What `tui.json` names for OpenCode to load: the package, at this release's version (A41).

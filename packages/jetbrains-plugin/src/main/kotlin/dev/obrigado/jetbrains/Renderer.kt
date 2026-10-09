@@ -138,14 +138,27 @@ internal object Renderer {
      * ads and every other project's would never be funded. `version` is the IDE's own build —
      * `IU-262.10968.63` — because every JetBrains IDE reports as one agent, and the build is what
      * still says which one it was. `surface_version` is this plugin's (A30).
+     *
+     * `focused` and `input_at` are what the server's attention rule reads from an editor, which has
+     * no terminal and no prompt of its own: whether this project's window was in front, and when
+     * the person last typed or clicked anywhere in the IDE (epoch milliseconds).
      */
-    fun payload(sessionId: String, cwd: String, surfaceVersion: String?, hostVersion: String?): String =
+    fun payload(
+        sessionId: String,
+        cwd: String,
+        surfaceVersion: String?,
+        hostVersion: String?,
+        focused: Boolean,
+        inputAt: Long?,
+    ): String =
         jsonObject(
             listOfNotNull(
                 "session_id" to sessionId,
                 "cwd" to cwd,
                 surfaceVersion?.let { "surface_version" to it },
                 hostVersion?.let { "version" to it },
+                "focused" to focused,
+                inputAt?.let { "input_at" to it },
             )
         )
 }

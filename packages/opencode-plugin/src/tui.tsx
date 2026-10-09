@@ -27,6 +27,8 @@ import { parseSponsored, statuslineArgv } from "@obrigado/surface";
 import type { Sponsored, SponsoredSpan } from "@obrigado/surface";
 import type { TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui";
 import type { JSX } from "@opentui/solid";
+import { lastTypedPrompt } from "./prompt.ts";
+import type { TypedPrompt } from "./prompt.ts";
 import { createRoot, createSignal, onCleanup } from "solid-js";
 
 const AGENT = "opencode";
@@ -38,7 +40,7 @@ const AGENT = "opencode";
  * separately and need different sentences to fix. `package.json` must agree; a test holds them
  * together, the same way `CLIENT_VERSION` is held to the client's manifest.
  */
-const SURFACE_VERSION = "0.2.0";
+const SURFACE_VERSION = "0.3.0";
 
 /**
  * How often the line is re-rendered.
@@ -163,8 +165,13 @@ function statuslineCommand(): readonly string[] {
  * off `session_id`. Omitting it would collapse every OpenCode window into one shared
  * rotation cursor, so two sessions would consume each other's inventory.
  */
-function payloadFor(sessionId: string, cwd: string): string {
-  return JSON.stringify({ session_id: sessionId, cwd, surface_version: SURFACE_VERSION });
+function payloadFor(sessionId: string, cwd: string, prompt: TypedPrompt | null): string {
+  return JSON.stringify({
+    session_id: sessionId,
+    cwd,
+    surface_version: SURFACE_VERSION,
+    ...(prompt === null ? {} : { prompt_id: prompt.id, prompt_at: prompt.at }),
+  });
 }
 
 /**
@@ -174,7 +181,11 @@ function payloadFor(sessionId: string, cwd: string): string {
  * before the plugin was installed. An error surfaced into the developer's chrome would
  * be a worse outcome than showing no ad.
  */
-async function fetchSponsored(sessionId: string, cwd: string): Promise<Sponsored | null> {
+async function fetchSponsored(
+  sessionId: string,
+  cwd: string,
+  prompt: TypedPrompt | null,
+): Promise<Sponsored | null> {
   const [command, ...args] = statuslineCommand();
   if (command === undefined) return null;
 
@@ -187,7 +198,7 @@ async function fetchSponsored(sessionId: string, cwd: string): Promise<Sponsored
       stdout: "pipe",
       stderr: "ignore",
     });
-    proc.stdin.write(payloadFor(sessionId, cwd));
+    proc.stdin.write(payloadFor(sessionId, cwd, prompt));
     await proc.stdin.end();
 
     // The FIRST line, not the whole stream. The renderer prints its line and then ships
@@ -349,7 +360,8 @@ function initialize(api: TuiPluginApi, disposeRoot: () => void): void {
     const raw = "params" in route ? route.params?.["sessionID"] : undefined;
     const sessionId = typeof raw === "string" && raw.length > 0 ? raw : "opencode-home";
     void (async () => {
-      const next = await fetchSponsored(sessionId, process.cwd());
+      const prompt = sessionId === "opencode-home" ? null : lastTypedPrompt(api, sessionId);
+      const next = await fetchSponsored(sessionId, process.cwd(), prompt);
       // A refresh that lands after teardown must not touch a disposed root.
       if (disposed) return;
       if (next !== null) {

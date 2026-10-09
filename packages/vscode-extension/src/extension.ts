@@ -89,7 +89,18 @@ function command(): readonly string[] {
  * extension was installed. An error surfaced into someone's status bar would be worse than
  * showing no ad at all.
  */
-function fetchSponsored(cwd: string, version: string): Promise<Sponsored | null> {
+/** What the server's attention rule reads from this window: is it in front, and when was it used. */
+interface Attention {
+  readonly focused: boolean;
+  /** When the person last typed or clicked in this window, or undefined if not since it opened. */
+  readonly inputAt: number | undefined;
+}
+
+function fetchSponsored(
+  cwd: string,
+  version: string,
+  attention: Attention,
+): Promise<Sponsored | null> {
   const [bin, ...args] = command();
   if (bin === undefined) return Promise.resolve(null);
 
@@ -146,6 +157,8 @@ function fetchSponsored(cwd: string, version: string): Promise<Sponsored | null>
         session_id: `${host()}-${vscode.env.sessionId}-${cwd}`,
         cwd,
         surface_version: version,
+        focused: attention.focused,
+        ...(attention.inputAt === undefined ? {} : { input_at: attention.inputAt }),
       }),
     );
   });
@@ -169,9 +182,28 @@ export function activate(context: vscode.ExtensionContext): void {
     { dispose: () => clearInterval(timer) },
   );
 
+  /*
+   * When the person last used this window, by VS Code's own measure of it: `WindowState.active`
+   * turns true on keyboard or mouse activity anywhere in the window, chat panels included, and
+   * false after a short time without. Each turn is dated, so someone reading for a minute without
+   * touching anything is dated by when they stopped. While it is true, the answer is now.
+   */
+  let lastInputAt: number | undefined = vscode.window.state.active ? Date.now() : undefined;
+  let wasActive = vscode.window.state.active;
+  context.subscriptions.push(
+    vscode.window.onDidChangeWindowState((state) => {
+      if (state.active !== wasActive) lastInputAt = Date.now();
+      wasActive = state.active;
+    }),
+  );
+  const attention = (): Attention => ({
+    focused: vscode.window.state.focused,
+    inputAt: vscode.window.state.active ? Date.now() : lastInputAt,
+  });
+
   const refresh = async (): Promise<void> => {
     const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
-    current = await fetchSponsored(cwd, version);
+    current = await fetchSponsored(cwd, version, attention());
     if (current === null) {
       item.hide();
       return;

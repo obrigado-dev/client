@@ -14,6 +14,8 @@ import type { CachedBatch } from "@obrigado/shared/rotation";
 import { ensureDir, SESSION_STATE_DIR } from "./config.ts";
 import { EDITOR_AGENT_IDS } from "@obrigado/shared/agents";
 
+import { promptFromPayload, seenPrompt } from "./prompt-signal.ts";
+import type { SeenPrompt } from "./prompt-signal.ts";
 import { AGENTS } from "./version.ts";
 import type { Agent } from "./version.ts";
 
@@ -44,6 +46,8 @@ export interface AgentSessionState {
    * which is precisely the stutter §3 says is a reason to uninstall.
    */
   retry_after?: number;
+  /** The latest prompt a render has seen in this session (`prompt-signal.ts`). */
+  prompt?: SeenPrompt;
   updated_at: number;
 }
 
@@ -116,6 +120,22 @@ export async function readSessionState(
     return { batch: null, updated_at: Date.now() };
   }
 }
+
+/**
+ * This session's state as a render sees it: what was stored, with the latest prompt the host's
+ * payload names folded in (`prompt-signal.ts`). Written back by the render that read it.
+ */
+export async function readRenderState(
+  agent: Agent,
+  sessionId: string,
+  payload: string,
+): Promise<AgentSessionState> {
+  const stored = await readSessionState(agent, sessionId);
+  const prompt = seenPrompt(stored.prompt, promptFromPayload(payload), Date.now());
+  return prompt === undefined ? stored : { ...stored, prompt };
+}
+
+export { focusedFromPayload, inputAgeSeconds } from "./prompt-signal.ts";
 
 export async function writeSessionState(
   agent: Agent,

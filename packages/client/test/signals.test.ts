@@ -189,6 +189,16 @@ describe("environment signals", () => {
     });
   });
 
+  describe("in an editor (A40)", () => {
+    test("there is no terminal to ask about, so tty is left out rather than false", () => {
+      // An editor opened from the Dock has no TERM and pipes for stdio: probed, it read false,
+      // and was never served. Its window is what the attention rule reads instead.
+      for (const agent of ["vscode", "cursor", "jetbrains"]) {
+        expect(`${agent}: ${"tty" in collectSignals({ agent })}`).toBe(`${agent}: false`);
+      }
+    });
+  });
+
   test("CI is detected from vendor variables, not just CI=1", () => {
     // A false negative here bills an advertiser for a build. Several systems set only
     // their own variable.

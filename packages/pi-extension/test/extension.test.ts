@@ -193,3 +193,40 @@ describe("splitCommand matches @obrigado/surface", () => {
     expect(splitCommand(input)).toEqual(sharedSplitCommand(input));
   });
 });
+
+describe("the person's prompts", () => {
+  /*
+   * Only input typed in Pi's own interface counts, never input from an RPC client or another
+   * extension, and only its time and an id reach the renderer: the text is never read.
+   */
+  test("reach the renderer as an id and a time, for typed input only", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "obrigado-pi-prompt-"));
+    const sent = join(dir, "payload.json");
+    const cli = join(dir, "stub.sh");
+    await writeFile(cli, `#!/bin/sh\ncat > '${sent}'\nprintf '%s\\n' 'oss-sponsor · Neon'\n`);
+    await chmod(cli, 0o755);
+    process.env["OBRIGADO_STATUSLINE_COMMAND"] = cli;
+    const { handlers, api } = harness();
+    extension(api);
+    const payload = async (): Promise<Record<string, unknown>> =>
+      JSON.parse(await Bun.file(sent).text()) as Record<string, unknown>;
+
+    await handlers.get("input")?.(
+      { type: "input", text: "from a script", source: "rpc" },
+      context(true, recorded),
+    );
+    await handlers.get("turn_end")?.({}, context(true, recorded));
+    expect(await payload()).not.toHaveProperty("prompt_id");
+
+    const before = Date.now();
+    await handlers.get("input")?.(
+      { type: "input", text: "fix the build", source: "interactive" },
+      context(true, recorded),
+    );
+    await handlers.get("turn_end")?.({}, context(true, recorded));
+    const typed = await payload();
+    expect(typed["prompt_id"]).toEqual(expect.stringMatching(/^prompt-\d+$/u));
+    expect(typed["prompt_at"]).toBeGreaterThanOrEqual(before);
+    expect(JSON.stringify(typed)).not.toContain("fix the build");
+  });
+});

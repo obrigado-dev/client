@@ -111,6 +111,7 @@ type StreamHook<E> = (
 
 interface On {
   (event: "session.start" | "session.end" | "session.attach", hook: Hook<unknown, unknown>): void;
+  (event: "prompt.submit", hook: Hook<unknown, unknown>): void;
   (event: "turn.step", hook: StreamHook<unknown>): void;
   (event: "ui.render", matcher: { component: "AbovePrompt" }, hook: Hook<BandEvent, unknown>): void;
 }
@@ -119,6 +120,14 @@ interface On {
 let sponsored: Sponsored | null = null;
 let ticking: Timer | null = null;
 const timing = sessionTiming();
+
+/**
+ * The status line's `prompt_id`: a new one each time the person sends a prompt, so the renderer
+ * can tell how long ago that was (`prompt-signal.ts`), which is what the server's attention rule
+ * reads. Made from the clock rather than counted, so a reload of the module cannot reissue an id
+ * the renderer has already dated; until the first prompt after one, there is none.
+ */
+let promptId: string | undefined;
 
 /**
  * One render, as the other hosts do it: the payload Claude Code would send its status line,
@@ -138,6 +147,7 @@ async function render($: Mods): Promise<Sponsored | null> {
         cwd: await $.session.cwd(),
         surface_version: SURFACE_VERSION,
         ...(cost === undefined ? {} : { cost }),
+        ...(promptId === undefined ? {} : { prompt_id: promptId }),
       }),
       timeoutMs: RENDER_TIMEOUT_MS,
     });
@@ -180,6 +190,12 @@ export function register(on: On): void {
     $.clock.after(1, () => {
       void refresh($);
     });
+    return next(e);
+  });
+
+  // A person sending a prompt. Only the moment is kept, never the text.
+  on("prompt.submit", async ($, e, next) => {
+    promptId = `prompt-${await $.clock.now()}`;
     return next(e);
   });
 

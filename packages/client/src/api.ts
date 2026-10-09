@@ -33,7 +33,7 @@ import type {
   StatsResponse,
   TimingSignals,
 } from "@obrigado/shared";
-import { DESKTOP_APP_ID } from "@obrigado/shared/agents";
+import { DESKTOP_APP_ID, EDITOR_AGENT_IDS } from "@obrigado/shared/agents";
 
 import { CLIENT_VERSION } from "./version.ts";
 
@@ -332,6 +332,10 @@ const DESKTOP_APP_ENTRYPOINT = "claude-desktop";
  * `--agent claude-desktop` run from anywhere else is probed like any other host.
  */
 function hasTerminal(agent: string, env: NodeJS.ProcessEnv): boolean {
+  // Nor in an editor, which draws in its own window: one opened from the Dock has no `TERM` and
+  // pipes for stdio, so a probe there read `false` and the editor was never served. What shows a
+  // person in an editor is its window (`focused`, `input_at`), not a terminal.
+  if ((EDITOR_AGENT_IDS as readonly string[]).includes(agent)) return false;
   return !(agent === DESKTOP_APP_ID && env["CLAUDE_CODE_ENTRYPOINT"] === DESKTOP_APP_ENTRYPOINT);
 }
 

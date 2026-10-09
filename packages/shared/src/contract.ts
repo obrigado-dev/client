@@ -432,6 +432,12 @@ export const BeaconEventSchema = z.discriminatedUnion("type", [
         /** Session timing at the moment this impression was shown (§14 Phase 3). */
         timing: TimingSignalsSchema.optional(),
         /**
+         * Seconds since the person last submitted a prompt in this session, when the host can
+         * tell. A terminal session's slot is attended only within a few minutes of one (the
+         * server's `ATTENTION_WINDOW_S`); the prompt itself is never read, let alone sent.
+         */
+        input_age_s: z.int().min(0).max(MAX_DURATION_S).optional(),
+        /**
          * Packages the agent actually read (§14 Phase 6).
          *
          * Package ids only — never a path. The client resolves a path to a package locally,

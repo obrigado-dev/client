@@ -59,7 +59,7 @@ Restart OpenCode after installing. By hand, the entry is:
 ```jsonc
 {
   "$schema": "https://opencode.ai/tui.json",
-  "plugin": ["@obrigado/opencode-plugin@0.2.0"]
+  "plugin": ["@obrigado/opencode-plugin@0.3.0"]
 }
 ```
 

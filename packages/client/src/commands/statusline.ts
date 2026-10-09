@@ -30,8 +30,10 @@ import { drainRetrieval } from "../retrieval.ts";
 import {
   agentSessionLive,
   isEditorAgent,
+  focusedFromPayload,
+  inputAgeSeconds,
   pruneSessionState,
-  readSessionState,
+  readRenderState,
   sessionIdFromPayload,
   writeSessionState,
 } from "../session-state.ts";
@@ -200,7 +202,8 @@ function pendingLine(text: string | null): () => void {
 async function reportImpression(
   item: BatchItem,
   payload: string,
-  shareActivity: boolean,
+  shareActivity: boolean | undefined,
+  prompt: AgentSessionState["prompt"],
 ): Promise<void> {
   // §14 Phase 3: timing travels with the impression, not the session, because
   // interactivity accumulates as the session runs. The first render of a session has
@@ -210,11 +213,20 @@ async function reportImpression(
   // §14 Phase 6. Drained rather than read: the queue is per-session state written by a
   // hook, and leaving entries behind would report the same reads against every subsequent
   // impression, inflating the multiplier for whatever the agent happened to open once.
-  const retrieved = shareActivity ? await drainRetrieval() : [];
+  const retrieved = shareActivity === true ? await drainRetrieval() : [];
 
-  const signals: { timing?: typeof timing; retrieved?: string[] } = {};
+  const signals: {
+    timing?: typeof timing;
+    retrieved?: string[];
+    input_age_s?: number;
+    focused?: boolean;
+  } = {};
   if (Object.keys(timing).length > 0) signals.timing = timing;
   if (retrieved.length > 0) signals.retrieved = retrieved;
+  const inputAgeS = inputAgeSeconds(prompt, Date.now());
+  if (inputAgeS !== undefined) signals.input_age_s = inputAgeS;
+  const focused = focusedFromPayload(payload);
+  if (focused !== undefined) signals.focused = focused;
 
   await enqueue({
     type: "impression",
@@ -294,7 +306,7 @@ export async function statusline(argv: readonly string[] = []): Promise<number> 
 
     const origin = apiOrigin(config);
 
-    const state = await readSessionState(agent, sessionId);
+    const state = await readRenderState(agent, sessionId, payload);
     // A cold read means this is the session's first render. Remember it now,
     // because the write below makes every later render look identical — and it is
     // the one moment per session cheap enough to sweep abandoned state on.
@@ -315,7 +327,7 @@ export async function statusline(argv: readonly string[] = []): Promise<number> 
      * makes re-queuing an impression that already landed harmless.
      */
     if (rotation?.fresh === true) {
-      await reportImpression(rotation.item, payload, config.sharing?.activity === true);
+      await reportImpression(rotation.item, payload, config.sharing?.activity, state.prompt);
     }
 
     await persistRender(agent, sessionId, state, outcome);

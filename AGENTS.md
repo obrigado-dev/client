@@ -20,8 +20,8 @@ this passes on every laptop and fails on every runner.
 | What | Where it goes | How | State |
 |---|---|---|---|
 | `@obrigado/surface` | npm | tag `surface-v<version>` → `publish.yml` publishes | 0.3.0 published |
-| `@obrigado/opencode-plugin` | npm | same (0.1.0 was published by hand; trusted publishing is set up) | 0.2.0, a built `dist/tui.js` (0.1.0 shipped source, which OpenCode cannot load from npm); pins surface's exact version |
-| `obrigado` CLI binaries | GitHub Releases, fetched by `install.sh` | tag `v<version>` → `release.yml` | 0.3.5 released |
+| `@obrigado/opencode-plugin` | npm | same (0.1.0 was published by hand; trusted publishing is set up) | 0.3.0: reports the person's last typed message for the attention rule; a built `dist/tui.js`; pins surface's exact version |
+| `obrigado` CLI binaries | GitHub Releases, fetched by `install.sh` | tag `v<version>` → `release.yml` | 0.3.6 released |
 | VS Code / Cursor extension | each GitHub release; installed by `obrigado install --agent vscode\|cursor` (A40) | built by `release.yml` with the binaries, stamped with the release version | Marketplace publisher `obrigado` unclaimed; see `docs/PUBLISHING.md` |
 | JetBrains plugin | each GitHub release; served as a plugin repository at obrigado.dev/jetbrains/updatePlugins.xml (A40) | the same | Marketplace vendor unclaimed; see `docs/PUBLISHING.md` |
 | Pi extension | copied into `~/.pi/agent/extensions` by the CLI | ships inside the CLI | n/a |

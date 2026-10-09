@@ -127,15 +127,31 @@ class RendererTest {
     }
 
     @Test
-    fun `the payload names the session, the project, this plugin and the IDE`() {
-        val payload = Renderer.payload(sessionId = "jetbrains-u-/p", cwd = "/p", surfaceVersion = "0.1.0", hostVersion = "IU-262.10968.63")
+    fun `the payload names the session, the project, this plugin, the IDE and the window's attention`() {
+        val payload =
+            Renderer.payload(
+                sessionId = "jetbrains-u-/p",
+                cwd = "/p",
+                surfaceVersion = "0.1.0",
+                hostVersion = "IU-262.10968.63",
+                focused = true,
+                inputAt = 1_790_000_000_000,
+            )
         assertEquals(
-            """{"session_id":"jetbrains-u-/p","cwd":"/p","surface_version":"0.1.0","version":"IU-262.10968.63"}""",
+            """{"session_id":"jetbrains-u-/p","cwd":"/p","surface_version":"0.1.0","version":"IU-262.10968.63",""" +
+                """"focused":true,"input_at":1790000000000}""",
             payload,
         )
         assertEquals(
-            """{"session_id":"s","cwd":"/p"}""",
-            Renderer.payload(sessionId = "s", cwd = "/p", surfaceVersion = null, hostVersion = null),
+            """{"session_id":"s","cwd":"/p","focused":false}""",
+            Renderer.payload(
+                sessionId = "s",
+                cwd = "/p",
+                surfaceVersion = null,
+                hostVersion = null,
+                focused = false,
+                inputAt = null,
+            ),
         )
     }
 }

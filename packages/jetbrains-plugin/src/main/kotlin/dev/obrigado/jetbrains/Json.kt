@@ -53,10 +53,18 @@ internal fun jsonString(value: String): String =
         append('"')
     }
 
-/** An object of string fields, in the order given. All the payload ever needs. */
-internal fun jsonObject(fields: List<Pair<String, String>>): String =
+/**
+ * An object of scalar fields, in the order given: strings, booleans and whole numbers, which is
+ * all the payload ever needs. Anything else is written as its string form.
+ */
+internal fun jsonObject(fields: List<Pair<String, Any>>): String =
     fields.joinToString(separator = ",", prefix = "{", postfix = "}") { (key, value) ->
-        "${jsonString(key)}:${jsonString(value)}"
+        val encoded =
+            when (value) {
+                is Boolean, is Int, is Long -> value.toString()
+                else -> jsonString(value.toString())
+            }
+        "${jsonString(key)}:$encoded"
     }
 
 /** Thrown only inside the reader, and cheap: no stack trace is ever wanted for it. */
