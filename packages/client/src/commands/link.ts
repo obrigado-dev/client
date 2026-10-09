@@ -95,15 +95,8 @@ async function confirmFlow(flow: Flow, args: LinkArgs, code: string): Promise<nu
   }
 
   const entry = result.data.entry;
-  console.log(`  ${email} verified.`);
-  console.log(`  Status: ${describe(entry)}.`);
-  if (entry.listed || entry.pending_review) {
-    // In production one origin serves both tiers, so `${origin}/obrigado` is the
-    // page. The replace only matters in dev, where the API (:3000) and the web
-    // tier (:4321) are separate ports.
-    console.log(`\n  The page: ${flow.origin.replace(/:3000$/u, ":4321")}/obrigado`);
-    console.log("  Remove it any time with `obrigado unlink`.");
-  }
+  console.log(`  Verified ${email}: ${describe(entry)}.`);
+  if (entry.listed || entry.pending_review) console.log("  Undo with `obrigado unlink`.");
   return 0;
 }
 
@@ -131,16 +124,18 @@ async function requestFlow(flow: Flow, args: LinkArgs, email: string): Promise<n
 
   await writeConfig({ ...flow.config, pending_link_email: email });
 
-  console.log(`  A code is on its way to ${email}.\n`);
-  if (request.consent_listing) {
-    // The server's own sentence, verbatim — the one promise the CLI must not
-    // paraphrase is what gets published.
-    console.log(`  If you confirm it: ${result.data.publishes}\n`);
-  } else {
-    console.log("  --no-list: the email will be verified but never published.\n");
-  }
-  console.log("  Confirm with: obrigado link --code 123456");
-  console.log(`  The code expires in ${Math.round(result.data.expires_in_s / 60)} minutes.`);
+  console.log(`  Code sent to ${email}.`);
+  // The server's own sentence, verbatim — the one promise the CLI must not paraphrase is what
+  // gets published.
+  console.log(
+    request.consent_listing
+      ? `  ${result.data.publishes}\n`
+      : "  --no-list: nothing is published.\n",
+  );
+  console.log(
+    `  Confirm with \`obrigado link --code 123456\` ` +
+      `(expires in ${Math.round(result.data.expires_in_s / 60)} min).`,
+  );
   return 0;
 }
 

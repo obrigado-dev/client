@@ -107,7 +107,7 @@ describe("starting", () => {
     const code = await linkGitHub(flow, parseLinkArgs([]), noWait);
 
     expect(code).toBe(0);
-    expect(output()).toContain(`If you approve it: ${PUBLISHES}`);
+    expect(output()).toContain(`  ${PUBLISHES}`);
     expect(output()).toContain("https://github.com/login/device");
     expect(output()).toContain("WDJB-MJHT");
     expect(requests[0]?.body).toEqual({ consent_listing: true });
@@ -164,7 +164,7 @@ describe("waiting", () => {
     expect(slept).toEqual([5000, 5000, 10_000]);
     expect(requests.filter((request) => request.path === "github/poll")).toHaveLength(3);
     expect(requests.at(-1)?.body).toEqual({ flow: FLOW });
-    expect(output()).toContain("@ada linked.");
+    expect(output()).toContain("Linked @ada");
   });
 
   test("a cancel on GitHub and an expired code each say what happened", async () => {
@@ -202,7 +202,7 @@ describe("signing in (A33)", () => {
         developer_session: { token: SESSION.token, login: "ada", expires_at: SESSION.expires_at },
       },
     ]);
-    expect(output()).toContain("signed in as @ada until 2027-09-17");
+    expect(output()).toContain("Signed in until 2027-09-17");
   });
 
   test("a server from before sign-in links without a session, and nothing is written", async () => {

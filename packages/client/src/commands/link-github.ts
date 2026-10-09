@@ -59,14 +59,15 @@ async function storeSession(
   await writeConfig(session === null ? rest : { ...rest, developer_session: session });
 }
 
+/** Keep the session an approval handed over, answering the day it ends, or null for none. */
 async function signedInAs(
   flow: LinkFlow,
   login: string,
   session: DeveloperSessionWire | undefined,
-): Promise<void> {
-  if (session === undefined) return;
+): Promise<string | null> {
+  if (session === undefined) return null;
   await storeSession(flow.config, { token: session.token, login, expires_at: session.expires_at });
-  console.log(`  This install is signed in as @${login} until ${session.expires_at.slice(0, 10)}.`);
+  return session.expires_at.slice(0, 10);
 }
 
 /** What `link github` refuses before asking the server anything. */
@@ -112,16 +113,11 @@ export async function linkGitHub(
   }
 
   const { data } = started;
-  if (args.noList) {
-    console.log("  --no-list: the account will be linked but never published.\n");
-  } else {
-    // The server's sentence, verbatim — the one promise the CLI must not paraphrase.
-    console.log(`  If you approve it: ${data.publishes}\n`);
-  }
-  console.log(`  Open ${data.verification_uri} and enter:  ${data.user_code}\n`);
+  // The server's sentence, verbatim — the one promise the CLI must not paraphrase.
+  console.log(args.noList ? "  --no-list: nothing is published.\n" : `  ${data.publishes}\n`);
   console.log(
-    `  Waiting for GitHub. The code expires in ${Math.round(data.expires_in_s / 60)} minutes; ` +
-      "Ctrl-C stops waiting.",
+    `  Enter ${data.user_code} at ${data.verification_uri} ` +
+      `(expires in ${Math.round(data.expires_in_s / 60)} min). Waiting…`,
   );
   return await waitForApproval(flow, data.flow, data.interval_s, dependencies);
 }
@@ -149,20 +145,16 @@ async function waitForApproval(
     return await waitForApproval(flow, handle, outcome.interval_s, dependencies);
   }
   if (outcome.status === "linked") {
-    console.log(`\n  @${outcome.entry.login} linked.`);
-    console.log(`  Status: ${describe(outcome.entry)}.`);
-    await signedInAs(flow, outcome.entry.login, outcome.session);
-    if (outcome.entry.listed) {
-      // Dev runs the API and the site on separate ports; in production they are one origin.
-      console.log(`\n  The page: ${flow.origin.replace(/:3000$/u, ":4321")}/obrigado`);
-      console.log("  Remove it any time with `obrigado unlink github`.");
-    }
+    console.log(`\n  Linked @${outcome.entry.login}: ${describe(outcome.entry)}.`);
+    const until = await signedInAs(flow, outcome.entry.login, outcome.session);
+    const signedIn = until === null ? "" : `Signed in until ${until}. `;
+    console.log(`  ${signedIn}Undo with \`obrigado unlink github\`.`);
     return 0;
   }
   console.log(
     outcome.status === "denied"
-      ? "\n  Cancelled on GitHub. Nothing was linked."
-      : "\n  The code expired before it was approved. Run `obrigado link github` again.",
+      ? "\n  Cancelled on GitHub."
+      : "\n  The code expired. Run `obrigado link github` again.",
   );
   return 1;
 }

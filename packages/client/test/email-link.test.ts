@@ -90,13 +90,13 @@ describe("requesting a code", () => {
     expect(writes[0]?.["pending_link_email"]).toBe("dev@acme.com");
   });
 
-  test("--no-list sends consent_listing false and says the email is never published", async () => {
+  test("--no-list sends consent_listing false and says nothing is published", async () => {
     respond = () => Response.json(CODE_SENT);
 
     await link(["dev@acme.com", "--no-list"]);
 
     expect(requests[0]?.body["consent_listing"]).toBe(false);
-    expect(output()).toContain("never published");
+    expect(output()).toContain("nothing is published");
     expect(output()).not.toContain("appears on this month's page");
   });
 
