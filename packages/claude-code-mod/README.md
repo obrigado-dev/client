@@ -29,7 +29,11 @@ So the mod asks for a line only in a session that draws in the app and in no ter
 (`$.session.surfaces()`). A terminal session the app has attached to is still the terminal's.
 
 Like every other host, it draws and does not deliver. It runs
-`obrigado statusline --agent claude-desktop --json` every thirty seconds and draws the parts it is
+`obrigado statusline --agent claude-desktop --json` when a session starts, when the app attaches,
+after `/clear` and `/resume`, and then on a thirty-second beat only if the session did something
+since the last line (a prompt, or a model request), as a terminal's status line redraws only on
+the conversation's events. Nothing in the mods API says whether the app's window is in front, so
+an app left idle, hidden or not, keeps its line and counts nothing more. It draws the parts it is
 handed with Claude Code's own elements: the label as plain text, the brand's square icon as an
 `Svg` (the app's only picture element, drawn as an image with scripts stripped) one line high and
 sized from the PNG's own header, and the copy as one `Link` to the click URL. The icon is

@@ -130,6 +130,21 @@ const timing = sessionTiming();
 let promptId: string | undefined;
 
 /**
+ * Whether the session has done anything since the last line was drawn: a prompt sent, or a model
+ * request made. The clock draws a new line only when it has, as a terminal's status line redraws
+ * only on the conversation's events, because nothing here can tell whether the app's window is in
+ * front: an app left idle, hidden or not, keeps the line it has and counts nothing more.
+ */
+let stirred = false;
+
+/** The clock's beat: a new line if the session has stirred since the last, else nothing. */
+function tick($: Mods): void {
+  if (!stirred) return;
+  stirred = false;
+  void refresh($);
+}
+
+/**
  * One render, as the other hosts do it: the payload Claude Code would send its status line,
  * cut to what the renderer reads, and the first non-empty line of what comes back.
  *
@@ -190,7 +205,7 @@ export function register(on: On): void {
     timing.start(await $.clock.now());
     ticking?.cancel();
     ticking = $.clock.every(REFRESH_MS, () => {
-      void refresh($);
+      tick($);
     });
     // The first line now rather than a tick from now, without holding up the session's start.
     $.clock.after(1, () => {
@@ -202,12 +217,15 @@ export function register(on: On): void {
   // A person sending a prompt. Only the moment is kept, never the text.
   on("prompt.submit", async ($, e, next) => {
     promptId = `prompt-${await $.clock.now()}`;
+    stirred = true;
     return next(e);
   });
 
   // Every model request of the session, the main loop's and its subagents', timed while it is in
   // flight and passed on untouched. This is the status line's `total_api_duration_ms`.
+  // Each one stirs the session, so the clock's next beat draws a new line.
   on("turn.step", async function* ($, e, next) {
+    stirred = true;
     const startedAt = await $.clock.now();
     try {
       return yield* next(e);
