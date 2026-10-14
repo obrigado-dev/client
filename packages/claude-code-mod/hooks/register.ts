@@ -170,6 +170,12 @@ async function appOnly($: Mods): Promise<boolean> {
   return surfaces.includes("desktop") && !surfaces.includes("terminal");
 }
 
+/** Whether a `session.end` is one conversation giving way to the next in the same process. */
+function continuesInProcess(e: unknown): boolean {
+  const reason = typeof e === "object" && e !== null ? (e as { reason?: unknown }).reason : null;
+  return reason === "clear" || reason === "resume";
+}
+
 /** Asks for a line only in a session that is the app's; anywhere else there is none to count. */
 async function refresh($: Mods): Promise<void> {
   sponsored = (await appOnly($)) ? await render($) : null;
@@ -219,7 +225,18 @@ export function register(on: On): void {
     return next(e);
   });
 
-  on("session.end", (_, e, next) => {
+  on("session.end", async ($, e, next) => {
+    // `/clear` and `/resume` end one conversation and begin the next in the same process, and
+    // Claude Code raises `session.start` once per process, never again for the next one. Stopping
+    // here left the last line on screen for the rest of the app's session, never refreshed and
+    // never counted. So the lines go on, and the clock starts over as for a session starting.
+    if (continuesInProcess(e)) {
+      timing.start(await $.clock.now());
+      $.clock.after(1, () => {
+        void refresh($);
+      });
+      return next(e);
+    }
     ticking?.cancel();
     ticking = null;
     return next(e);
