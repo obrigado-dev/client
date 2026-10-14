@@ -230,7 +230,9 @@ function installedTargets(config: ClientConfig | null): InstallAgent[] {
  *
  * A remover says what it actually did and leaves the integration record cleared, except where
  * it found nothing of ours — Claude Code's "foreign" case deliberately does not touch the
- * record, because a statusline belonging to another tool is not ours to have removed.
+ * record, because a statusline belonging to another tool is not ours to have removed. Nor
+ * does its "nested" case, where we still render from inside the developer's own command
+ * until they take us out of it.
  */
 
 async function removeClaudeCode(
@@ -241,6 +243,12 @@ async function removeClaudeCode(
   const result = await uninstallStatusLine(current?.previous_status_line ?? null);
   if (result === "foreign") {
     console.log("Claude Code: current statusline belongs to another tool; left alone.");
+    return;
+  }
+  if (result === "nested") {
+    console.log(
+      `Claude Code: your statusline runs Obrigado inside another command; left alone. Take Obrigado out of it in ${tilde(CLAUDE_SETTINGS_PATH)}.`,
+    );
     return;
   }
   console.log(

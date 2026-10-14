@@ -12,6 +12,8 @@
  *   2. No program file, binary, bundle or policy is touched — ever.
  *   3. A pre-existing statusline from another tool is never overwritten. If one
  *      is present, install REFUSES and explains, rather than silently winning.
+ *      Nor is one removed: uninstall deletes only an entry that is wholly ours,
+ *      and a developer's command that runs ours inside it is theirs to edit.
  *   4. The file is backed up before the write and the previous value recorded,
  *      so uninstall restores byte-for-byte what was there.
  *   5. The write is atomic (temp file + rename), so an interrupted install
@@ -53,7 +55,9 @@ interface StatusLineEntry {
 export type SettingsObject = Record<string, unknown>;
 
 /**
- * Whether an entry is one we wrote.
+ * Whether our renderer runs in an entry at all: as the whole of it, which is what install
+ * writes, or nested inside a command of the developer's. `statusLineOwner` tells the two
+ * apart, for the one caller that must — uninstall.
  *
  * Must recognise both forms — the global `obrigado statusline` and the
  * source-checkout `<bun> /path/to/packages/client/src/cli.ts statusline` — or uninstall
@@ -83,6 +87,39 @@ export function isOurStatusLine(value?: unknown): boolean {
     command,
   );
   return installedCli || sourceCli;
+}
+
+/** Whose an entry is, by what its command runs. */
+export type StatusLineOwner = "ours" | "nested" | "foreign";
+
+/**
+ * `ours` when the whole command is our renderer, `nested` when it is a command of the
+ * developer's that runs ours inside it, `foreign` when nothing of ours runs at all.
+ *
+ * The line between the first two is what uninstall may delete. A launcher such as
+ * `RUNCOMMAND_BASE='obrigado statusline' runcommand statusline` renders another tool's line as
+ * well as ours, so removing that entry as ours would take the developer's line with it.
+ */
+export function statusLineOwner(value?: unknown): StatusLineOwner {
+  if (!isOurStatusLine(value)) return "foreign";
+  // `isOurStatusLine` only says yes to an entry whose command is a string.
+  const command = (value as StatusLineEntry).command ?? "";
+  /*
+   * Ours alone means the command IS one of the two forms install writes, from its first word:
+   * `obrigado statusline …` by name or path, or `<bun> …/packages/client/src/cli.ts statusline …`.
+   *
+   * Quoting, chaining, piping, redirection, substitution and a second line are each a way for
+   * a command of the developer's to run around ours, so any one of them makes the entry
+   * theirs. Ruling them out first is also what keeps the patterns below honest: past that
+   * check, `\S` and `.` cannot carry a second command.
+   */
+  if (/['"`;&|<>()\n]/u.test(command)) return "nested";
+  const installedCli = /^\s*(?:\S*[/\\])?obrigado\s+statusline(?:\s.*)?$/iu.test(command);
+  const sourceCli =
+    /^\s*(?:\S*[/\\])?bun(?:\.exe)?\s+\S*[/\\]packages[/\\]client[/\\]src[/\\]cli\.ts\s+statusline(?:\s.*)?$/iu.test(
+      command,
+    );
+  return installedCli || sourceCli ? "ours" : "nested";
 }
 
 export async function readSettings(path = CLAUDE_SETTINGS_PATH): Promise<SettingsObject | null> {
@@ -198,9 +235,17 @@ export async function installStatusLine(
   return { outcome: { status: "installed", backup }, previous: existing ?? null };
 }
 
-export type UninstallOutcome = "removed" | "restored" | "not-installed" | "foreign";
+export type UninstallOutcome = "removed" | "restored" | "not-installed" | "foreign" | "nested";
 
-/** Remove our entry, restoring whatever was there before if we recorded it. */
+/**
+ * Remove our entry, restoring whatever was there before if we recorded it.
+ *
+ * Only an entry that is wholly ours is touched. One that runs ours inside a command of the
+ * developer's comes back `nested` and stays exactly as it is, even with a previous value on
+ * record: taking just our part out would mean rewriting their shell, which is a guess, and
+ * removing or replacing the whole entry would take their line with ours while reporting that
+ * only Obrigado's had gone.
+ */
 export async function uninstallStatusLine(
   previous: unknown,
   path = CLAUDE_SETTINGS_PATH,
@@ -211,7 +256,8 @@ export async function uninstallStatusLine(
 
   const existing = settings["statusLine"];
   if (existing === undefined || existing === null) return "not-installed";
-  if (!isOurStatusLine(existing)) return "foreign";
+  const owner = statusLineOwner(existing);
+  if (owner !== "ours") return owner;
 
   await backupSettings(path, backupDir);
 

@@ -15,6 +15,7 @@ import {
   isOurStatusLine,
   readSettings,
   statusLineCommand,
+  statusLineOwner,
   uninstallStatusLine,
 } from "../src/statusline.ts";
 
@@ -150,6 +151,28 @@ describe("uninstalling", () => {
 
     expect(await uninstallStatusLine(null, settingsPath, backups)).toBe("foreign");
     expect((await readSettings(settingsPath))?.["statusLine"]).toEqual(foreign);
+  });
+
+  /*
+   * A launcher that renders another tool's line and then ours, as runcommand's RUNCOMMAND_BASE
+   * does. Recognition calls it ours, rightly, for chaining; uninstall used to delete it on that
+   * word, taking the developer's own line with ours and reporting that only Obrigado's had gone.
+   */
+  test("leaves a developer's command that runs ours inside it alone", async () => {
+    const launcher = {
+      type: "command",
+      command: "RUNCOMMAND_BASE='obrigado statusline --agent claude-code' runcommand statusline",
+      padding: 0,
+    };
+    await write({ model: "opus", statusLine: launcher });
+    const before = await readFile(settingsPath, "utf8");
+
+    // Nothing recorded to restore, then something: neither may replace their command.
+    expect(await uninstallStatusLine(null, settingsPath, backups)).toBe("nested");
+    const previous = { type: "command", command: "runcommand statusline" };
+    expect(await uninstallStatusLine(previous, settingsPath, backups)).toBe("nested");
+
+    expect(await readFile(settingsPath, "utf8")).toBe(before);
   });
 
   test("is a no-op when nothing is installed", async () => {
@@ -300,4 +323,51 @@ describe("recognising our command wherever it is nested", () => {
       expect(isOurStatusLine({ command })).toBe(false);
     });
   }
+});
+
+/*
+ * Ownership decides what uninstall may DELETE, which recognition cannot: every command below
+ * runs ours, and only the first group is ours alone.
+ */
+describe("telling our entry from a command that runs it", () => {
+  const ours = [
+    ["the installed CLI by name", "obrigado statusline --agent claude-code"],
+    ["the installed CLI by path", "/Users/dev/.local/bin/obrigado statusline --agent claude-code"],
+    [
+      "a source checkout",
+      "/opt/homebrew/bin/bun /x/client/packages/client/src/cli.ts statusline --agent claude-code",
+    ],
+    ["the checkout form the READMEs document", "bun /x/packages/client/src/cli.ts statusline"],
+  ] as const;
+
+  for (const [name, command] of ours) {
+    test(`${name} is ours`, () => {
+      expect(statusLineOwner({ type: "command", command })).toBe("ours");
+    });
+  }
+
+  const nested = [
+    [
+      "a launcher's quoted inner command",
+      "RUNCOMMAND_BASE='/bin/bun /x/packages/client/src/cli.ts statusline' runcommand statusline",
+    ],
+    ["a wrapper given ours as its arguments", "my-wrapper obrigado statusline"],
+    ["ours with a second command after it", "obrigado statusline; something-else"],
+    ["ours with a second command on the next line", "obrigado statusline\nsomething-else"],
+    ["ours piped into something else", "obrigado statusline | tee /tmp/line"],
+  ] as const;
+
+  for (const [name, command] of nested) {
+    test(`${name} is the developer's`, () => {
+      expect(statusLineOwner({ type: "command", command })).toBe("nested");
+    });
+  }
+
+  test("a command that never runs ours is foreign", () => {
+    expect(statusLineOwner({ type: "command", command: "runcommand statusline" })).toBe("foreign");
+    expect(statusLineOwner({ type: "command", command: "obrigado statusline-preview" })).toBe(
+      "foreign",
+    );
+    expect(statusLineOwner(null)).toBe("foreign");
+  });
 });
