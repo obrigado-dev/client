@@ -17,11 +17,7 @@ import {
   CodexUnsupportedError,
   uninstallCodexStatusLine,
 } from "../codex-statusline.ts";
-import {
-  installOpenCodePlugin,
-  OPENCODE_TUI_CONFIG_PATH,
-  uninstallOpenCodePlugin,
-} from "../opencode-plugin.ts";
+import { installOpenCodePlugin, uninstallOpenCodePlugin } from "../opencode-plugin.ts";
 
 import { installStatusLine, uninstallStatusLine } from "../statusline.ts";
 import { decideSharing, reportStored } from "./privacy-prompt.ts";
@@ -123,8 +119,9 @@ async function installOpenCodeAdapter(
       row: {
         mark: "done",
         host: "OpenCode",
-        detail: `plugin · ${tilde(OPENCODE_TUI_CONFIG_PATH)} · ${already ? "already there" : "restart OpenCode"}`,
-        backedUp: !already && outcome.backup !== null,
+        // Both files when OpenCode 2 has made its own: each major reads only one of them.
+        detail: `plugin · ${outcome.files.map((file) => tilde(file)).join(", ")} · ${already ? "already there" : "restart OpenCode"}`,
+        backedUp: !already && outcome.backups.length > 0,
       },
     };
   } catch (error) {
@@ -268,7 +265,7 @@ async function removeOpenCode(
   const result = await uninstallOpenCodePlugin();
   console.log(
     result === "removed"
-      ? "OpenCode: removed only Obrigado's plugin entry."
+      ? "OpenCode: removed only Obrigado's plugin entries."
       : "OpenCode: no Obrigado plugin entry found.",
   );
   integrations.opencode = {

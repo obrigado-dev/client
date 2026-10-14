@@ -112,9 +112,10 @@ The host decides this, not us. There are three precedents:
    the client prints one line to stdout. This is the simplest case and the one to copy when
    the host supports a status-line command. See `packages/client/src/commands/statusline.ts`.
 2. **The host loads a plugin.** OpenCode registers `@obrigado/opencode-plugin` in its own
-   `tui.json`, loads the package's `./tui` export, and the plugin renders into the host's
-   `app_bottom` slot. Copy this when the
-   host has a plugin API. See `packages/opencode-plugin/`.
+   `tui.json` (OpenCode 2: `cli.json`), loads the package's `./tui` export, and the plugin
+   renders into the host's `app_bottom` slot (OpenCode 2: `app`). One module serves both
+   majors, each finding its own entry point on it. Copy this when the host has a plugin API.
+   See `packages/opencode-plugin/`.
 3. **The host has an extension gallery.** VS Code and Cursor install an extension that creates
    a status bar item. See `packages/vscode-extension/`. JetBrains IDEs install a plugin that
    registers a status bar widget through `statusBarWidgetFactory`; see

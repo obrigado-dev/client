@@ -12,9 +12,9 @@ Requests for one are open ([#8619](https://github.com/anomalyco/opencode/issues/
 [#23539](https://github.com/anomalyco/opencode/issues/23539)).
 
 What OpenCode has instead is better than either: a TUI plugin API where a plugin registers
-Solid components into named slots of the host's layout. `app_bottom` is persistent and
-host-owned, which is the property that makes a status line a countable impression and a
-toast not.
+Solid components into named slots of the host's layout. The slot under the routed screen
+(`app_bottom` in OpenCode 1, `app` in OpenCode 2) is persistent and host-owned, which is the
+property that makes a status line a countable impression and a toast not.
 
 **This is why OpenCode gets an integration and Codex does not.** Codex's reachable surfaces
 were a warning cell, an Enterprise-only push field, the model's own plan output, and the
@@ -42,6 +42,36 @@ the advertiser's copy, and nobody can click the disclosure itself and land on an
 Every failure renders nothing, leaving OpenCode looking exactly as it did before the plugin
 was installed. That is the correct failure for an advertisement.
 
+## OpenCode 1 and 2
+
+OpenCode 2 is a rewrite published beside OpenCode 1 (`opencode` on npm for 2, `opencode-ai` for
+1), with a TUI plugin API of its own. One module serves both, each host finding its own entry
+point on the default export (A42):
+
+| | OpenCode 1 (1.18.10 on) | OpenCode 2 (2.0.29) |
+|---|---|---|
+| Requires of the default export | `tui(api)`, and no `server()` beside it | a non-empty `id` and `setup(context)` |
+| Where the line goes | `app_bottom`, `order: 90` | appended to `app` |
+| The open session | `api.route.current.params.sessionID` | `context.ui.router.current()`, `{ type: "session", sessionID }` |
+| The person's last message | newest `user` message with a text part neither `synthetic` nor `ignored` | newest `user` message; OpenCode's own text is a `synthetic` message |
+| Teardown | `api.lifecycle.onDispose` | the function `setup` returns |
+| Plugin list | `tui.json`, `plugin` | `cli.json`, `plugins`, carried over from `tui.json` once |
+
+Neither host rejects the other's key, so `{ id, tui, setup }` loads in both. 0.3.0 exported
+only `tui`, and OpenCode 2 refused it as an "Invalid V2 TUI plugin module".
+
+The two draw differently in one respect. OpenCode 1 calls a slot's callback inside its own
+tracking scope, so reading the creative there swaps the row when it rotates; OpenCode 2 calls a
+claim's render once and untracked, so the rotation is a keyed `Show` instead. OpenCode 2's claims
+also carry no order: claims at one place draw in the order their plugins were enabled.
+
+`dist/tui.js` is one build for both. The JSX helpers it imports (`createElement`, `insert`,
+`setProp`, `createComponent`…) and the elements it uses (`box`, `text`, `span`, `a`,
+`ascii_font`) are the same in OpenTUI 0.4.5, which OpenCode 1 ships, and 0.5.17, which OpenCode 2
+ships, and each host rewrites `solid-js` and `@opentui/*` to its own copy. OpenCode 2's API is
+declared by hand in `src/opencode2.ts`, narrowed to what is read, because `@opencode/plugin`'s
+own types bring OpenTUI 0.5 and OpenCode 2's whole client with them.
+
 ## Install
 
 ```bash
@@ -49,17 +79,29 @@ obrigado install --agent opencode
 ```
 
 That appends one entry to `plugin` in `~/.config/opencode/tui.json` (or
-`$XDG_CONFIG_HOME/opencode`), preserving every other key, backing the file up first, and
-writing atomically. `obrigado uninstall --agent opencode` removes only that entry, and drops
-the key entirely if nothing else is in it. A `tui.json` that cannot be parsed — comments are
-legal there and illegal in JSON — is refused rather than rewritten from a lossy parse.
+`$XDG_CONFIG_HOME/opencode`), and, once OpenCode 2 has made its own `cli.json`, one to that
+file's `plugins` too, preserving every other key, backing each file up first, and writing
+atomically. `obrigado uninstall --agent opencode` removes only those entries, and drops a key
+entirely if nothing else is in it. A file that cannot be parsed — comments are legal there and
+illegal in JSON — is refused rather than rewritten from a lossy parse, and the install stops
+before writing either.
 
-Restart OpenCode after installing. By hand, the entry is:
+`cli.json` is never created. OpenCode 2 fills it from `tui.json` the first time it runs, our
+entry included, and a `cli.json` that already existed would stop it carrying over the rest of
+the developer's settings.
+
+Restart OpenCode after installing. By hand, the entries are:
 
 ```jsonc
+// ~/.config/opencode/tui.json, which OpenCode 1 reads
 {
   "$schema": "https://opencode.ai/tui.json",
-  "plugin": ["@obrigado/opencode-plugin@0.3.0"]
+  "plugin": ["@obrigado/opencode-plugin@0.4.0"]
+}
+// ~/.config/opencode/cli.json, which OpenCode 2 reads (`$OPENCODE_CONFIG_DIR` when set)
+{
+  "$schema": "https://opencode.ai/v2/cli.json",
+  "plugins": ["@obrigado/opencode-plugin@0.4.0"]
 }
 ```
 
@@ -69,7 +111,8 @@ OpenCode installs nothing and says nothing. Installs before 0.3.3 wrote that for
 
 At a version, because OpenCode never asks npm again about a plugin it has installed: an unpinned
 spec stays on the first version it got. Change the version to update. The CLI does this for you
-(A41): it writes the version it shipped with, and moves the pin after it updates itself.
+(A41): it writes the version it shipped with, and moves the pin in both files after it updates
+itself. OpenCode 2 caches the same way, so its pin moves the same way (A42).
 
 From a source checkout, point the plugin at your client with `OBRIGADO_STATUSLINE_COMMAND`.
 
@@ -86,6 +129,24 @@ rather than from npm:
   only from a local path: OpenTUI's Solid transform skips everything under `node_modules`, where
   an npm install puts the package, so from npm the source never loaded. Since 0.2.0 the package
   ships `dist/tui.js`, compiled by `build.ts` with the host's modules left external.
+
+`opencode` 2.0.29 and `opencode-ai` 1.18.35 in tmux, 2026-10-14, each with its own `HOME` and
+XDG directories (2 with `--standalone`), the renderer replaced by a fixture through
+`OBRIGADO_STATUSLINE_COMMAND`, a provider pointed at a closed localhost port, and 0.4.0's
+`dist/tui.js` in place of the published 0.3.0 where each host's npm cache had installed it:
+
+- **Published 0.3.0 fails in OpenCode 2** as reported: "Plugin failed:
+  @obrigado/opencode-plugin@0.3.0".
+- **0.4.0 draws in both**, on the home screen and in a session, under the routed screen. The
+  payload carries `surface_version` 0.4.0 and, in a session, its `ses_…` id and the typed
+  message's `msg_…` id and time in epoch milliseconds.
+- **Turning it off stops it in both** (`/plugins` in 2, the command palette's Plugins in 1): the
+  line goes, and nothing runs the renderer in the 45 seconds after. Turned back on in 2, it
+  fetches at once. Published 0.3.0 did not stop in OpenCode 1: disabled, it went on running the
+  renderer every 30 seconds with nothing drawn, because its teardown was never handed to the host.
+- A `file:` tarball spec is no way to test a build in OpenCode 2: installed from one, the same
+  `dist/tui.js` fails with "Cannot find package '@opentui/solid'" from a cache path that contains
+  `file:`. Replace the files of a registry install instead.
 
 ## Known defects
 
@@ -150,6 +211,12 @@ it, which is why this package has no `build` script and why the repo still has n
 
 ## Stability
 
-The TUI plugin API is undocumented — there is no docs page, and the host that loads it is
-named `createLegacyTuiPluginHost`. The types here come from `@opencode-ai/plugin@1.18.10`
+OpenCode 1's TUI plugin API is undocumented — there is no docs page, and the host that loads
+it is named `createLegacyTuiPluginHost`. The types here come from `@opencode-ai/plugin@1.18.10`
 and `@opentui/solid@0.4.5`. Treat it as movable.
+
+OpenCode 2's is published, as `@opencode/plugin/tui`, and calls its slot paths documented API,
+"coarse, few, and kept stable across host refactors" (`SlotMap`, 2.0.29). A claim aimed at a
+path the host stops publishing is appended to the nearest surviving ancestor rather than
+dropped. The members this package reads are copied from 2.0.29 into `src/opencode2.ts`; check
+them against a new major before trusting it.

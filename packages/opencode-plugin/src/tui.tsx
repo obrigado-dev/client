@@ -1,17 +1,26 @@
+/** @jsxImportSource @opentui/solid */
+// The pragma repeats this package's tsconfig for Bun's own JSX transform, which loads this file in
+// tests run from a repository root whose tsconfig names no JSX runtime. The build ignores it: JSX
+// there is compiled by OpenTUI's Solid transform (`build.ts`).
+
 /**
  * Obrigado's OpenCode surface.
  *
  * OpenCode has no `statusLine` setting — no config key names a command, and there is no
  * built-in item list to extend the way Codex has. What it has instead is better than
  * either: a TUI plugin API where a plugin registers Solid components into NAMED SLOTS of
- * the host's own layout. `app_bottom` is persistent and host-owned, which is the property
- * that makes a status line a countable impression and a toast not.
+ * the host's own layout. The slot under the routed screen (`app_bottom` in OpenCode 1, `app`
+ * in OpenCode 2) is persistent and host-owned, which is the property that makes a status
+ * line a countable impression and a toast not.
+ *
+ * Both majors load this one module, each through its own entry point: OpenCode 1 calls
+ * `tui(api)` and OpenCode 2 calls `setup(context)`. Everything past the adapters is shared.
  *
  * Two things follow, and they are what make this shippable where Codex was not:
  *
  *   1. Nothing is patched. The plugin loads because the developer listed it in
- *      `tui.json`, and it draws only inside a slot the host offers. No bundle rewritten,
- *      no launcher replaced, no CSP relaxed.
+ *      `tui.json` (OpenCode 2: `cli.json`), and it draws only inside a slot the host
+ *      offers. No bundle rewritten, no launcher replaced, no CSP relaxed.
  *   2. The copy is genuinely CLICKABLE. OpenTUI exposes `a` with an `href`, so the
  *      creative is a real link rather than a URL printed next to some text. Codex could
  *      do neither — it rendered Markdown literally and stripped OSC 8 — and that, not
@@ -27,9 +36,10 @@ import { parseSponsored, statuslineArgv } from "@obrigado/surface";
 import type { Sponsored, SponsoredSpan } from "@obrigado/surface";
 import type { TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui";
 import type { JSX } from "@opentui/solid";
-import { lastTypedPrompt } from "./prompt.ts";
+import type { OpenCode2Context, OpenCode2Plugin } from "./opencode2.ts";
+import { lastTypedPrompt, lastUserMessage } from "./prompt.ts";
 import type { TypedPrompt } from "./prompt.ts";
-import { createRoot, createSignal, onCleanup } from "solid-js";
+import { createRoot, createSignal, Show } from "solid-js";
 
 const AGENT = "opencode";
 
@@ -40,7 +50,7 @@ const AGENT = "opencode";
  * separately and need different sentences to fix. `package.json` must agree; a test holds them
  * together, the same way `CLIENT_VERSION` is held to the client's manifest.
  */
-const SURFACE_VERSION = "0.3.0";
+const SURFACE_VERSION = "0.4.0";
 
 /**
  * How often the line is re-rendered.
@@ -261,7 +271,7 @@ async function firstLine(stream: ReadableStream<Uint8Array>): Promise<string | n
 /**
  * The row itself.
  *
- * Split out because `initialize` should read as wiring rather than markup — and, as it
+ * Split out because the adapters should read as wiring rather than markup — and, as it
  * turned out, because it is what makes the hover release. Read inside the slot callback,
  * `hovered()` re-ran the whole callback and rebuilt the row on every pointer change; since
  * OpenTUI skips `out` for a renderable that is already destroyed, the flag could never be
@@ -318,7 +328,37 @@ function sponsoredRow(
   );
 }
 
-function initialize(api: TuiPluginApi, disposeRoot: () => void): void {
+/**
+ * What the line needs from whichever OpenCode loaded it. The two majors name these differently,
+ * so each gets a few lines of adapter below and the line itself is written once.
+ */
+interface Host {
+  /** The open session's id, or null on the home route and any other. */
+  readonly session: () => string | null;
+  /** The person's latest typed message in a session. */
+  readonly prompt: (sessionId: string) => TypedPrompt | null;
+}
+
+/** The line: the creative to draw, the row that draws it, and its start and teardown. */
+interface Line {
+  readonly sponsored: () => Sponsored | null;
+  readonly row: (ad: Sponsored) => JSX.Element;
+  /** Fetches now, then every `REFRESH_MS`. */
+  readonly begin: () => void;
+  readonly dispose: () => void;
+}
+
+/**
+ * The home route has no session, and its rotation is genuinely separate from any
+ * conversation's — so it gets its own key rather than borrowing the last one's.
+ */
+const HOME_SESSION = "opencode-home";
+
+function createLine(host: Host): Line {
+  return createRoot((disposeRoot) => buildLine(host, disposeRoot));
+}
+
+function buildLine(host: Host, disposeRoot: () => void): Line {
   const [sponsored, setSponsored] = createSignal<Sponsored | null>(null);
   // One flag for the whole line, not one per run.
   //
@@ -347,20 +387,13 @@ function initialize(api: TuiPluginApi, disposeRoot: () => void): void {
    */
   const [startup, setStartup] = createSignal(wordmarkEnabled());
   let firstCopy: string | null = null;
+  let timer: ReturnType<typeof setInterval> | undefined;
   let disposed = false;
 
   const refresh = (): void => {
-    // The home route has no session, and its rotation is genuinely separate from any
-    // conversation's — so it gets its own key rather than borrowing the last one's.
-    //
-    // Read defensively rather than narrowing on `name === "session"`: the route union
-    // ends in an open `{ name: string; params?: … }`, so a plugin cannot actually
-    // discriminate on the name, and a host that adds a route must not break this.
-    const route = api.route.current;
-    const raw = "params" in route ? route.params?.["sessionID"] : undefined;
-    const sessionId = typeof raw === "string" && raw.length > 0 ? raw : "opencode-home";
+    const sessionId = host.session() ?? HOME_SESSION;
     void (async () => {
-      const prompt = sessionId === "opencode-home" ? null : lastTypedPrompt(api, sessionId);
+      const prompt = sessionId === HOME_SESSION ? null : host.prompt(sessionId);
       const next = await fetchSponsored(sessionId, process.cwd(), prompt);
       // A refresh that lands after teardown must not touch a disposed root.
       if (disposed) return;
@@ -380,41 +413,124 @@ function initialize(api: TuiPluginApi, disposeRoot: () => void): void {
     })();
   };
 
-  refresh();
-  const timer = setInterval(refresh, REFRESH_MS);
-
-  onCleanup(() => {
-    disposed = true;
-    // A stale hover would otherwise survive into the next creative, leaving a line
-    // that renders as if the mouse were still on it.
-    setHovered(false);
-    clearInterval(timer);
-    if (glyphTimer !== undefined) clearInterval(glyphTimer);
-
-    disposeRoot();
-  });
-
-  api.slots.register({
-    // Late, so the host's own operational readout keeps its position. We are a guest in
-    // this layout, and the developer's model and directory are not inventory to displace.
-    order: 90,
-    slots: {
-      app_bottom() {
-        const ad = sponsored();
-        return ad === null ? null : sponsoredRow(ad, hovered, setHovered, frame, startup);
-      },
+  return {
+    sponsored,
+    row: (ad) => sponsoredRow(ad, hovered, setHovered, frame, startup),
+    begin: () => {
+      if (disposed || timer !== undefined) return;
+      refresh();
+      timer = setInterval(refresh, REFRESH_MS);
     },
-  });
+    dispose: () => {
+      if (disposed) return;
+      disposed = true;
+      // A stale hover would otherwise survive into the next creative, leaving a line
+      // that renders as if the mouse were still on it.
+      setHovered(false);
+      if (timer !== undefined) clearInterval(timer);
+      if (glyphTimer !== undefined) clearInterval(glyphTimer);
+      disposeRoot();
+    },
+  };
 }
 
-const plugin: TuiPluginModule = {
-  id: "obrigado",
-  tui: (api) => {
-    createRoot((disposeRoot) => {
-      initialize(api, disposeRoot);
+/**
+ * Claims the host's slot, and only then starts the line.
+ *
+ * Every fetch is an impression the renderer records, so a line must never run behind a slot the
+ * host refused: that would bill for copy nobody can see. A failed claim tears the line down and
+ * fails the plugin's load, which the host reports.
+ */
+function claim<T>(line: Line, place: () => T): T {
+  let placed: T;
+  try {
+    placed = place();
+  } catch (error) {
+    line.dispose();
+    throw error;
+  }
+  line.begin();
+  return placed;
+}
+
+/**
+ * OpenCode 1: `tui(api)`, the line in `app_bottom`.
+ *
+ * The host calls a slot's callback inside its own tracking scope, so the read of the creative
+ * there is what swaps the row when it rotates.
+ */
+function tui(api: TuiPluginApi): Promise<void> {
+  const line = createLine({
+    // Read defensively rather than narrowing on `name === "session"`: the route union
+    // ends in an open `{ name: string; params?: … }`, so a plugin cannot actually
+    // discriminate on the name, and a host that adds a route must not break this.
+    session: () => {
+      const route = api.route.current;
+      const raw = "params" in route ? route.params?.["sessionID"] : undefined;
+      return typeof raw === "string" && raw.length > 0 ? raw : null;
+    },
+    prompt: (sessionId) => lastTypedPrompt(api, sessionId),
+  });
+  claim(line, () => {
+    // Turning the plugin off, or reloading it, stops the spawns along with the drawing.
+    api.lifecycle.onDispose(line.dispose);
+    api.slots.register({
+      // Late, so the host's own operational readout keeps its position. We are a guest in
+      // this layout, and the developer's model and directory are not inventory to displace.
+      order: 90,
+      slots: {
+        app_bottom() {
+          const ad = line.sponsored();
+          return ad === null ? null : line.row(ad);
+        },
+      },
     });
-    return Promise.resolve();
-  },
-};
+  });
+  return Promise.resolve();
+}
+
+/**
+ * OpenCode 2: `setup(context)`, the line appended to the `app` slot.
+ *
+ * `app` sits under the routed screen on every route, where OpenCode 1's `app_bottom` was. There
+ * is no order to ask for: claims at one place draw in the order their plugins were enabled.
+ *
+ * OpenCode 2 calls a claim's render once and untracked, so a read in the callback would never
+ * rotate. The keyed `Show` is the tracking scope instead, and rebuilds the row for each creative
+ * as OpenCode 1 does.
+ */
+function setup(context: OpenCode2Context): () => void {
+  const line = createLine({
+    session: () => {
+      const route = context.ui.router.current();
+      const id = route.type === "session" ? route.sessionID : undefined;
+      return typeof id === "string" && id.length > 0 ? id : null;
+    },
+    prompt: (sessionId) => lastUserMessage(context, sessionId),
+  });
+  const release = claim(line, () =>
+    context.ui.slot({
+      append: "app",
+      render: () => (
+        <Show when={line.sponsored()} keyed>
+          {(ad: Sponsored) => line.row(ad)}
+        </Show>
+      ),
+    }),
+  );
+  return () => {
+    release();
+    line.dispose();
+  };
+}
+
+/**
+ * One module for both majors, each finding its own entry point in it.
+ *
+ * OpenCode 1 requires `tui()`, accepts an `id`, and refuses only a `server()` beside it (1.18.10
+ * through 1.19.0, `readV1Plugin`). OpenCode 2 requires a non-empty `id` and `setup()` and reads
+ * nothing else (2.0.29, `isPlugin`). Neither rejects the other's key.
+ */
+const plugin: TuiPluginModule & OpenCode2Plugin = { id: "obrigado", tui, setup };
 
 export default plugin;

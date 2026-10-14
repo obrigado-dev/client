@@ -12,7 +12,7 @@ import {
   SESSION_STATE_DIR,
 } from "../config.ts";
 import { codexSupport } from "../codex-statusline.ts";
-import { hasOurPlugin, OPENCODE_TUI_CONFIG_PATH, readTuiConfig } from "../opencode-plugin.ts";
+import { openCodePluginFiles } from "../opencode-plugin.ts";
 import { resolveDeps } from "../deps.ts";
 import { supportsHyperlinks } from "../link.ts";
 import { sessionStateSummary } from "../session-state.ts";
@@ -54,9 +54,9 @@ export async function status(): Promise<number> {
   }
 
   const origin = apiOrigin(config);
-  const [settings, tuiConfig, runtime, workspace, stats] = await Promise.all([
+  const [settings, opencodeFiles, runtime, workspace, stats] = await Promise.all([
     readSettings().catch(() => null),
-    readTuiConfig().catch(() => null),
+    openCodePluginFiles(),
     sessionStateSummary(),
     resolveDeps(),
     fetchStats({ apiOrigin: origin, installKey: config.install_key }),
@@ -78,7 +78,7 @@ export async function status(): Promise<number> {
   console.log(
     `  Claude Code   ${isOurStatusLine(settings?.["statusLine"]) ? "configured" : "not installed"}`,
   );
-  console.log(`  OpenCode      ${hasOurPlugin(tuiConfig) ? "configured" : "not installed"}`);
+  console.log(`  OpenCode      ${opencodeFiles.length > 0 ? "configured" : "not installed"}`);
   console.log(`  Codex         unsupported upstream (${codexSupport().issue})`);
   console.log(`  API           ${origin}`);
 
@@ -143,7 +143,7 @@ export async function doctor(): Promise<number> {
   // so a script wrapping it could not tell a healthy install from a broken one.
   let healthy = true;
   const config = await readConfig();
-  const tuiConfig = await readTuiConfig().catch(() => null);
+  const opencodeFiles = await openCodePluginFiles();
   const settings = await readSettings().catch((error: unknown) => {
     console.log(`  settings.json  UNREADABLE — ${error instanceof Error ? error.message : error}`);
     healthy = false;
@@ -169,7 +169,7 @@ export async function doctor(): Promise<number> {
   console.log(`  chained        ${claudeIntegration(config)?.chained_command ?? "none"}`);
   console.log(`  codex          ${codexSupport().reason}; see ${codexSupport().issue}`);
   console.log(
-    `  opencode       ${hasOurPlugin(tuiConfig) ? `plugin entry in ${OPENCODE_TUI_CONFIG_PATH}` : "not configured"}`,
+    `  opencode       ${opencodeFiles.length > 0 ? `plugin entry in ${opencodeFiles.join(", ")}` : "not configured"}`,
   );
   console.log(
     `  integrations   Claude ${claudeIntegration(config)?.installed === true ? "on" : "off"}, Codex ${codexIntegration(config)?.installed === true ? "on" : "off"}, OpenCode ${opencodeIntegration(config)?.installed === true ? "on" : "off"}`,

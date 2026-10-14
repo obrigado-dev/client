@@ -6,6 +6,8 @@
  */
 import type { TuiPluginApi } from "@opencode-ai/plugin/tui";
 
+import type { OpenCode2Context } from "./opencode2.ts";
+
 /** A message the person typed: its id and when it was sent. */
 export interface TypedPrompt {
   readonly id: string;
@@ -34,6 +36,25 @@ export function lastTypedPrompt(api: TuiPluginApi, sessionId: string): TypedProm
     }
   } catch {
     // An OpenCode older than the state API: no prompt, so no attention claimed.
+  }
+  return null;
+}
+
+/**
+ * The same answer from OpenCode 2, where a message's type says who wrote it: the person's are
+ * `user`, and OpenCode's own text is a `synthetic` message rather than a flagged part, so the
+ * newest `user` message is the one. Null before the first, and on a host whose data API is not
+ * the one this was written against.
+ */
+export function lastUserMessage(context: OpenCode2Context, sessionId: string): TypedPrompt | null {
+  try {
+    const messages = context.data.session.message.list(sessionId);
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (message?.type === "user") return { id: message.id, at: message.time.created };
+    }
+  } catch {
+    // Not the data API this reads: no prompt, so no attention claimed.
   }
   return null;
 }
