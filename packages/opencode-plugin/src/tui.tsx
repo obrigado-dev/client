@@ -37,6 +37,8 @@ import type { Sponsored, SponsoredSpan } from "@obrigado/surface";
 import type { TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui";
 import type { JSX } from "@opentui/solid";
 import type { OpenCode2Context, OpenCode2Plugin } from "./opencode2.ts";
+import { drawsAgain, sessionActivity, sessionActivity2, STILL } from "./activity.ts";
+import type { Activity } from "./activity.ts";
 import { lastTypedPrompt, lastUserMessage } from "./prompt.ts";
 import type { TypedPrompt } from "./prompt.ts";
 import { createRoot, createSignal, Show } from "solid-js";
@@ -50,10 +52,11 @@ const AGENT = "opencode";
  * separately and need different sentences to fix. `package.json` must agree; a test holds them
  * together, the same way `CLIENT_VERSION` is held to the client's manifest.
  */
-const SURFACE_VERSION = "0.4.0";
+const SURFACE_VERSION = "0.4.1";
 
 /**
- * How often the line is re-rendered.
+ * How often the line may be re-rendered: a beat that draws a new line only after something
+ * happened in the session (`activity.ts`).
  *
  * Matched to the other hosts' cadence rather than to the frame rate: this is a process
  * spawn, and the batch behind it is cached on disk for far longer. Faster would buy
@@ -337,13 +340,15 @@ interface Host {
   readonly session: () => string | null;
   /** The person's latest typed message in a session. */
   readonly prompt: (sessionId: string) => TypedPrompt | null;
+  /** What the session is doing, for whether the next beat draws a new line (`activity.ts`). */
+  readonly activity: (sessionId: string) => Activity;
 }
 
 /** The line: the creative to draw, the row that draws it, and its start and teardown. */
 interface Line {
   readonly sponsored: () => Sponsored | null;
   readonly row: (ad: Sponsored) => JSX.Element;
-  /** Fetches now, then every `REFRESH_MS`. */
+  /** Fetches now, then on each `REFRESH_MS` beat after something happened in the session. */
   readonly begin: () => void;
   readonly dispose: () => void;
 }
@@ -389,6 +394,8 @@ function buildLine(host: Host, disposeRoot: () => void): Line {
   let firstCopy: string | null = null;
   let timer: ReturnType<typeof setInterval> | undefined;
   let disposed = false;
+  // The session and messages the line on screen was drawn at, null before the first.
+  let drawnAt: string | null = null;
 
   const refresh = (): void => {
     const sessionId = host.session() ?? HOME_SESSION;
@@ -413,13 +420,23 @@ function buildLine(host: Host, disposeRoot: () => void): Line {
     })();
   };
 
+  // A new line only after something happened: an idle OpenCode keeps the line it has.
+  const beat = (): void => {
+    const sessionId = host.session() ?? HOME_SESSION;
+    const activity = sessionId === HOME_SESSION ? STILL : host.activity(sessionId);
+    const now = `${sessionId}|${activity.mark}`;
+    if (!drawsAgain(drawnAt, now, activity.working)) return;
+    drawnAt = now;
+    refresh();
+  };
+
   return {
     sponsored,
     row: (ad) => sponsoredRow(ad, hovered, setHovered, frame, startup),
     begin: () => {
       if (disposed || timer !== undefined) return;
-      refresh();
-      timer = setInterval(refresh, REFRESH_MS);
+      beat();
+      timer = setInterval(beat, REFRESH_MS);
     },
     dispose: () => {
       if (disposed) return;
@@ -470,6 +487,7 @@ function tui(api: TuiPluginApi): Promise<void> {
       return typeof raw === "string" && raw.length > 0 ? raw : null;
     },
     prompt: (sessionId) => lastTypedPrompt(api, sessionId),
+    activity: (sessionId) => sessionActivity(api, sessionId),
   });
   claim(line, () => {
     // Turning the plugin off, or reloading it, stops the spawns along with the drawing.
@@ -507,6 +525,7 @@ function setup(context: OpenCode2Context): () => void {
       return typeof id === "string" && id.length > 0 ? id : null;
     },
     prompt: (sessionId) => lastUserMessage(context, sessionId),
+    activity: (sessionId) => sessionActivity2(context, sessionId),
   });
   const release = claim(line, () =>
     context.ui.slot({

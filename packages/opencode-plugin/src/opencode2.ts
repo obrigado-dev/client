@@ -46,6 +46,8 @@ export interface OpenCode2Context {
   };
   readonly data: {
     readonly session: {
+      /** Whether the agent is at work in the session. */
+      status(sessionID: string): "idle" | "running";
       readonly message: { list(sessionID: string): readonly OpenCode2Message[] };
     };
   };
