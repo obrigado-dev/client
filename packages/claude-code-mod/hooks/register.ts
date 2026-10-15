@@ -45,7 +45,7 @@ import { sessionTiming } from "./timing.ts";
 const AGENT = "claude-desktop";
 
 /** This mod's own version, reported on every render (A30). Held to both manifests by a test. */
-const SURFACE_VERSION = "0.1.0";
+const SURFACE_VERSION = "0.1.1";
 
 /** The other hosts' cadence. Each tick is a process spawn; the batch behind it lives far longer. */
 const REFRESH_MS = 30_000;

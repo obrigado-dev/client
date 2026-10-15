@@ -11,7 +11,7 @@
         "source": "git-subdir",
         "url": "https://github.com/obrigado-dev/client.git",
         "path": "packages/claude-code-mod",
-        "ref": "claude-code-mod-v0.1.0"
+        "ref": "claude-code-mod-v0.1.1"
       }
     }
   ]

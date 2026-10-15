@@ -1,6 +1,6 @@
 {
   "name": "@obrigado/claude-code-mod",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Obrigado's Claude Code mod: the sponsored line in the band above the prompt, in the Claude desktop app.",
   "homepage": "https://obrigado.dev",
