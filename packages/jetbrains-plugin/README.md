@@ -15,9 +15,12 @@ obrigado.dev serves it as a plugin repository (A40).
 
 1. Install the CLI: `curl -fsSL https://obrigado.dev/install.sh | sh`. The widget runs it.
 2. Quit the IDE, then run `obrigado install --agent jetbrains` (a bare `obrigado install` asks
-   about the IDEs it finds). For every JetBrains IDE on the machine it runs the IDE's own
-   `installPlugins` command against the repository, and adds the repository to
-   `idea.plugin.hosts` in that IDE's custom `idea.properties` so updates arrive from it (A43).
+   about the IDEs it finds). The CLI fetches the release's zip and checks it against the signed
+   checksums, as it does the `.vsix`, and keeps it in `~/.obrigado/jetbrains` with a repository
+   feed naming it. For every JetBrains IDE on the machine it runs the IDE's own `installPlugins`
+   command against that local repository, and adds the repository to `idea.plugin.hosts` in the
+   IDE's custom `idea.properties`. The daily update puts each new release's checked zip there, and
+   the IDE offers it at its next update check (A43).
 3. Start the IDE and approve the plugin when it asks: it is a third-party plugin, and the CLI
    leaves that consent to you.
 
@@ -29,7 +32,8 @@ command line.
 
 By hand instead: **Settings → Plugins → ⚙ → Manage Plugin Repositories**, add
 `https://obrigado.dev/jetbrains/updatePlugins.xml`, then install **Obrigado** from the Marketplace
-tab. Updates arrive the same way.
+tab. Updates arrive the same way, but the IDE downloads them itself, and nothing checks them
+against the signed checksums.
 
 ## Why a status bar widget
 

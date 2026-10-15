@@ -19,6 +19,7 @@ import {
   installedPluginVersion,
   installJetBrainsPlugin,
   PLUGIN_ID,
+  pointAtRepository,
   removeJetBrainsRepository,
   runLauncher,
   withoutRepository,
@@ -28,6 +29,8 @@ import type { PluginDeps } from "../src/jetbrains-plugin.ts";
 
 const ORIGIN = "https://obrigado.dev";
 const REPOSITORY = `${ORIGIN}/jetbrains/updatePlugins.xml`;
+/** The checked copy on this machine, which the IDE is given instead (A43). */
+const LOCAL = "file:///home/dev/.obrigado/jetbrains/updatePlugins.xml";
 
 describe("adding the repository to an IDE's custom properties", () => {
   test("starts the setting, with a comment saying whose it is, where there was none", () => {
@@ -139,6 +142,7 @@ function ideAnswering(answer: Ran): { deps: PluginDeps; ran: (readonly string[])
       return answer;
     },
     origin: ORIGIN,
+    repository: LOCAL,
     machine: machine(),
     backupDir: backups,
   };
@@ -147,7 +151,7 @@ function ideAnswering(answer: Ran): { deps: PluginDeps; ran: (readonly string[])
 
 const INSTALLED: Ran = {
   code: 0,
-  stdout: `plugin repositories: [${REPOSITORY}, null]\nlooking up plugins: [dev.obrigado]\ninstalled plugin: PluginNode{id=dev.obrigado, name='Obrigado'}\n`,
+  stdout: `plugin repositories: [${LOCAL}, null]\nlooking up plugins: [dev.obrigado]\ninstalled plugin: PluginNode{id=dev.obrigado, name='Obrigado'}\n`,
 };
 
 beforeEach(async () => {
@@ -161,10 +165,10 @@ describe("installing into an IDE", () => {
 
     const outcome = await installJetBrainsPlugin(IDE, deps);
 
-    expect(ran).toEqual([[IDE.launcher, "installPlugins", PLUGIN_ID, REPOSITORY]]);
+    expect(ran).toEqual([[IDE.launcher, "installPlugins", PLUGIN_ID, LOCAL]]);
     expect(outcome).toEqual({ status: "installed", version: "0.3.8", updates: true, backup: null });
     expect(await readFile(properties(), "utf8")).toBe(
-      `${HOSTS_COMMENT}\nidea.plugin.hosts=${REPOSITORY}\n`,
+      `${HOSTS_COMMENT}\nidea.plugin.hosts=${LOCAL}\n`,
     );
   });
 
@@ -198,7 +202,7 @@ describe("installing into an IDE", () => {
       updates: true,
       backup: null,
     });
-    expect(await readFile(properties(), "utf8")).toContain(REPOSITORY);
+    expect(await readFile(properties(), "utf8")).toContain(LOCAL);
   });
 
   test("writes nothing when the IDE is open, and says so", async () => {
@@ -222,7 +226,7 @@ describe("installing into an IDE", () => {
   test("passes on what the IDE said when it could not install", async () => {
     const { deps } = ideAnswering({
       code: 1,
-      stdout: `plugin repositories: [${REPOSITORY}, null]\nlooking up plugins: [dev.obrigado]\nunknown plugins: [dev.obrigado]\n`,
+      stdout: `plugin repositories: [${LOCAL}, null]\nlooking up plugins: [dev.obrigado]\nunknown plugins: [dev.obrigado]\n`,
     });
 
     expect(await installJetBrainsPlugin(IDE, deps)).toEqual({
@@ -243,9 +247,28 @@ describe("installing into an IDE", () => {
   });
 });
 
+describe("moving an IDE that 0.3.9 pointed at obrigado.dev", () => {
+  test("swaps obrigado.dev's repository for the checked copy, keeping everybody else's", async () => {
+    await writeFile(
+      properties(),
+      `idea.cycle.buffer.size=1024\n${HOSTS_COMMENT}\nidea.plugin.hosts=${REPOSITORY}\n`,
+    );
+    const { deps } = ideAnswering(INSTALLED);
+
+    expect((await pointAtRepository(IDE, deps))?.changed).toBe(true);
+    expect(await readFile(properties(), "utf8")).toBe(
+      `idea.cycle.buffer.size=1024\n${HOSTS_COMMENT}\nidea.plugin.hosts=${LOCAL}\n`,
+    );
+    expect((await pointAtRepository(IDE, deps))?.changed).toBe(false);
+  });
+});
+
 describe("uninstalling from an IDE", () => {
-  test("takes out only the repository it added, once", async () => {
-    await writeFile(properties(), `idea.plugin.hosts=https://a.example/u.xml;${REPOSITORY}\n`);
+  test("takes out only the repositories it added, once", async () => {
+    await writeFile(
+      properties(),
+      `idea.plugin.hosts=https://a.example/u.xml;${LOCAL};${REPOSITORY}\n`,
+    );
     const { deps } = ideAnswering(INSTALLED);
 
     expect(await removeJetBrainsRepository(IDE, deps)).toBe(true);

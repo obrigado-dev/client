@@ -1,9 +1,11 @@
 /**
- * `obrigado install --agent jetbrains` and its uninstall (A43), over IDEs given rather than found:
- * one summary line per IDE, the record kept when any took the plugin, and an uninstall that turns
- * the line off where it cannot remove the plugin.
+ * `obrigado install --agent jetbrains`, its daily refresh and its uninstall (A43), over IDEs given
+ * rather than found and a release faked at `fetch`: one summary line per IDE, the plugin installed
+ * from the checked copy on this machine, the record kept when any IDE took it, and an uninstall
+ * that turns the line off where it cannot remove the plugin.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,14 +13,19 @@ import { join } from "node:path";
 import type { ClientIntegrations } from "../src/config.ts";
 import { configDirectory, pluginsDirectory } from "../src/jetbrains-ides.ts";
 import type { JetBrainsIde, Machine } from "../src/jetbrains-ides.ts";
+import { HOSTS_COMMENT } from "../src/jetbrains-plugin.ts";
+import { localRepositoryUrl } from "../src/jetbrains-repository.ts";
 import {
   ideLabels,
   installJetBrainsHost,
   namesList,
   readyIdesLabel,
+  refreshJetBrains,
   removeJetBrains,
 } from "../src/commands/install-jetbrains.ts";
 import type { JetBrainsDeps } from "../src/commands/install-jetbrains.ts";
+import { ORIGIN, release } from "./jetbrains-release.ts";
+import type { ReleaseOptions } from "./jetbrains-release.ts";
 
 let home: string;
 
@@ -63,25 +70,40 @@ async function holding(each: JetBrainsIde, version: string): Promise<void> {
   await writeFile(join(lib, `obrigado-jetbrains-${version}.jar`), "PK");
 }
 
-/** The IDEs given, each installing when asked, except those named open. */
-function world(ides: readonly JetBrainsIde[], open: readonly JetBrainsIde[] = []) {
+const repositoryDir = (): string => join(home, ".obrigado/jetbrains");
+const properties = (each: JetBrainsIde): string =>
+  join(configDirectory(each, machine()), "idea.properties");
+
+/** The IDEs given, each installing when asked except those named open, and a release to fetch. */
+function world(
+  ides: readonly JetBrainsIde[],
+  open: readonly JetBrainsIde[] = [],
+  published: ReleaseOptions = {},
+) {
   const said: string[] = [];
+  const ran: (readonly string[])[] = [];
+  const { fetch, keys } = release(published);
   const deps: JetBrainsDeps = {
     run: async (argv) => {
+      ran.push(argv);
       const target = ides.find((each) => each.launcher === argv[0]);
       if (target === undefined || open.includes(target)) {
         return { code: 1, stdout: "Only one instance of IDEA can be run at a time.\n" };
       }
-      await holding(target, "0.3.8");
+      await holding(target, "0.4.0");
       return { code: 0, stdout: "installed plugin: PluginNode{id=dev.obrigado}\n" };
     },
-    origin: "https://obrigado.dev",
+    origin: ORIGIN,
     machine: machine(),
     backupDir: join(home, ".obrigado/backups"),
+    fetch,
+    keys,
+    current: "0.3.9",
+    repositoryDir: repositoryDir(),
     ides,
     say: (line) => said.push(line),
   };
-  return { deps, said };
+  return { deps, said, ran };
 }
 
 describe("naming the IDEs", () => {
@@ -121,7 +143,7 @@ describe("installing into each IDE", () => {
     expect(
       results.map((result) => [result.row?.mark, result.row?.host, result.row?.detail]),
     ).toEqual([
-      ["done", "IntelliJ IDEA", "plugin 0.3.8 · approve it when IntelliJ IDEA starts"],
+      ["done", "IntelliJ IDEA", "plugin 0.4.0 · approve it when IntelliJ IDEA starts"],
       ["done", "PyCharm", "plugin 0.3.7 · already there"],
       ["failed", "WebStorm", "open, so not installed"],
       ["skipped", "GoLand", "needs 2025.1 or newer"],
@@ -134,6 +156,40 @@ describe("installing into each IDE", () => {
       "Installing the plugin into IntelliJ IDEA, which starts without a window to do it…",
       "Installing the plugin into WebStorm, which starts without a window to do it…",
     ]);
+  });
+
+  test("installs from the checked copy on this machine, and points the IDE at it", async () => {
+    await opened(IDEA);
+    const { deps, ran } = world([IDEA]);
+
+    await installJetBrainsHost(null, {}, deps);
+
+    const local = localRepositoryUrl(repositoryDir());
+    expect(ran).toEqual([[IDEA.launcher, "installPlugins", "dev.obrigado", local]]);
+    expect(existsSync(join(repositoryDir(), "obrigado-jetbrains-0.4.0.zip"))).toBe(true);
+    expect(await readFile(properties(IDEA), "utf8")).toBe(
+      `${HOSTS_COMMENT}\nidea.plugin.hosts=${local}\n`,
+    );
+  });
+
+  test("starts no IDE when the plugin does not match the signed checksums", async () => {
+    await opened(IDEA, PYCHARM);
+    await holding(PYCHARM, "0.3.7");
+    const { deps, ran } = world([IDEA, PYCHARM, NEW_RIDER], [], {
+      zip: new TextEncoder().encode("something else"),
+    });
+    const integrations: ClientIntegrations = {};
+
+    const results = await installJetBrainsHost(null, integrations, deps);
+
+    expect(results.map((result) => result.row?.detail)).toEqual([
+      "failed: checksum mismatch for obrigado-jetbrains-0.4.0.zip: not installed",
+      "failed: checksum mismatch for obrigado-jetbrains-0.4.0.zip: not installed",
+      "never opened: open it once, then run this again",
+    ]);
+    expect(ran).toEqual([]);
+    expect(integrations.jetbrains).toBeUndefined();
+    expect(existsSync(properties(PYCHARM))).toBe(false);
   });
 
   test("records nothing when no IDE took the plugin", async () => {
@@ -164,11 +220,54 @@ describe("installing into each IDE", () => {
           host: "JetBrains IDEs",
           detail: "none found",
           notes: [
-            "to install it by hand, add https://obrigado.dev/jetbrains/updatePlugins.xml under Settings → Plugins → ⚙ → Manage Plugin Repositories",
+            `to install it by hand, add ${ORIGIN}/jetbrains/updatePlugins.xml under Settings → Plugins → ⚙ → Manage Plugin Repositories`,
           ],
         },
       },
     ]);
+  });
+});
+
+describe("the daily refresh", () => {
+  const installed = {
+    install_key: "k",
+    api_origin: ORIGIN,
+    integrations: { jetbrains: { installed: true } },
+  };
+
+  test("puts the next release in the repository for the IDEs to offer", async () => {
+    await opened(IDEA);
+    await installJetBrainsHost(null, {}, world([IDEA]).deps);
+    const { deps, said } = world([IDEA], [], { version: "0.4.1" });
+
+    await refreshJetBrains(installed, (line) => said.push(line), deps);
+
+    expect(said).toEqual([
+      "JetBrains IDEs: plugin 0.4.1, offered at each IDE's next update check.",
+    ]);
+    expect(existsSync(join(repositoryDir(), "obrigado-jetbrains-0.4.1.zip"))).toBe(true);
+  });
+
+  test("moves an IDE that 0.3.9 pointed at obrigado.dev over to the checked copy", async () => {
+    await opened(IDEA);
+    await holding(IDEA, "0.3.9");
+    const remote = `${ORIGIN}/jetbrains/updatePlugins.xml`;
+    await writeFile(properties(IDEA), `${HOSTS_COMMENT}\nidea.plugin.hosts=${remote}\n`);
+
+    await refreshJetBrains(installed, () => {}, world([IDEA]).deps);
+
+    expect(await readFile(properties(IDEA), "utf8")).toBe(
+      `${HOSTS_COMMENT}\nidea.plugin.hosts=${localRepositoryUrl(repositoryDir())}\n`,
+    );
+  });
+
+  test("does nothing for an install that never put the plugin in", async () => {
+    const { deps, said } = world([IDEA]);
+
+    await refreshJetBrains(null, (line) => said.push(line), deps);
+
+    expect(said).toEqual([]);
+    expect(existsSync(repositoryDir())).toBe(false);
   });
 });
 
@@ -195,5 +294,7 @@ describe("uninstalling", () => {
       ),
     );
     expect(left).toEqual(["", ""]);
+    // Nothing points at the copy here any more.
+    expect(existsSync(repositoryDir())).toBe(false);
   });
 });

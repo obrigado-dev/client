@@ -5,6 +5,8 @@
  * starts without a window, fetches the plugin from the repository, unpacks it into its plugins
  * directory, and exits 0 once the plugin is there. JetBrains documents it with the IDE closed, and
  * an open one refuses ("Only one instance of … can be run at a time") having written nothing.
+ * The repository is the one the CLI keeps on this machine (`jetbrains-repository.ts`), holding a
+ * zip already checked against the release's signed checksums.
  *
  * That install does not remember the repository, and a plugin from a custom repository updates
  * only from a repository the IDE knows. So the repository also goes into `idea.plugin.hosts` in
@@ -41,6 +43,10 @@ const LAUNCH_TIMEOUT_MS = 180_000;
 /** An IDE that is running, or still starting, says so rather than installing. */
 const OPEN = /only one instance|not been initialized/iu;
 
+/**
+ * obrigado.dev's repository, which a developer adds by hand (A40). The CLI points IDEs at its own
+ * copy instead, and takes this out where 0.3.9, which pointed them here, put it in.
+ */
 export function repositoryUrl(origin: string): string {
   return `${origin}/jetbrains/updatePlugins.xml`;
 }
@@ -176,8 +182,10 @@ export async function runLauncher(argv: readonly string[]): Promise<Ran> {
 
 export interface PluginDeps {
   readonly run: (argv: readonly string[]) => Promise<Ran>;
-  /** The server whose repository the IDE installs and updates from. */
+  /** The server whose repository an earlier version pointed IDEs at. */
   readonly origin: string;
+  /** The `file:` URL of the repository on this machine, which the IDE installs and updates from. */
+  readonly repository: string;
   readonly machine: Machine;
   readonly backupDir: string;
 }
@@ -216,15 +224,12 @@ export async function installJetBrainsPlugin(
   deps: PluginDeps,
 ): Promise<PluginOutcome> {
   const plugins = pluginsDirectory(ide, deps.machine);
-  const url = repositoryUrl(deps.origin);
   const found = installedPluginVersion(plugins);
   if (found === null) {
-    const ran = await deps.run([ide.launcher, "installPlugins", PLUGIN_ID, url]);
+    const ran = await deps.run([ide.launcher, "installPlugins", PLUGIN_ID, deps.repository]);
     if (ran.code !== 0) return refusal(ran);
   }
-  const edited = await editProperties(ide, deps.machine, deps.backupDir, (text) =>
-    withRepository(text, url),
-  );
+  const edited = await pointAtRepository(ide, deps);
   return {
     status: found === null ? "installed" : "already-installed",
     version: found ?? installedPluginVersion(plugins),
@@ -233,14 +238,28 @@ export async function installJetBrainsPlugin(
   };
 }
 
-/** Takes the repository back out of the IDE's plugin hosts. Whether there was one to take out. */
+/**
+ * The repository on this machine among the IDE's plugin hosts, and obrigado.dev's taken out where
+ * an earlier version put it. Null when the hosts line could not be edited.
+ */
+export async function pointAtRepository(
+  ide: JetBrainsIde,
+  deps: Omit<PluginDeps, "run">,
+): Promise<{ readonly changed: boolean; readonly backup: string | null } | null> {
+  const remote = repositoryUrl(deps.origin);
+  return await editProperties(ide, deps.machine, deps.backupDir, (text) =>
+    withRepository(withoutRepository(text, remote), deps.repository),
+  );
+}
+
+/** Takes the repositories back out of the IDE's plugin hosts. Whether there was one to take out. */
 export async function removeJetBrainsRepository(
   ide: JetBrainsIde,
   deps: Omit<PluginDeps, "run">,
 ): Promise<boolean> {
-  const url = repositoryUrl(deps.origin);
+  const remote = repositoryUrl(deps.origin);
   const edited = await editProperties(ide, deps.machine, deps.backupDir, (text) =>
-    withoutRepository(text, url),
+    withoutRepository(withoutRepository(text, deps.repository), remote),
   );
   return edited?.changed === true;
 }

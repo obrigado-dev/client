@@ -21,7 +21,12 @@ import {
 import type { Editor, EditorDeps } from "../editor-extension.ts";
 import { CLIENT_VERSION } from "../version.ts";
 import type { AdapterResult, Remover } from "./adapters.ts";
-import { installJetBrainsHost, jetbrainsDeps, readyIdesLabel } from "./install-jetbrains.ts";
+import {
+  installJetBrainsHost,
+  jetbrainsDeps,
+  readyIdesLabel,
+  refreshJetBrains,
+} from "./install-jetbrains.ts";
 import { canAsk, parseAnswer } from "./privacy-prompt.ts";
 import { apiOrigin } from "./shared.ts";
 
@@ -177,10 +182,12 @@ export function removeEditor(editor: Editor): Remover {
 }
 
 /**
- * The newest release's extension, in every editor this install put one in.
+ * The newest release's extension, in every editor this install put one in, and the newest plugin
+ * into the repository the JetBrains IDEs update from (A43).
  *
  * A sideloaded extension does not update itself, so `obrigado update` runs this after the binary.
- * An editor whose extension is current is skipped without a download.
+ * An editor whose extension is current is skipped without a download, and so is a repository
+ * already holding the newest plugin.
  */
 export async function refreshEditors(
   config: ClientConfig | null,
@@ -194,4 +201,5 @@ export async function refreshEditors(
     if (outcome.status === "installed") say(`${LABEL[editor]}: extension ${outcome.version}.`);
     if (outcome.status === "failed") say(`${LABEL[editor]}: not updated: ${outcome.reason}.`);
   }
+  await refreshJetBrains(config, say);
 }
