@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 const CLI = join(import.meta.dir, "..", "src", "cli.ts");
 const RENDERER = "/opt/obrigado/bin/obrigado statusline";
@@ -17,7 +17,7 @@ let home: string;
 
 beforeEach(async () => {
   home = await mkdtemp(join(tmpdir(), "obrigado-uninstall-"));
-  await mkdir(join(home, ".claude"));
+  await mkdir(dirname(join(home, ".claude", "settings.json")));
   await mkdir(join(home, ".obrigado"));
   await writeFile(
     join(home, ".claude", "settings.json"),
