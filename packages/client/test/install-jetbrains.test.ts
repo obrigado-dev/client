@@ -208,6 +208,21 @@ describe("installing into each IDE", () => {
     expect(integrations.jetbrains).toBeUndefined();
   });
 
+  test("run from a JetBrains IDE's own terminal, says to finish from a terminal outside it", async () => {
+    await opened(WEBSTORM);
+    const { deps } = world([WEBSTORM], [WEBSTORM]);
+    const inside = {
+      ...deps,
+      machine: { ...deps.machine, env: { TERMINAL_EMULATOR: "JetBrains-JediTerm" } },
+    };
+
+    const results = await installJetBrainsHost(null, {}, inside);
+
+    expect(results[0]?.row?.notes).toEqual([
+      "this terminal is in a JetBrains IDE and closes with it: quit WebStorm, then run `obrigado install --agent jetbrains` in a terminal app outside the IDE",
+    ]);
+  });
+
   test("with no IDE found, says how to do it by hand", async () => {
     const results = await installJetBrainsHost(null, {}, world([]).deps);
 

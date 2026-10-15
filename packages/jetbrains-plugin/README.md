@@ -15,7 +15,7 @@ obrigado.dev serves it as a plugin repository (A40).
 
 1. Install the CLI: `curl -fsSL https://obrigado.dev/install.sh | sh`. The widget runs it.
 2. Quit the IDE, then run `obrigado install --agent jetbrains` (a bare `obrigado install` asks
-   about the IDEs it finds). The CLI fetches the release's zip and checks it against the signed
+   about the IDEs it finds) from a terminal app outside it: the IDE's own terminal closes with it. The CLI fetches the release's zip and checks it against the signed
    checksums, as it does the `.vsix`, and keeps it in `~/.obrigado/jetbrains` with a repository
    feed naming it. For every JetBrains IDE on the machine it runs the IDE's own `installPlugins`
    command against that local repository, and adds the repository to `idea.plugin.hosts` in the
@@ -24,7 +24,8 @@ obrigado.dev serves it as a plugin repository (A40).
 3. Start the IDE and approve the plugin when it asks: it is a third-party plugin, and the CLI
    leaves that consent to you.
 
-An IDE that is open refuses the install and is told so; one never opened is skipped, because
+An IDE that is open refuses the install and is told so, with a terminal outside it named when the
+command ran in an IDE's own terminal; one never opened is skipped, because
 installing into it would create its settings and stop it offering to import the previous
 version's. `obrigado uninstall --agent jetbrains` takes the repository back out and turns the line
 off; the plugin itself is removed in **Settings → Plugins**, because no IDE removes one from its

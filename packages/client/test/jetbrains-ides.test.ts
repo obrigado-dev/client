@@ -9,6 +9,7 @@ import { dirname, join } from "node:path";
 
 import {
   configDirectory,
+  inJetBrainsTerminal,
   jetbrainsIdes,
   pluginsDirectory,
   readiness,
@@ -221,5 +222,14 @@ describe("whether the plugin can go in now", () => {
 
     expect(build).toContain(`sinceBuild = "${String(SINCE_BUILD)}"`);
     expect(properties).toContain(`platformVersion = ${SINCE_RELEASE}`);
+  });
+});
+
+describe("a JetBrains IDE's own terminal", () => {
+  test("is told apart by the variable every IDE sets in it", () => {
+    expect(
+      inJetBrainsTerminal({ ...mac(), env: { TERMINAL_EMULATOR: "JetBrains-JediTerm" } }),
+    ).toBe(true);
+    expect(inJetBrainsTerminal({ ...mac(), env: { TERM_PROGRAM: "iTerm.app" } })).toBe(false);
   });
 });

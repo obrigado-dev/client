@@ -10,6 +10,7 @@
 import { BACKUP_DIR, editorIntegration } from "../config.ts";
 import type { ClientConfig, ClientIntegrations } from "../config.ts";
 import {
+  inJetBrainsTerminal,
   jetbrainsIdes,
   pluginsDirectory,
   readiness,
@@ -84,15 +85,27 @@ function byHand(url: string): string {
   return `add ${url} under Settings → Plugins → ⚙ → Manage Plugin Repositories`;
 }
 
-function rowFor(host: string, outcome: PluginOutcome, repository: string): InstallRow {
+const AGAIN = "`obrigado install --agent jetbrains`";
+
+/**
+ * What to do about an IDE that is open. Run from a JetBrains IDE's own terminal, "quit it and run
+ * this again" is a loop: the terminal closes with the IDE, so the next run has to come from a
+ * terminal app outside it.
+ */
+function whenOpen(host: string, deps: JetBrainsDeps): string {
+  return inJetBrainsTerminal(deps.machine)
+    ? `this terminal is in a JetBrains IDE and closes with it: quit ${host}, then run ${AGAIN} in a terminal app outside the IDE`
+    : `quit it, then run ${AGAIN} again`;
+}
+
+function rowFor(
+  host: string,
+  outcome: PluginOutcome,
+  deps: PluginDeps & JetBrainsDeps,
+): InstallRow {
   if (outcome.status === "open" || outcome.status === "failed") {
     return outcome.status === "open"
-      ? {
-          mark: "failed",
-          host,
-          detail: "open, so not installed",
-          notes: ["quit it, then run `obrigado install --agent jetbrains` again"],
-        }
+      ? { mark: "failed", host, detail: "open, so not installed", notes: [whenOpen(host, deps)] }
       : { mark: "failed", host, detail: `failed: ${outcome.reason}` };
   }
   const plugin = outcome.version === null ? "plugin" : `plugin ${outcome.version}`;
@@ -101,7 +114,7 @@ function rowFor(host: string, outcome: PluginOutcome, repository: string): Insta
     mark: "done",
     host,
     detail: `${plugin} · ${after}`,
-    ...(outcome.updates ? {} : { notes: [`for updates, ${byHand(repository)}`] }),
+    ...(outcome.updates ? {} : { notes: [`for updates, ${byHand(deps.repository)}`] }),
     backedUp: outcome.backup !== null,
   };
 }
@@ -126,7 +139,7 @@ async function installInto(
     deps.say(`Installing the plugin into ${host}, which starts without a window to do it…`);
   }
   try {
-    return rowFor(host, await installJetBrainsPlugin(ide, deps), deps.repository);
+    return rowFor(host, await installJetBrainsPlugin(ide, deps), deps);
   } catch (error) {
     return failedRow(host, error);
   }

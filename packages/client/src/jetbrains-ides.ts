@@ -49,6 +49,15 @@ export function thisMachine(): Machine {
 export const SINCE_BUILD = 251;
 export const SINCE_RELEASE = "2025.1";
 
+/**
+ * Whether this command runs in a JetBrains IDE's own terminal, which every IDE marks with
+ * `TERMINAL_EMULATOR=JetBrains-JediTerm`. Such a terminal closes with its IDE, and an IDE takes the
+ * plugin only while it is closed, so the install has to be run again from somewhere else.
+ */
+export function inJetBrainsTerminal(machine: Machine): boolean {
+  return machine.env["TERMINAL_EMULATOR"] === "JetBrains-JediTerm";
+}
+
 /** Thin clients for an IDE that runs elsewhere: nothing renders in them. */
 const THIN_CLIENTS = new Set(["GW", "JBC"]);
 
