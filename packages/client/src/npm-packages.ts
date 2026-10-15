@@ -14,7 +14,7 @@
  * release's assets and `release.yml` publishes them; they are described here so the tests hold them.
  */
 
-export const NPM_NAME = "@obrigado/client";
+const NPM_NAME = "@obrigado/client";
 
 interface Platform {
   readonly os: "darwin" | "linux";
@@ -38,7 +38,7 @@ export const NPM_PLATFORMS: Readonly<Record<string, Platform>> = {
   "linux-x64-musl": { os: "linux", cpu: "x64", libc: "musl" },
 };
 
-export function platformPackageName(asset: string): string {
+function platformPackageName(asset: string): string {
   return `${NPM_NAME}-${asset}`;
 }
 
