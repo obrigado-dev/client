@@ -331,12 +331,15 @@ export async function uninstall(argv: readonly string[] = []): Promise<number> {
   }
 
   const integrations: ClientIntegrations = { ...config?.integrations };
-  // Concurrently: the hosts write to different files, and one that cannot be reached
-  // must not stop the others from being removed.
-  const failures = await Promise.all(
-    targets.map((agent) => removeOne(agent, config, integrations)),
-  );
-  const failed = failures.includes(true);
+  // One after another, never side by side: Claude Code's status line and the desktop app's plugin
+  // are both in `~/.claude/settings.json`, and removed together each read the file and the second
+  // write landed on the first, losing a removal that had reported success. `removeOne` still
+  // catches per host, so one that cannot be reached does not stop the others.
+  let failed = false;
+  for (const agent of targets) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- sequential on purpose, see above
+    if (await removeOne(agent, config, integrations)) failed = true;
+  }
 
   if (config !== null) await writeConfig({ ...config, integrations });
   console.log(`State remains in ${OBRIGADO_DIR} — delete that directory to remove it completely.`);
