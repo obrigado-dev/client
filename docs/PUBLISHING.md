@@ -84,9 +84,11 @@ in the repository; a release is the only thing that gives either a version.
   which checks it against the signed checksums and runs the editor's own `--install-extension`,
   and the daily background update installs the next one. By hand: the release's `.vsix`, or
   https://obrigado.dev/vscode/obrigado.vsix, then **Extensions: Install from VSIX…**.
-- **JetBrains IDEs** add https://obrigado.dev/jetbrains/updatePlugins.xml under **Settings →
-  Plugins → ⚙ → Manage Plugin Repositories**, then install and update from it. The feed is built
-  from the latest release's `editors.json`.
+- **JetBrains IDEs** install and update from https://obrigado.dev/jetbrains/updatePlugins.xml,
+  whose feed is built from the latest release's `editors.json`. `obrigado install --agent
+  jetbrains` runs each closed IDE's own `installPlugins` against it and adds it to the IDE's
+  `idea.plugin.hosts` (A43). By hand: add it under **Settings → Plugins → ⚙ → Manage Plugin
+  Repositories**, then install from the Marketplace tab.
 
 Before a release that changes the JetBrains plugin, run `./gradlew verifyPlugin` in
 `packages/jetbrains-plugin`: the Plugin Verifier checks the build against the recommended IDE

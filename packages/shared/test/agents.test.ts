@@ -73,12 +73,13 @@ describe("the derived views", () => {
       "claude-code",
       "codex",
       "opencode",
-      // The `.vsix` each release carries, when asked for (A40); JetBrains IDEs install from their
-      // own manager.
+      // The `.vsix` each release carries (A40), and the JetBrains plugin through each IDE's own
+      // installer (A43), when asked for.
       "vscode",
       "cursor",
       "pi",
       "oh-my-pi",
+      "jetbrains",
       "claude-desktop",
     ]);
   });

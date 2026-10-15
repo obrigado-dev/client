@@ -14,13 +14,16 @@ describe("agent targeting", () => {
   });
 
   test("rejects hosts this client does not install into", () => {
-    // JetBrains IDEs install from their own plugin manager, from obrigado.dev's repository (A40).
-    expect(() => requestedAgent(["--agent", "jetbrains"])).toThrow(/Unsupported agent/u);
+    expect(() => requestedAgent(["--agent", "gemini-cli"])).toThrow(/Unsupported agent/u);
   });
 
   test("installs the VS Code extension into either editor", () => {
     expect(requestedAgent(["--agent", "vscode"])).toBe("vscode");
     expect(requestedAgent(["--agent=cursor"])).toBe("cursor");
+  });
+
+  test("installs the plugin into the JetBrains IDEs (A43)", () => {
+    expect(requestedAgent(["--agent", "jetbrains"])).toBe("jetbrains");
   });
 });
 

@@ -91,7 +91,7 @@ export interface ClaudeDesktopIntegrationConfig {
   readonly renderer_command?: string;
 }
 
-/** The VS Code extension in one editor (A40). */
+/** The VS Code extension in one editor (A40), or the plugin in the JetBrains IDEs (A43). */
 export interface EditorIntegrationConfig {
   readonly installed: boolean;
   readonly installed_at?: string;
@@ -108,6 +108,12 @@ export interface ClientIntegrations {
   /* One extension, two editors, each with its own command-line tool — two install records. */
   vscode?: EditorIntegrationConfig;
   cursor?: EditorIntegrationConfig;
+  /*
+   * One record for every JetBrains IDE: the install puts the plugin into all it finds at once.
+   * `installed: false` after an uninstall is also what keeps the plugin, which only the IDE can
+   * remove, from drawing anything (A43).
+   */
+  jetbrains?: EditorIntegrationConfig;
 }
 
 export interface ClientConfig {
@@ -267,7 +273,7 @@ export function piIntegration(
 
 export function editorIntegration(
   config: ClientConfig | null,
-  editor: "vscode" | "cursor",
+  editor: "vscode" | "cursor" | "jetbrains",
 ): EditorIntegrationConfig | null {
   return config?.integrations?.[editor] ?? null;
 }

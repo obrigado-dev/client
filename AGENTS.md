@@ -23,7 +23,7 @@ this passes on every laptop and fails on every runner.
 | `@obrigado/opencode-plugin` | npm | same (0.1.0 was published by hand; trusted publishing is set up) | 0.4.1: one module OpenCode 1 and OpenCode 2 both load (A42), reporting the person's last typed message for the attention rule, and drawing a new line only after something happened in the session; a built `dist/tui.js`; pins surface's exact version |
 | `obrigado` CLI binaries | GitHub Releases, fetched by `install.sh` | tag `v<version>` → `release.yml` | 0.3.8 released |
 | VS Code / Cursor extension | each GitHub release; installed by `obrigado install --agent vscode\|cursor` (A40) | built by `release.yml` with the binaries, stamped with the release version | Marketplace publisher `obrigado` unclaimed; see `docs/PUBLISHING.md` |
-| JetBrains plugin | each GitHub release; served as a plugin repository at obrigado.dev/jetbrains/updatePlugins.xml (A40) | the same | Marketplace vendor unclaimed; see `docs/PUBLISHING.md` |
+| JetBrains plugin | each GitHub release; served as a plugin repository at obrigado.dev/jetbrains/updatePlugins.xml (A40); installed by `obrigado install --agent jetbrains` through each IDE's own installer (A43) | the same | Marketplace vendor unclaimed; see `docs/PUBLISHING.md` |
 | Pi extension | copied into `~/.pi/agent/extensions` by the CLI | ships inside the CLI | n/a |
 | Claude Code mod (the desktop app) | the `obrigado` marketplace at this repository's root | tag `claude-code-mod-v<version>`, pushed atomically with the commit whose marketplace names it; see `packages/claude-code-mod/README.md` | 0.1.1 released: a new line only after the session does something, and lines go on after `/clear` and `/resume` |
 

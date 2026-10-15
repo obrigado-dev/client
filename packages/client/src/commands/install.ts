@@ -25,7 +25,12 @@ import type { AdapterResult, Remover } from "./adapters.ts";
 import { installClaudeDesktopAdapter, removeClaudeDesktop } from "./install-desktop.ts";
 import { claudeRow, failedRow, printInstallRows, tilde } from "./install-report.ts";
 import { installPiHosts, removePiHost } from "./install-pi.ts";
-import { editorsForInstall, installEditorHosts, removeEditor } from "./install-editors.ts";
+import {
+  editorsForInstall,
+  installEditorHosts,
+  removeEditor,
+  removeJetBrains,
+} from "./install-editors.ts";
 import { positionFromArgv, resolveClaudeState } from "./claude-state.ts";
 import { reportUpdates } from "../self-update.ts";
 import { requestedAgent, SUPPORTED_INSTALL_AGENTS, targetsForInstall } from "./detect.ts";
@@ -215,6 +220,7 @@ const INSTALLED_CHECK: Record<InstallAgent, (config: ClientConfig) => boolean> =
   "claude-desktop": (config) => claudeDesktopIntegration(config)?.installed === true,
   vscode: (config) => editorIntegration(config, "vscode")?.installed === true,
   cursor: (config) => editorIntegration(config, "cursor")?.installed === true,
+  jetbrains: (config) => editorIntegration(config, "jetbrains")?.installed === true,
 };
 
 function installedTargets(config: ClientConfig | null): InstallAgent[] {
@@ -293,6 +299,7 @@ const REMOVERS: Record<InstallAgent, Remover> = {
   "claude-desktop": removeClaudeDesktop,
   vscode: removeEditor("vscode"),
   cursor: removeEditor("cursor"),
+  jetbrains: removeJetBrains(),
 };
 
 /**

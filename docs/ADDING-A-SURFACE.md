@@ -119,7 +119,8 @@ The host decides this, not us. There are three precedents:
 3. **The host has an extension gallery.** VS Code and Cursor install an extension that creates
    a status bar item. See `packages/vscode-extension/`. JetBrains IDEs install a plugin that
    registers a status bar widget through `statusBarWidgetFactory`; see
-   `packages/jetbrains-plugin/`.
+   `packages/jetbrains-plugin/`. Neither is in its store yet, so the CLI installs both through
+   the editor's own tool: `--install-extension` (A40), and each IDE's `installPlugins` (A43).
 
 Whichever applies, the rendering rules — the disclosure, the allowed styles, the
 control-character ban — live in `packages/shared` and are not per-host. Do not reimplement

@@ -41,13 +41,14 @@
  */
 
 /**
- * How Obrigado gets into a host. `null` when nothing installs it yet.
+ * How Obrigado gets into a host: `cli` when this client installs it, `null` when nothing does yet.
  *
- * `marketplace` is a host that installs from its own plugin manager rather than from this client.
- * JetBrains IDEs do, from the plugin repository obrigado.dev serves until a store lists the
- * plugin (A40); VS Code and Cursor became `cli` when the CLI took over installing their `.vsix`.
+ * There was a second value, `marketplace`, for a host that installs from its own plugin manager
+ * rather than from this client. VS Code and Cursor left it when the CLI took over installing their
+ * `.vsix` (A40), and the JetBrains IDEs when it took over running their own installer (A43). A host
+ * that only a store could put Obrigado into would bring it back.
  */
-export type InstallMethod = "cli" | "marketplace";
+export type InstallMethod = "cli";
 
 export interface AgentFacts {
   readonly id: string;
@@ -163,7 +164,8 @@ export const AGENTS = [
   {
     id: "jetbrains",
     label: "JetBrains IDEs",
-    installs: "marketplace",
+    // Through each IDE's own `installPlugins`, from the repository obrigado.dev serves (A43).
+    installs: "cli",
     kind: "editor",
     // One id for IntelliJ IDEA, PyCharm, WebStorm, GoLand and the rest, because they are one
     // platform running one plugin rather than forks of each other: the extension point is the

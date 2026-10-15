@@ -1,14 +1,18 @@
 /**
- * Whether a bare install puts the line in VS Code or Cursor too (A40): asked, default no, before
- * anything is installed, and never without somebody there to answer.
+ * Whether a bare install puts the line in VS Code, Cursor or the JetBrains IDEs too (A40, A43):
+ * asked, default no, before anything is installed, and never without somebody there to answer.
  */
 import { describe, expect, test } from "bun:test";
 
 import type { ClientConfig } from "../src/config.ts";
 import { chooseEditors } from "../src/commands/install-editors.ts";
+import type { EditorHere } from "../src/commands/install-editors.ts";
 
-const BOTH = (): boolean => true;
-const NEITHER = (): boolean => false;
+const BOTH: EditorHere[] = [
+  { host: "vscode", label: "VS Code" },
+  { host: "cursor", label: "Cursor" },
+];
+const NEITHER: EditorHere[] = [];
 
 /** Answers in order, recording each question it was put. */
 function answering(...answers: Array<string | null>): {
@@ -67,5 +71,29 @@ describe("asking about the editors on this machine", () => {
 
     expect(await chooseEditors(null, ask, NEITHER)).toEqual([]);
     expect(asked).toHaveLength(0);
+  });
+});
+
+describe("asking about the JetBrains IDEs", () => {
+  test("once for all of them, by name, after the other editors", async () => {
+    const { ask, asked } = answering("", "", "y");
+    const here: EditorHere[] = [...BOTH, { host: "jetbrains", label: "IntelliJ IDEA and PyCharm" }];
+
+    expect(await chooseEditors(null, ask, here)).toEqual(["jetbrains"]);
+    expect(asked[2]).toBe(
+      "Also put the sponsored line in IntelliJ IDEA and PyCharm? Only while an agent runs there. [y/N] ",
+    );
+  });
+
+  test("kept without asking once installed", async () => {
+    const config: ClientConfig = {
+      install_key: "k",
+      api_origin: "https://obrigado.dev",
+      integrations: { jetbrains: { installed: true } },
+    };
+
+    expect(await chooseEditors(config, null, [{ host: "jetbrains", label: "PyCharm" }])).toEqual([
+      "jetbrains",
+    ]);
   });
 });

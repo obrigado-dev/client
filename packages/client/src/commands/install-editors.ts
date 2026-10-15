@@ -1,9 +1,11 @@
 /**
- * VS Code and Cursor: the extension's question, install, removal and refresh (A40).
+ * The editors: VS Code and Cursor's extension (A40), and the JetBrains IDEs' plugin (A43). Their
+ * question, install, removal and refresh.
  *
  * Split from `install.ts` for its line budget, as the Pi and desktop app adapters were. What is
- * fetched, checked and handed to the editor lives in `editor-extension.ts`; these decide what the
- * developer is asked and told, and what the install records.
+ * fetched, checked and handed to VS Code or Cursor lives in `editor-extension.ts`, and the
+ * JetBrains IDEs have `install-jetbrains.ts`; these decide what the developer is asked and told,
+ * and what the install records.
  */
 import { createInterface } from "node:readline/promises";
 
@@ -19,12 +21,35 @@ import {
 import type { Editor, EditorDeps } from "../editor-extension.ts";
 import { CLIENT_VERSION } from "../version.ts";
 import type { AdapterResult, Remover } from "./adapters.ts";
+import { installJetBrainsHost, jetbrainsDeps, readyIdesLabel } from "./install-jetbrains.ts";
 import { canAsk, parseAnswer } from "./privacy-prompt.ts";
 import { apiOrigin } from "./shared.ts";
+
+// Read from here by `install.ts`, which is at its limit of modules to import.
+export { removeJetBrains } from "./install-jetbrains.ts";
 
 const LABEL: Record<Editor, string> = { vscode: "VS Code", cursor: "Cursor" };
 
 type Ask = (question: string) => Promise<string | null>;
+
+/** An editor host a bare install can ask about. */
+export type EditorHost = Editor | "jetbrains";
+
+/** One that is on this machine, and what the question calls it. */
+export interface EditorHere {
+  readonly host: EditorHost;
+  readonly label: string;
+}
+
+/** VS Code and Cursor where their tools are, then the JetBrains IDEs the plugin can go into now. */
+function editorsHere(existing: ClientConfig | null): EditorHere[] {
+  const here: EditorHere[] = EDITORS.filter((editor) => editorPresent(editor)).map((editor) => ({
+    host: editor,
+    label: LABEL[editor],
+  }));
+  const ides = readyIdesLabel(jetbrainsDeps(existing));
+  return ides === null ? here : [...here, { host: "jetbrains", label: ides }];
+}
 
 /**
  * The editors a bare install includes: those it already put the extension in, then those
@@ -38,20 +63,20 @@ type Ask = (question: string) => Promise<string | null>;
 export async function chooseEditors(
   existing: ClientConfig | null,
   ask: Ask | null,
-  present: (editor: Editor) => boolean = editorPresent,
-): Promise<Editor[]> {
-  const chosen: Editor[] = [];
-  for (const editor of EDITORS.filter((candidate) => present(candidate))) {
-    if (editorIntegration(existing, editor)?.installed === true) {
-      chosen.push(editor);
+  here: readonly EditorHere[] = editorsHere(existing),
+): Promise<EditorHost[]> {
+  const chosen: EditorHost[] = [];
+  for (const { host, label } of here) {
+    if (editorIntegration(existing, host)?.installed === true) {
+      chosen.push(host);
       continue;
     }
     if (ask === null) continue;
-    const question = `Also put the sponsored line in ${LABEL[editor]}? Only while an agent runs there. [y/N] `;
+    const question = `Also put the sponsored line in ${label}? Only while an agent runs there. [y/N] `;
     // oxlint-disable-next-line eslint/no-await-in-loop -- a person answers one question at a time
     const answer = parseAnswer(await ask(question));
     if (answer === null) break;
-    if (answer) chosen.push(editor);
+    if (answer) chosen.push(host);
   }
   return chosen;
 }
@@ -60,7 +85,7 @@ export async function chooseEditors(
 export async function editorsForInstall(
   argv: readonly string[],
   existing: ClientConfig | null,
-): Promise<Editor[]> {
+): Promise<EditorHost[]> {
   if (!canAsk(argv)) return chooseEditors(existing, null);
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const closed = new AbortController();
@@ -118,7 +143,7 @@ async function installEditorAdapter(
   };
 }
 
-/** Each editor asked for, in the table's order. */
+/** Each editor asked for, in the table's order, then the JetBrains IDEs. */
 export async function installEditorHosts(
   targets: readonly string[],
   existing: ClientConfig | null,
@@ -129,6 +154,9 @@ export async function installEditorHosts(
   for (const editor of EDITORS.filter((candidate) => targets.includes(candidate))) {
     // oxlint-disable-next-line eslint/no-await-in-loop -- two editors, each with its own tool
     results.push(await installEditorAdapter(editor, existing, integrations, deps));
+  }
+  if (targets.includes("jetbrains")) {
+    results.push(...(await installJetBrainsHost(existing, integrations)));
   }
   return results;
 }

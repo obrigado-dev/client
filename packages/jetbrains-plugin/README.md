@@ -11,12 +11,25 @@ plugin's.
 ## Installing
 
 Not on the JetBrains Marketplace (see `docs/PUBLISHING.md`). Every release carries the plugin, and
-obrigado.dev serves it as a plugin repository (A40):
+obrigado.dev serves it as a plugin repository (A40).
 
 1. Install the CLI: `curl -fsSL https://obrigado.dev/install.sh | sh`. The widget runs it.
-2. In the IDE, **Settings → Plugins → ⚙ → Manage Plugin Repositories**, add
-   `https://obrigado.dev/jetbrains/updatePlugins.xml`.
-3. Install **Obrigado** from the Marketplace tab. Updates arrive the same way.
+2. Quit the IDE, then run `obrigado install --agent jetbrains` (a bare `obrigado install` asks
+   about the IDEs it finds). For every JetBrains IDE on the machine it runs the IDE's own
+   `installPlugins` command against the repository, and adds the repository to
+   `idea.plugin.hosts` in that IDE's custom `idea.properties` so updates arrive from it (A43).
+3. Start the IDE and approve the plugin when it asks: it is a third-party plugin, and the CLI
+   leaves that consent to you.
+
+An IDE that is open refuses the install and is told so; one never opened is skipped, because
+installing into it would create its settings and stop it offering to import the previous
+version's. `obrigado uninstall --agent jetbrains` takes the repository back out and turns the line
+off; the plugin itself is removed in **Settings → Plugins**, because no IDE removes one from its
+command line.
+
+By hand instead: **Settings → Plugins → ⚙ → Manage Plugin Repositories**, add
+`https://obrigado.dev/jetbrains/updatePlugins.xml`, then install **Obrigado** from the Marketplace
+tab. Updates arrive the same way.
 
 ## Why a status bar widget
 
@@ -111,7 +124,5 @@ supplies the standard library, and 2025.1 bundles 2.1.
 
 - **No Marketplace listing.** The vendor profile is unclaimed, and JetBrains reviews every
   plugin. Its guidelines rule out "features for additional promotion", which a reviewer may
-  read as covering a sponsored line; if so, the fallback is a custom plugin repository served
-  from obrigado.dev, which every JetBrains IDE supports.
-- **Not wired into `obrigado install`.** Like the VS Code extension, it arrives from the
-  host's own gallery, so the installer's job is to detect the IDE and point at it.
+  read as covering a sponsored line. The repository obrigado.dev serves (A40) is what installs
+  and updates it meanwhile, and keeps working if a listing comes.

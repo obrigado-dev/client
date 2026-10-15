@@ -23,7 +23,7 @@ const USAGE = `obrigado — sponsored status lines that fund open source maintai
 
   obrigado install             configure every detected supported agent
   obrigado install --agent <host>  just one: claude-code, claude-desktop, opencode, pi,
-                               oh-my-pi, vscode, cursor or codex
+                               oh-my-pi, vscode, cursor, jetbrains or codex
   obrigado install --chain     keep your existing statusline, add ours beneath
   obrigado install --above     put ours above your line instead (with --chain)
   obrigado install --replace   take over an existing statusline (reversible)

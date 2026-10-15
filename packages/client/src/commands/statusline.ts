@@ -253,6 +253,8 @@ export async function statusline(argv: readonly string[] = []): Promise<number> 
   const agent = agentFromArgv(argv);
   // A host this build does not know gets nothing, not somebody else's line. See `agentFromArgv`.
   if (agent === null) return 0;
+  // Uninstalled from the JetBrains IDEs, whose plugin only the IDE can remove: it draws nothing.
+  if (agent === "jetbrains" && config.integrations?.jetbrains?.installed === false) return 0;
   // Hosts that draw their own UI ask for the parts rather than a rendered line.
   const structured = argv.includes("--json");
 

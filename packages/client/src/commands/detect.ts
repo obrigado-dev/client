@@ -28,11 +28,12 @@ const DETECTORS: Record<InstallableAgentId, () => boolean> = {
   pi: piDetected,
   "oh-my-pi": ohMyPiDetected,
   "claude-desktop": claudeDesktopDetected,
-  // Asked about, never detected into (A40). An editor on this machine says nothing about whether
-  // an agent runs in it, so a bare install asks (`install-editors.ts`), and
-  // `--agent vscode|cursor` installs into one without asking.
+  // Asked about, never detected into (A40, A43). An editor on this machine says nothing about
+  // whether an agent runs in it, so a bare install asks (`install-editors.ts`), and
+  // `--agent vscode|cursor|jetbrains` installs without asking.
   vscode: () => false,
   cursor: () => false,
+  jetbrains: () => false,
 };
 
 function detectInstalledAgents(): InstallableAgentId[] {
@@ -41,8 +42,8 @@ function detectInstalledAgents(): InstallableAgentId[] {
 
 /**
  * Derived, not listed: an agent is installable here exactly when the shared table says this
- * client is what puts it there. JetBrains IDEs are absent because they install from their own
- * plugin manager (A40), which is a fact about them rather than a decision taken in this file.
+ * client is what puts it there, which is a fact about the host rather than a decision taken in
+ * this file.
  */
 export const SUPPORTED_INSTALL_AGENTS: readonly InstallableAgentId[] = INSTALLABLE_AGENTS.map(
   (agent) => agent.id,
