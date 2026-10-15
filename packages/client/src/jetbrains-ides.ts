@@ -143,7 +143,7 @@ function launcherOf(info: Record<string, unknown>, file: string, machine: Machin
   return existsSync(launcher) ? launcher : null;
 }
 
-export function readProductInfo(file: string, machine: Machine): JetBrainsIde | null {
+function readProductInfo(file: string, machine: Machine): JetBrainsIde | null {
   let info: unknown;
   try {
     info = JSON.parse(readFileSync(file, "utf8"));
