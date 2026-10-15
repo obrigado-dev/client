@@ -11,9 +11,6 @@ import java.net.URISyntaxException
  * escaped HTML or broken-up plain text, and never a construct Swing will interpret.
  */
 
-/** Said once, in the tooltip. */
-internal const val FOOTER = "70% of revenue funds open source maintainers."
-
 /**
  * Status bar text: label, then copy — one string, in that order.
  *
@@ -40,8 +37,8 @@ internal fun breakHtmlPrefix(value: String): String =
 /**
  * The tooltip, which is the only rich surface here that costs no click.
  *
- * HTML because Swing tooltips speak it: the label in bold, the copy with the emphasis its runs
- * carry, and the footer. Colour is not carried — the tooltip's background is the theme's, not
+ * HTML because Swing tooltips speak it: the label in bold and the copy with the emphasis its
+ * runs carry. Colour is not carried — the tooltip's background is the theme's, not
  * ours — and neither is the brand's logo, which Swing's HTML cannot draw from a `data:` URI and
  * which must never be fetched from anywhere else: a remote image in a tooltip hands the
  * advertiser an IP address and an activity signal nobody sold them.
@@ -51,7 +48,6 @@ internal fun tooltipHtml(ad: Sponsored): String =
         append("<html>")
         if (ad.label != null) append("<b>").append(escapeHtml(ad.label)).append("</b><br>")
         ad.spans.forEach { append(emphasise(it, ad)) }
-        append("<br><br><i>").append(escapeHtml(FOOTER)).append("</i>")
         append("</html>")
     }
 

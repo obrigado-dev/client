@@ -20,9 +20,6 @@ import type { Sponsored, SponsoredBrand, SponsoredSpan } from "@obrigado/surface
 
 export type { Sponsored, SponsoredSpan };
 
-/** Said once, rendered in the hover. */
-const FOOTER = "70% of revenue funds open source maintainers.";
-
 /**
  * The mark, as a Codicon.
  *
@@ -94,8 +91,6 @@ export function tooltipMarkdown(ad: Sponsored): string {
     ...(ad.label === null ? [] : [`**${escapeMarkdown(ad.label)}**`]),
     "",
     `[${copy}](${markdownUrl(ad.url)})`,
-    "",
-    `_${escapeMarkdown(FOOTER)}_`,
   ].join("\n");
 }
 

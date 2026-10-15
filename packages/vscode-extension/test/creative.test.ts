@@ -52,12 +52,13 @@ describe("status bar text", () => {
 });
 
 describe("hover markdown", () => {
-  test("label, copy as a link, and the split", () => {
+  test("label and copy as a link, and nothing after them", () => {
     const md = tooltipMarkdown(ad());
     // Markdown-escaped: the hyphen in the label would otherwise read as a list marker.
     expect(md).toContain("**oss\\-sponsor**");
     expect(md).toContain("[Ship it faster — example\\.com](https://obrigado.dev/c/abc123.sig)");
-    expect(md).toContain("70% of revenue funds open source maintainers");
+    expect(md).not.toContain("70%");
+    expect(md.trimEnd().endsWith("(https://obrigado.dev/c/abc123.sig)")).toBe(true);
   });
 
   test("bold and italic runs survive, because markdown can carry them", () => {

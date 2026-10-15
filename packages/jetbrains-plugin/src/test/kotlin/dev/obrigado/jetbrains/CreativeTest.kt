@@ -49,13 +49,13 @@ class CreativeTest {
     }
 
     @Test
-    fun `the tooltip carries the label, the runs' emphasis and the footer`() {
+    fun `the tooltip carries the label and the runs' emphasis, and nothing after them`() {
         val html =
             tooltipHtml(
                 ad(spans = listOf(SponsoredSpan(text = "Postgres", bold = true), SponsoredSpan(text = ", but calm", italic = true)))
             )
         assertEquals(
-            "<html><b>oss-sponsor</b><br><b>Postgres</b><i>, but calm</i><br><br><i>$FOOTER</i></html>",
+            "<html><b>oss-sponsor</b><br><b>Postgres</b><i>, but calm</i></html>",
             html,
         )
     }
@@ -63,7 +63,7 @@ class CreativeTest {
     @Test
     fun `an italic line italicises every run, and no label means no bold line`() {
         val html = tooltipHtml(ad(label = null, spans = listOf(SponsoredSpan(text = "calm")), effect = "italic"))
-        assertEquals("<html><i>calm</i><br><br><i>$FOOTER</i></html>", html)
+        assertEquals("<html><i>calm</i></html>", html)
     }
 
     @Test
