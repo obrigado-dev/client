@@ -10,7 +10,7 @@
  * The three cases, in order:
  *
  *   1. `obrigado` on PATH — the published case, and the only one that survives the binary
- *      moving.
+ *      moving. Named by its full path when a package manager installed it (A44).
  *   2. A compiled binary that is not on PATH — downloaded and run in place. Its sources live
  *      in Bun's virtual filesystem, so the checkout form below would write a path nothing can
  *      run; the binary IS the CLI, so it is invoked directly.
@@ -30,13 +30,6 @@ function isCompiledBinary(path = import.meta.path): boolean {
 }
 
 /**
- * The renderer command as a shell string, with `--agent <host>` appended when a host is named.
- *
- * The host is named explicitly rather than left to the renderer's default, so every installed
- * command states which agent it attributes to. A default that some callers rely on and others
- * override is a default that eventually mis-attributes revenue.
- */
-/**
  * The renderer as argv, for a host that does not start with the installing shell's PATH.
  *
  * The same three cases, with `obrigado` named by its full path. The Claude desktop app starts
@@ -50,9 +43,36 @@ export function absoluteRendererArgv(): string[] {
   return [process.execPath, join(dirname(import.meta.path), "cli.ts"), "statusline"];
 }
 
-export function rendererCommand(agent?: string): string {
+/** Whether npm, pnpm, bun or yarn put this binary where it is: in their `node_modules` (A44). */
+function fromPackageManager(binary: string): boolean {
+  return binary.split(/[\\/]/u).includes("node_modules");
+}
+
+/**
+ * The renderer command as a shell string, with `--agent <host>` appended when a host is named.
+ *
+ * The host is named explicitly rather than left to the renderer's default, so every installed
+ * command states which agent it attributes to. A default that some callers rely on and others
+ * override is a default that eventually mis-attributes revenue.
+ *
+ * `obrigado` on PATH is named bare, except where a package manager installed it (A44). Under a
+ * Node version manager such as nvm, fnm or Vite+, that bin directory is one Node version's, so
+ * the bare name stops resolving in any shell on another version and the line goes blank. Its
+ * `obrigado` is a shell script that runs under any Node, so the path it has now keeps working.
+ * Only a path that needs no quoting: `statusLineOwner` takes a quote for a command of the
+ * developer's, and uninstall would then leave ours behind.
+ */
+export function rendererCommand(
+  agent?: string,
+  found?: { readonly onPath: string | null; readonly binary: string },
+): string {
   const suffix = agent === undefined ? "" : ` --agent ${agent}`;
-  if (Bun.which("obrigado") !== null) return `obrigado statusline${suffix}`;
+  const onPath = found === undefined ? Bun.which("obrigado") : found.onPath;
+  if (onPath !== null) {
+    const binary = found?.binary ?? process.execPath;
+    const byPath = fromPackageManager(binary) && /^[\w./+@-]+$/u.test(onPath);
+    return `${byPath ? onPath : "obrigado"} statusline${suffix}`;
+  }
   if (isCompiledBinary()) return `${process.execPath} statusline${suffix}`;
   // `import.meta.path` is this module; the CLI entry sits beside it.
   const cli = join(dirname(import.meta.path), "cli.ts");

@@ -91,13 +91,19 @@ manifest, whose `bin` is `src/cli.ts`, and not what npm gets.
 
 Every `v<version>` release publishes them. `release.yml`'s `npm` job runs after the GitHub
 release: it downloads what was published, checks it against the signed SHA256SUMS, lays the
-packages out, and publishes the platform packages and then `@obrigado/client` with
-`npm publish --provenance`. A version already on the registry is skipped, so a failed job is
-re-run alone.
+packages out, and publishes them with `npm publish --provenance`: the platform packages first,
+then `@obrigado/client` once npm serves every one of them, since it names each at its exact
+version and npm took over ten minutes to make 0.3.11's linux-x64 pair installable. A version
+already on the registry is skipped, so a failed job is re-run alone.
 
 An npm install updates itself like any release binary (A38): the daily check replaces the binary
 where the package manager put it. `npm ls -g` goes on naming the version installed until the next
 `npm install -g @obrigado/client@latest`, which lays the same bytes down.
+
+`obrigado install` from an npm install writes each host's command with the full path of the
+`obrigado` it found on PATH, not the bare name (0.3.12). Under a Node version manager such as
+nvm, fnm or Vite+ that bin directory belongs to one Node version, and the bare name would stop
+resolving in any shell on another one.
 
 ### Their first version
 

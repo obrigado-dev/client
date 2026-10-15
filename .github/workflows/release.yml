@@ -117,7 +117,8 @@ jobs:
   npm:
     needs: binaries
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Most of it waiting for npm to make the platform packages installable (Publish, below).
+    timeout-minutes: 50
     permissions:
       contents: read
       id-token: write
@@ -157,16 +158,33 @@ jobs:
       # Through npm trusted publishing (OIDC), which each of the six packages names this workflow
       # for; their first version went out by hand (docs/PUBLISHING.md). A version already on the
       # registry is done, so a re-run publishes only what is missing. The platform packages go
-      # first, because @obrigado/client names each at this exact version.
+      # first, and @obrigado/client only once npm serves every one of them: it names each at this
+      # exact version, and npm took over ten minutes to make 0.3.11's linux-x64 pair installable,
+      # which would have left a Linux machine with a launcher and nothing beside it to run.
       - name: Publish
         run: |
           set -eu
-          for dir in ./dist/npm/client-* ./dist/npm/client; do
-            spec="$(bun -e "const m = JSON.parse(await Bun.file('$dir/package.json').text()); console.log(m.name + '@' + m.version)")"
-            if npm view "$spec" version > /dev/null 2>&1; then
-              echo "$spec is already published"
-              continue
+          spec() {
+            bun -e "const m = JSON.parse(await Bun.file('$1/package.json').text()); console.log(m.name + '@' + m.version)"
+          }
+          publish() {
+            if npm view "$(spec "$1")" version > /dev/null 2>&1; then
+              echo "$(spec "$1") is already published"
+              return
             fi
-            npm publish "$dir" --provenance --access public
-            echo "## Published: \`$spec\`" >> "$GITHUB_STEP_SUMMARY"
+            npm publish "$1" --provenance --access public
+            echo "## Published: \`$(spec "$1")\`" >> "$GITHUB_STEP_SUMMARY"
+          }
+          for dir in ./dist/npm/client-*; do publish "$dir"; done
+          for dir in ./dist/npm/client-*; do
+            tries=0
+            until npm view "$(spec "$dir")" version > /dev/null 2>&1; do
+              tries=$((tries + 1))
+              if [ "$tries" -gt 60 ]; then
+                echo "$(spec "$dir") is not installable after 30 minutes: @obrigado/client not published" >&2
+                exit 1
+              fi
+              sleep 30
+            done
           done
+          publish ./dist/npm/client
