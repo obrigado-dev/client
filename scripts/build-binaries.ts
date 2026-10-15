@@ -19,9 +19,9 @@
  *
  * ## Windows
  *
- * Not built. `bun-windows-x64` compiles, but the installer that consumes these is a POSIX
- * shell script, and shipping a binary nothing can fetch is worse than a Windows user reading
- * "use npm" — which still works, and is what the site says.
+ * Not built. `bun-windows-x64` compiles, but both ways in are POSIX shell scripts, install.sh
+ * and the npm launcher (A44), and nothing has been run on Windows. install.sh sends a Windows
+ * machine to WSL, where the Linux build runs, and npm refuses `@obrigado/client` there by `os`.
  */
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";

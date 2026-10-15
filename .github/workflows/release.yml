@@ -109,3 +109,64 @@ jobs:
           gh release download "$TAG" --repo "${{ github.repository }}" --pattern 'obrigado-*' --pattern 'editors.json' --pattern 'SHA256SUMS' --pattern 'SHA256SUMS.sig'
           sha256sum -c SHA256SUMS
           bun ../scripts/sign-release.ts --verify .
+
+  # The same binaries on npm (A44), for `npm install -g @obrigado/client` and the rest: a package
+  # per platform carrying the release's binary byte for byte, and @obrigado/client, which installs
+  # the one that fits. A job of its own so that only it holds a token npm accepts, and so a failure
+  # here is re-run alone: the GitHub release is already out.
+  npm:
+    needs: binaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      # npm ≥ 11.5 speaks trusted publishing; the runner's Node ships an older one.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: npm install -g npm@latest
+
+      - run: bun install --frozen-lockfile
+
+      # What goes to npm is what went to GitHub, held to the signed checksums the way install.sh
+      # and the self-update hold it.
+      - name: Download what was published
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          mkdir -p dist/release && cd dist/release
+          gh release download "$TAG" --repo "${{ github.repository }}" --pattern 'obrigado-*' --pattern 'editors.json' --pattern 'SHA256SUMS' --pattern 'SHA256SUMS.sig'
+          sha256sum -c SHA256SUMS
+          bun ../../scripts/sign-release.ts --verify .
+
+      - run: bun scripts/npm-packages.ts dist/release dist/npm
+
+      # Through npm trusted publishing (OIDC), which each of the six packages names this workflow
+      # for; their first version went out by hand (docs/PUBLISHING.md). A version already on the
+      # registry is done, so a re-run publishes only what is missing. The platform packages go
+      # first, because @obrigado/client names each at this exact version.
+      - name: Publish
+        run: |
+          set -eu
+          for dir in ./dist/npm/client-* ./dist/npm/client; do
+            spec="$(bun -e "const m = JSON.parse(await Bun.file('$dir/package.json').text()); console.log(m.name + '@' + m.version)")"
+            if npm view "$spec" version > /dev/null 2>&1; then
+              echo "$spec is already published"
+              continue
+            fi
+            npm publish "$dir" --provenance --access public
+            echo "## Published: \`$spec\`" >> "$GITHUB_STEP_SUMMARY"
+          done
