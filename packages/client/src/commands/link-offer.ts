@@ -29,14 +29,14 @@ export const LINK_QUESTION =
 export const LINK_LATER = "Link your GitHub any time to be listed: obrigado link github";
 
 /** Whether to ask, only mention it, or say nothing. */
-export type LinkOffer = "ask" | "mention" | "none";
+type LinkOffer = "ask" | "mention" | "none";
 
 /**
  * Nothing for an install with no host configured, which has nothing to be thanked for yet, one
  * signed in with GitHub already, or one asked before, whatever it said. Without a terminal the
  * question becomes a line, since a script or an agent can pass it on.
  */
-export function linkOffer(config: ClientConfig, canPrompt: boolean): LinkOffer {
+function linkOffer(config: ClientConfig, canPrompt: boolean): LinkOffer {
   if (installedTargets(config).length === 0) return "none";
   if (config.developer_session !== undefined || config.link_offered_at !== undefined) {
     return "none";
