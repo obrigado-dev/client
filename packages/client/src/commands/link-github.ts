@@ -9,6 +9,11 @@
  *
  * An approved link also signs this install in: the server hands over a session once, and it is
  * kept in the config until `obrigado unlink github` ends it.
+ *
+ * The code waits in the config until the link settles, so a later `obrigado link github` finishes
+ * it rather than starting another. That is what `--no-wait` is for: a coding agent's shell gives
+ * up long before a person has typed a code on github.com, so the agent runs `--no-wait`, hands the
+ * person the code, and runs `obrigado link github` once they have approved it.
  */
 import type { DeveloperSessionWire, LinkedGitHubWire } from "@obrigado/shared";
 
@@ -46,6 +51,34 @@ function sameLogin(login: string, other: string | undefined): boolean {
 }
 
 type DeveloperSession = NonNullable<ClientConfig["developer_session"]>;
+type PendingLink = NonNullable<ClientConfig["pending_github_link"]>;
+
+/** Keep the link waiting for its code, or forget it. Read again first, as `storeSession` does. */
+async function keepPending(fallback: ClientConfig, pending: PendingLink | null): Promise<void> {
+  const { pending_github_link: _replaced, ...rest } = (await readConfig()) ?? fallback;
+  await writeConfig(pending === null ? rest : { ...rest, pending_github_link: pending });
+}
+
+/**
+ * The link to come back to: one still waiting, asked for the same way. A request with a name or
+ * links, or one listing where the waiting one did not, is a different request and starts afresh.
+ */
+function waitingLink(config: ClientConfig, args: LinkArgs, now = Date.now()): PendingLink | null {
+  const pending = config.pending_github_link;
+  if (pending === undefined || Date.parse(pending.expires_at) <= now + 5000) return null;
+  const different =
+    args.name !== undefined ||
+    args.url !== undefined ||
+    Object.keys(args.socials ?? {}).length > 0 ||
+    pending.listed === args.noList;
+  return different ? null : pending;
+}
+
+/** Where to type the code, and for how long. */
+function enterCode(pending: PendingLink, now = Date.now()): string {
+  const minutes = Math.max(1, Math.round((Date.parse(pending.expires_at) - now) / 60_000));
+  return `Enter ${pending.user_code} at ${pending.verification_uri} (expires in ${minutes} min).`;
+}
 
 /**
  * Keep this install's session, or drop it. The config is read again first: a link waits minutes
@@ -99,6 +132,19 @@ export async function linkGitHub(
     return 1;
   }
 
+  // Read now rather than taken from the flow: the link it may finish was kept by an earlier run.
+  const waiting = waitingLink((await readConfig()) ?? flow.config, args);
+  if (waiting !== null) {
+    console.log(`  ${waiting.publishes}\n`);
+    console.log(`  Already started. ${enterCode(waiting)}`);
+    if (args.noWait === true) {
+      console.log("  Then run `obrigado link github` to finish.");
+      return 0;
+    }
+    console.log("  Waiting…");
+    return await settle(flow, waiting, dependencies);
+  }
+
   const started = await startGitHubLink(flow.options, {
     consent_listing: !args.noList,
     ...(args.name === undefined ? {} : { display_name: args.name }),
@@ -113,13 +159,38 @@ export async function linkGitHub(
   }
 
   const { data } = started;
-  // The server's sentence, verbatim — the one promise the CLI must not paraphrase.
-  console.log(args.noList ? "  --no-list: nothing is published.\n" : `  ${data.publishes}\n`);
-  console.log(
-    `  Enter ${data.user_code} at ${data.verification_uri} ` +
-      `(expires in ${Math.round(data.expires_in_s / 60)} min). Waiting…`,
-  );
-  return await waitForApproval(flow, data.flow, data.interval_s, dependencies);
+  const pending: PendingLink = {
+    flow: data.flow,
+    user_code: data.user_code,
+    verification_uri: data.verification_uri,
+    interval_s: data.interval_s,
+    expires_at: new Date(Date.now() + data.expires_in_s * 1000).toISOString(),
+    listed: !args.noList,
+    // The server's sentence, verbatim — the one promise the CLI must not paraphrase.
+    publishes: args.noList ? "--no-list: nothing is published." : data.publishes,
+  };
+  await keepPending(flow.config, pending);
+  console.log(`  ${pending.publishes}\n`);
+  if (args.noWait === true) {
+    console.log(`  ${enterCode(pending)}`);
+    console.log("  Then run `obrigado link github` to finish.");
+    return 0;
+  }
+  console.log(`  ${enterCode(pending)} Waiting…`);
+  return await settle(flow, pending, dependencies);
+}
+
+/** Wait the link out, then forget it, whatever became of it. A Ctrl-C leaves it to come back to. */
+async function settle(
+  flow: LinkFlow,
+  pending: PendingLink,
+  dependencies: PollDependencies,
+): Promise<number> {
+  try {
+    return await waitForApproval(flow, pending.flow, pending.interval_s, dependencies);
+  } finally {
+    await keepPending(flow.config, null);
+  }
 }
 
 /**

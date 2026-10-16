@@ -166,6 +166,26 @@ export interface ClientConfig {
     readonly expires_at: string;
   };
   /**
+   * When `obrigado install` last offered to link GitHub, whatever the answer was. Set, it is not
+   * offered again: once per install (`link-offer.ts`).
+   */
+  readonly link_offered_at?: string;
+  /**
+   * A GitHub link whose code is waiting to be approved, so `obrigado link github` can come back to
+   * it: after `--no-wait`, which an agent's shell needs, or after a Ctrl-C. Cleared once it settles.
+   * The flow token is this install's alone; GitHub's device code never leaves the server.
+   */
+  readonly pending_github_link?: {
+    readonly flow: string;
+    readonly user_code: string;
+    readonly verification_uri: string;
+    readonly interval_s: number;
+    readonly expires_at: string;
+    /** Whether it asked to be listed, and the server's sentence saying what that publishes. */
+    readonly listed: boolean;
+    readonly publishes: string;
+  };
+  /**
    * What this developer agreed to be targeted on. Absent means none of it.
    *
    * Independent flags rather than a level: somebody may be happy to share a country and not

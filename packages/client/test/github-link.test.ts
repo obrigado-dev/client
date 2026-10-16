@@ -19,6 +19,7 @@ mock.module("../src/config.ts", () => ({
   readConfig: () => Promise.resolve(storedConfig),
   writeConfig: (config: Record<string, unknown>) => {
     written.push(config);
+    storedConfig = config;
     return Promise.resolve();
   },
 }));
@@ -99,6 +100,65 @@ function server(polls: unknown[]): Responder {
     return Response.json(next);
   };
 }
+
+/** The link kept for a later run to finish, if any. */
+function kept(): Record<string, unknown> | undefined {
+  return storedConfig["pending_github_link"] as Record<string, unknown> | undefined;
+}
+
+/** How many requests went to this path. */
+function asked(path: string): number {
+  return requests.filter((request) => request.path === path).length;
+}
+
+describe("a link an agent starts and the person finishes", () => {
+  test("--no-wait prints the sentence and the code, and returns without waiting", async () => {
+    respond = server([{ status: "pending", interval_s: 5 }]);
+
+    expect(await linkGitHub(flow, parseLinkArgs(["--no-wait"]), noWait)).toBe(0);
+
+    expect(output()).toContain(PUBLISHES);
+    expect(output()).toContain("Enter WDJB-MJHT at https://github.com/login/device");
+    expect(output()).toContain("Then run `obrigado link github` to finish.");
+    expect(asked("github/poll")).toBe(0);
+    expect(kept()).toMatchObject({ flow: FLOW, user_code: "WDJB-MJHT", listed: true });
+  });
+
+  test("a later `link github` finishes that link rather than starting another", async () => {
+    respond = server([{ status: "linked", entry, session: SESSION }]);
+    await linkGitHub(flow, parseLinkArgs(["--no-wait"]), noWait);
+
+    expect(await linkGitHub(flow, parseLinkArgs([]), noWait)).toBe(0);
+
+    expect(asked("github/start")).toBe(1);
+    expect(requests.at(-1)).toEqual({ path: "github/poll", body: { flow: FLOW } });
+    expect(output()).toContain("Linked @ada");
+    expect(kept()).toBeUndefined();
+  });
+
+  test("--no-wait again shows the same code instead of asking for another", async () => {
+    respond = server([{ status: "pending", interval_s: 5 }]);
+    await linkGitHub(flow, parseLinkArgs(["--no-wait"]), noWait);
+
+    expect(await linkGitHub(flow, parseLinkArgs(["--no-wait"]), noWait)).toBe(0);
+
+    expect(asked("github/start")).toBe(1);
+    expect(output()).toContain("Already started. Enter WDJB-MJHT");
+  });
+
+  test("an expired code, or a different request, starts afresh", async () => {
+    respond = server([{ status: "pending", interval_s: 5 }]);
+    await linkGitHub(flow, parseLinkArgs(["--no-wait"]), noWait);
+    storedConfig = {
+      ...storedConfig,
+      pending_github_link: { ...kept(), expires_at: new Date(Date.now() - 1000).toISOString() },
+    };
+    await linkGitHub(flow, parseLinkArgs(["--no-wait"]), noWait);
+    await linkGitHub(flow, parseLinkArgs(["--no-wait", "--name", "Ada L"]), noWait);
+
+    expect(asked("github/start")).toBe(3);
+  });
+});
 
 describe("starting", () => {
   test("prints the server's sentence verbatim and where to type the code", async () => {
@@ -195,21 +255,20 @@ describe("signing in (A33)", () => {
     respond = server([{ status: "linked", entry, session: SESSION }]);
 
     expect(await linkGitHub(flow, parseLinkArgs([]), noWait)).toBe(0);
-    expect(written).toEqual([
-      {
-        ...BASE_CONFIG,
-        sharing: { region: true },
-        developer_session: { token: SESSION.token, login: "ada", expires_at: SESSION.expires_at },
-      },
-    ]);
+    // The code waited in the config while it was approved, and is gone once it settled.
+    expect(written.at(-1)).toEqual({
+      ...BASE_CONFIG,
+      sharing: { region: true },
+      developer_session: { token: SESSION.token, login: "ada", expires_at: SESSION.expires_at },
+    });
     expect(output()).toContain("Signed in until 2027-09-17");
   });
 
-  test("a server from before sign-in links without a session, and nothing is written", async () => {
+  test("a server from before sign-in links without a session, and keeps none", async () => {
     respond = server([{ status: "linked", entry }]);
 
     expect(await linkGitHub(flow, parseLinkArgs([]), noWait)).toBe(0);
-    expect(written).toEqual([]);
+    expect(written.at(-1)).toEqual(BASE_CONFIG);
   });
 
   test("unlinking the signed-in account removes its session from this install", async () => {

@@ -223,7 +223,8 @@ const INSTALLED_CHECK: Record<InstallAgent, (config: ClientConfig) => boolean> =
   jetbrains: (config) => editorIntegration(config, "jetbrains")?.installed === true,
 };
 
-function installedTargets(config: ClientConfig | null): InstallAgent[] {
+/** The hosts this install has configured, by its own record. */
+export function installedTargets(config: ClientConfig | null): InstallAgent[] {
   if (config === null) return [];
   return SUPPORTED_INSTALL_AGENTS.filter((agent) => INSTALLED_CHECK[agent](config));
 }

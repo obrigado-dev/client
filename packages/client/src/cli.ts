@@ -11,6 +11,7 @@
 import { config, refresh } from "./commands/config.ts";
 import { install, uninstall } from "./commands/install.ts";
 import { link, unlink } from "./commands/link.ts";
+import { offerGitHubLink } from "./commands/link-offer.ts";
 import { privacy } from "./commands/privacy.ts";
 import { printRetrievalHook, read, summary } from "./commands/projects.ts";
 import { doctor, status } from "./commands/status.ts";
@@ -61,7 +62,13 @@ https://obrigado.dev
  * code than the cases.
  */
 const commands: Record<string, (argv: readonly string[]) => Promise<number>> = {
-  install: (argv) => install(argv),
+  // Then getting listed, the one step setup leaves (`link-offer.ts`). Its outcome is its own:
+  // the install's exit code says how the install went.
+  install: async (argv) => {
+    const code = await install(argv);
+    await offerGitHubLink(argv);
+    return code;
+  },
   uninstall: (argv) => uninstall(argv),
   config: () => config(),
   refresh: () => refresh(),

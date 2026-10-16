@@ -36,6 +36,7 @@ const ERROR_TEXT: Record<string, string> = {
   too_many_flows: "Too many GitHub links in progress. Let one finish or expire, then retry.",
   too_many_accounts: "This install already has its maximum number of linked GitHub accounts.",
   flow_invalid: "That GitHub link is no longer in progress. Run `obrigado link github` again.",
+  rate_limited: "Too many new installs from this network for now. Try again in a few minutes.",
 };
 
 export function explain(error: string, origin: string): string {
@@ -56,6 +57,8 @@ export interface LinkArgs {
   readonly url?: string | undefined;
   readonly socials?: Socials | undefined;
   readonly noList: boolean;
+  /** `link github` only: print the code and return, and finish with a later `link github`. */
+  readonly noWait?: boolean;
   readonly problem?: string | undefined;
 }
 
@@ -69,12 +72,15 @@ export function parseLinkArgs(argv: readonly string[]): LinkArgs {
   let url: string | undefined;
   const socials: Socials = {};
   let noList = false;
+  let noWait = false;
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i] as string;
     const platform = arg.startsWith("--") ? arg.slice(2) : "";
     if (arg === "--no-list") {
       noList = true;
+    } else if (arg === "--no-wait") {
+      noWait = true;
     } else if (arg === "--code" || arg === "--name" || arg === "--url") {
       const value = argv[i + 1];
       if (value === undefined) return { noList, problem: `${arg} needs a value` };
@@ -105,5 +111,5 @@ export function parseLinkArgs(argv: readonly string[]): LinkArgs {
     }
   }
 
-  return { email, code, name, url, socials, noList };
+  return { email, code, name, url, socials, noList, noWait };
 }

@@ -38,6 +38,7 @@ const LINK_USAGE = `obrigado link — put your name (or your company's domain) o
 
   obrigado link                          where each linked email and account stands
   obrigado link github                   sign in with GitHub; your login lists at once
+  obrigado link github --no-wait         print the code and return; \`link github\` finishes it
   obrigado link you@company.com          request a verification code
   obrigado link you@gmail.com --name "Ada L"
   obrigado link --code 123456            confirm with the emailed code
