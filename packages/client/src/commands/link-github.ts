@@ -223,7 +223,11 @@ async function waitForApproval(
     const until = await signedInAs(flow, outcome.entry.login, outcome.session);
     const signedIn = until === null ? "" : `Signed in until ${until}. `;
     console.log(`  ${signedIn}Undo with \`obrigado unlink github\`.`);
-    await offerNewsletter(flow, { email: outcome.email, vouch: outcome.newsletter_vouch });
+    await offerNewsletter(flow, {
+      email: outcome.email,
+      vouch: outcome.newsletter_vouch,
+      from: outcome.newsletter_from,
+    });
     return 0;
   }
   console.log(

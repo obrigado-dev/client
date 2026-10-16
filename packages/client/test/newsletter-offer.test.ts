@@ -1,6 +1,6 @@
 /**
  * The newsletter, offered after a GitHub link (`newsletter-offer.ts`): once, at a terminal, about
- * the address the link brought back, starting on Yes, and a yes only asks for a confirmation email.
+ * the address the link brought back, saying who asks, starting on Yes, and a yes subscribes.
  */
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 
@@ -28,11 +28,13 @@ const flow = {
   origin: "http://api.test",
   options: { apiOrigin: "http://api.test", installKey: "test-key" },
 };
-const OFFER = { email: "ada@example.com", vouch: "1.v" };
+const FROM =
+  "From Obrigado (Principle Stash Inc, 1 Example St, obrigado.dev). Unsubscribe any time.";
+const OFFER = { email: "ada@example.com", vouch: "1.v", from: FROM };
 
 let said: string[] = [];
 let drawn: string[] = [];
-let sent: Array<{ email: string; vouch: string }> = [];
+let sent: Array<{ email: string; vouch: string; asked: string }> = [];
 
 /** The offer, with a person pressing `keys`, or nobody at a terminal when `prompt` is false. */
 async function offer(
@@ -40,11 +42,11 @@ async function offer(
   {
     prompt = true,
     given = OFFER,
-    answer = "confirm_sent",
+    answer = "subscribed",
   }: {
     readonly prompt?: boolean;
     readonly given?: { readonly email: string | undefined; readonly vouch: string | undefined };
-    readonly answer?: "confirm_sent" | "subscribed" | null;
+    readonly answer?: "subscribed" | "already_subscribed" | null;
   } = {},
 ): Promise<void> {
   await offerNewsletter(flow, given, {
@@ -75,13 +77,14 @@ beforeEach(() => {
 });
 
 describe("after a GitHub link", () => {
-  test("Enter takes the Yes it starts on, and asks for a confirmation email", async () => {
+  test("Enter takes the Yes it starts on, and subscribes with the question as shown", async () => {
     await offer([{ name: "return" }]);
 
-    expect(drawn[0]).toStartWith(newsletterQuestion("ada@example.com"));
+    const asked = `${newsletterQuestion("ada@example.com")}\n${FROM}`;
+    expect(drawn[0]).toStartWith(asked);
     expect(drawn[0]).toContain("› Yes");
-    expect(sent).toEqual([OFFER]);
-    expect(said.at(-1)).toContain("Check ada@example.com for a link to confirm");
+    expect(sent).toEqual([{ email: "ada@example.com", vouch: "1.v", asked }]);
+    expect(said.at(-1)).toContain("Subscribed ada@example.com");
     expect(typeof written.at(-1)?.["newsletter_offered_at"]).toBe("string");
   });
 
@@ -109,11 +112,11 @@ describe("after a GitHub link", () => {
   });
 
   test("says so when the address is already subscribed, or the server did not answer", async () => {
-    await offer([{ name: "return" }], { answer: "subscribed" });
+    await offer([{ name: "return" }], { answer: "already_subscribed" });
     expect(said.at(-1)).toContain("already subscribed");
 
     storedConfig = BASE;
     await offer([{ name: "return" }], { answer: null });
-    expect(said.at(-1)).toContain("Couldn't sign you up");
+    expect(said.at(-1)).toContain("Couldn't subscribe you");
   });
 });

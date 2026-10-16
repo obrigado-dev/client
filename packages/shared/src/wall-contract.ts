@@ -223,11 +223,13 @@ export const GitHubLinkPollResponseSchema = z.discriminatedUnion("status", [
     session: DeveloperSessionWireSchema.optional(),
     /**
      * The account's primary verified email, as GitHub gave it, for the CLI to offer the newsletter
-     * to, and the server's signature saying so (`NewsletterSubscribeRequest`). Absent when GitHub
-     * gave none. The link does not keep it: only a subscription would.
+     * to; the server's signature saying so (`NewsletterSubscribeRequest`); and who is asking, as
+     * the question must say. Absent when GitHub gave none. The link does not keep the address:
+     * only a yes would.
      */
     email: z.email().max(254).optional(),
     newsletter_vouch: z.string().max(200).optional(),
+    newsletter_from: z.string().max(300).optional(),
   }),
   /** The person pressed Cancel on GitHub. */
   z.object({ status: z.literal("denied") }),
@@ -241,19 +243,19 @@ export type GitHubUnlinkRequest = z.infer<typeof GitHubUnlinkRequestSchema>;
 // ─────────────── The newsletter ───────────────
 
 /**
- * Asking for the newsletter, from the CLI after a GitHub link. `vouch` is what the poll that
+ * A yes to the newsletter, from the CLI after a GitHub link. `vouch` is what the poll that
  * finished the link signed for this email, so the endpoint takes only an address GitHub verified
- * moments ago, never one somebody typed. Nothing is subscribed by it: the server emails a link to
- * confirm, and only that click subscribes.
+ * moments ago, never one somebody typed. `asked` is the question exactly as the person saw it,
+ * kept as the record of what they said yes to.
  */
 export const NewsletterSubscribeRequestSchema = z.object({
   email: z.email().max(254),
   vouch: z.string().min(1).max(200),
+  asked: z.string().min(1).max(600),
 });
 export type NewsletterSubscribeRequest = z.infer<typeof NewsletterSubscribeRequestSchema>;
 
 export const NewsletterSubscribeResponseSchema = z.object({
-  /** `confirm_sent`: check the inbox. `subscribed`: it already was, and nothing was sent. */
-  status: z.enum(["confirm_sent", "subscribed"]),
+  status: z.enum(["subscribed", "already_subscribed"]),
 });
 export type NewsletterSubscribeResponse = z.infer<typeof NewsletterSubscribeResponseSchema>;
