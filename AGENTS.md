@@ -21,7 +21,7 @@ this passes on every laptop and fails on every runner.
 |---|---|---|---|
 | `@obrigado/surface` | npm | tag `surface-v<version>` → `publish.yml` publishes | 0.3.0 published |
 | `@obrigado/opencode-plugin` | npm | same (0.1.0 was published by hand; trusted publishing is set up) | 0.4.1: one module OpenCode 1 and OpenCode 2 both load (A42), reporting the person's last typed message for the attention rule, and drawing a new line only after something happened in the session; a built `dist/tui.js`; pins surface's exact version |
-| `obrigado` CLI binaries | GitHub Releases, fetched by `install.sh` | tag `v<version>` → `release.yml` | 0.3.14 released |
+| `obrigado` CLI binaries | GitHub Releases, fetched by `install.sh` | tag `v<version>` → `release.yml` | 0.3.15 released |
 | `@obrigado/client` and `@obrigado/client-<platform>` | npm: the same binaries, one package per platform, and a launcher that runs the one installed (A44) | the same tag → `release.yml`'s `npm` job, after the GitHub release; the first version by hand (`docs/PUBLISHING.md`) | 0.3.11 by hand; from 0.3.12 by `release.yml` |
 | VS Code / Cursor extension | each GitHub release; installed by `obrigado install --agent vscode\|cursor` (A40) | built by `release.yml` with the binaries, stamped with the release version | Marketplace publisher `obrigado` unclaimed; see `docs/PUBLISHING.md` |
 | JetBrains plugin | each GitHub release; served as a plugin repository at obrigado.dev/jetbrains/updatePlugins.xml (A40); installed by `obrigado install --agent jetbrains` through each IDE's own installer, from a copy checked against the signed checksums (A43) | the same | Marketplace vendor unclaimed; see `docs/PUBLISHING.md` |
