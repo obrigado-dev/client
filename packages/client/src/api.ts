@@ -102,7 +102,7 @@ export async function startSession(options: SessionOptions): Promise<SessionResp
  * here, and a developer who typed `obrigado status` is willing to wait a moment for a
  * real answer rather than get a blank one.
  */
-const STATS_TIMEOUT_MS = 8_000;
+export const STATS_TIMEOUT_MS = 8_000;
 
 export interface StatsOptions {
   readonly apiOrigin: string;

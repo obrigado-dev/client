@@ -171,6 +171,11 @@ export interface ClientConfig {
    */
   readonly link_offered_at?: string;
   /**
+   * When a finished GitHub link last offered the newsletter, whatever the answer was. Set, it is
+   * not offered again (`newsletter-offer.ts`).
+   */
+  readonly newsletter_offered_at?: string;
+  /**
    * A GitHub link whose code is waiting to be approved, so `obrigado link github` can come back to
    * it: after `--no-wait`, which an agent's shell needs, or after a Ctrl-C. Cleared once it settles.
    * The flow token is this install's alone; GitHub's device code never leaves the server.

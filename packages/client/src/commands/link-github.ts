@@ -22,6 +22,7 @@ import { readConfig, writeConfig } from "../config.ts";
 import type { ClientConfig } from "../config.ts";
 import { pollGitHubLink, startGitHubLink, unlinkGitHub } from "../github-link-api.ts";
 import { explain } from "./link-args.ts";
+import { offerNewsletter, willOfferNewsletter } from "./newsletter-offer.ts";
 import type { LinkArgs, LinkFlow } from "./link-args.ts";
 import { apiOrigin } from "./shared.ts";
 
@@ -147,6 +148,8 @@ export async function linkGitHub(
 
   const started = await startGitHubLink(flow.options, {
     consent_listing: !args.noList,
+    // GitHub is asked for the address only when the link will end by offering the newsletter.
+    ...(args.noWait !== true && willOfferNewsletter(flow.config) ? { newsletter: true } : {}),
     ...(args.name === undefined ? {} : { display_name: args.name }),
     ...(args.url === undefined ? {} : { url: args.url }),
     ...(args.socials === undefined || Object.keys(args.socials).length === 0
@@ -220,6 +223,7 @@ async function waitForApproval(
     const until = await signedInAs(flow, outcome.entry.login, outcome.session);
     const signedIn = until === null ? "" : `Signed in until ${until}. `;
     console.log(`  ${signedIn}Undo with \`obrigado unlink github\`.`);
+    await offerNewsletter(flow, { email: outcome.email, vouch: outcome.newsletter_vouch });
     return 0;
   }
   console.log(

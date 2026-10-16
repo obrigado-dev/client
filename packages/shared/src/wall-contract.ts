@@ -172,6 +172,11 @@ export const GitHubLinkStartRequestSchema = z.object({
   url: ListingUrlSchema.optional(),
   /** Other platforms' handles. A `github` key here is ignored: the verified login is the one. */
   socials: SocialHandlesSchema.optional(),
+  /**
+   * Whether the CLI will offer the newsletter once the link finishes, so GitHub is asked for read
+   * access to the account's email addresses. Absent or false, no email access is asked for.
+   */
+  newsletter: z.boolean().optional(),
 });
 export type GitHubLinkStartRequest = z.infer<typeof GitHubLinkStartRequestSchema>;
 
@@ -216,6 +221,13 @@ export const GitHubLinkPollResponseSchema = z.discriminatedUnion("status", [
     entry: LinkedGitHubWireSchema,
     /** Optional, so this client still reads a server from before developers signed in. */
     session: DeveloperSessionWireSchema.optional(),
+    /**
+     * The account's primary verified email, as GitHub gave it, for the CLI to offer the newsletter
+     * to, and the server's signature saying so (`NewsletterSubscribeRequest`). Absent when GitHub
+     * gave none. The link does not keep it: only a subscription would.
+     */
+    email: z.email().max(254).optional(),
+    newsletter_vouch: z.string().max(200).optional(),
   }),
   /** The person pressed Cancel on GitHub. */
   z.object({ status: z.literal("denied") }),
@@ -225,3 +237,23 @@ export type GitHubLinkPollResponse = z.infer<typeof GitHubLinkPollResponseSchema
 
 export const GitHubUnlinkRequestSchema = z.object({ login: z.string().min(1).max(39) });
 export type GitHubUnlinkRequest = z.infer<typeof GitHubUnlinkRequestSchema>;
+
+// ─────────────── The newsletter ───────────────
+
+/**
+ * Asking for the newsletter, from the CLI after a GitHub link. `vouch` is what the poll that
+ * finished the link signed for this email, so the endpoint takes only an address GitHub verified
+ * moments ago, never one somebody typed. Nothing is subscribed by it: the server emails a link to
+ * confirm, and only that click subscribes.
+ */
+export const NewsletterSubscribeRequestSchema = z.object({
+  email: z.email().max(254),
+  vouch: z.string().min(1).max(200),
+});
+export type NewsletterSubscribeRequest = z.infer<typeof NewsletterSubscribeRequestSchema>;
+
+export const NewsletterSubscribeResponseSchema = z.object({
+  /** `confirm_sent`: check the inbox. `subscribed`: it already was, and nothing was sent. */
+  status: z.enum(["confirm_sent", "subscribed"]),
+});
+export type NewsletterSubscribeResponse = z.infer<typeof NewsletterSubscribeResponseSchema>;
