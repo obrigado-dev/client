@@ -112,7 +112,9 @@ function fetchSponsored(
       resolve(value);
     };
 
-    const child = spawn(bin, args, { cwd, stdio: ["pipe", "pipe", "ignore"] });
+    // `windowsHide`: the editor has no console, and Windows would open one for the renderer on
+    // every render without it (A46).
+    const child = spawn(bin, args, { cwd, stdio: ["pipe", "pipe", "ignore"], windowsHide: true });
     // Fires only when the child has produced no line in time. A child that answered is
     // still shipping the impression it just rendered, and must not be killed for it.
     const timer = setTimeout(() => {

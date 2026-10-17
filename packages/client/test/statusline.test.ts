@@ -236,7 +236,14 @@ describe("the installed command must be runnable", () => {
     expect(command).toContain("statusline");
     if (Bun.which("obrigado") === null) {
       expect(command).toContain("cli.ts");
-      expect(command.startsWith("/")).toBe(true);
+      // From `/`, or on Windows from `~` or a drive and in forward slashes, which is how Git
+      // Bash and PowerShell both read a path (A46).
+      if (process.platform === "win32") {
+        expect(command).toMatch(/^(?:~|[A-Za-z]:)\//u);
+        expect(command).not.toContain("\\");
+      } else {
+        expect(command.startsWith("/")).toBe(true);
+      }
     }
   });
 
@@ -338,6 +345,13 @@ describe("telling our entry from a command that runs it", () => {
       "/opt/homebrew/bin/bun /x/client/packages/client/src/cli.ts statusline --agent claude-code",
     ],
     ["the checkout form the READMEs document", "bun /x/packages/client/src/cli.ts statusline"],
+    // Windows (A46): the binary is `obrigado.exe`, named from home or by a forward-slash path.
+    ["the Windows binary from home", "~/.local/bin/obrigado.exe statusline --agent claude-code"],
+    ["the Windows binary by path", "D:/tools/obrigado.exe statusline --agent claude-code"],
+    [
+      "a Windows checkout",
+      "~/.bun/bin/bun.exe ~/code/client/packages/client/src/cli.ts statusline",
+    ],
   ] as const;
 
   for (const [name, command] of ours) {
@@ -366,6 +380,9 @@ describe("telling our entry from a command that runs it", () => {
   test("a command that never runs ours is foreign", () => {
     expect(statusLineOwner({ type: "command", command: "runcommand statusline" })).toBe("foreign");
     expect(statusLineOwner({ type: "command", command: "obrigado statusline-preview" })).toBe(
+      "foreign",
+    );
+    expect(statusLineOwner({ type: "command", command: "obrigado.exe-old statusline" })).toBe(
       "foreign",
     );
     expect(statusLineOwner(null)).toBe("foreign");

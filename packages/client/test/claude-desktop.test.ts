@@ -6,12 +6,14 @@
  * asserted against a real file on disk.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  appClaudeCodeDirs,
   CLAUDE_DESKTOP_PLUGIN_ID,
+  claudeDesktopDetected,
   desktopRendererCommand,
   installClaudeDesktopPlugin,
   uninstallClaudeDesktopPlugin,
@@ -199,5 +201,80 @@ describe("the renderer command", () => {
     expect(
       desktopRendererCommand(["/Applications/My Tools/bun", "/src/it's/cli.ts", "statusline"]),
     ).toBe(`'/Applications/My Tools/bun' '/src/it'\\''s/cli.ts' statusline`);
+  });
+});
+
+/**
+ * Where the app is looked for (A46): its data folder on macOS, `%APPDATA%` on Windows, and the
+ * LocalCache Windows redirects an MSIX install's writes into.
+ */
+describe("detecting the app", () => {
+  test("finds it on macOS under Application Support", () => {
+    expect(appClaudeCodeDirs({ platform: "darwin", home: "/Users/jo", env: {} })).toEqual([
+      join("/Users/jo", "Library", "Application Support", "Claude", "claude-code"),
+    ]);
+  });
+
+  test("looks under APPDATA on Windows, and in each MSIX package's LocalCache", () => {
+    const dirs = appClaudeCodeDirs({
+      platform: "win32",
+      home: "C:\\Users\\jo",
+      env: { APPDATA: "/roaming", LOCALAPPDATA: "/local" },
+    });
+
+    expect(dirs).toEqual([
+      join("/roaming", "Claude", "claude-code"),
+      join(
+        "/local",
+        "Packages",
+        "Claude_pzs8sxrjxfjjc",
+        "LocalCache",
+        "Roaming",
+        "Claude",
+        "claude-code",
+      ),
+      join(
+        "/local",
+        "Packages",
+        "AnthropicPBC.Claude_fnn82j28hfe8t",
+        "LocalCache",
+        "Roaming",
+        "Claude",
+        "claude-code",
+      ),
+    ]);
+  });
+
+  test("is there once one of those folders is", async () => {
+    const local = join(dir, "local");
+    const machine = { platform: "win32" as const, home: dir, env: { LOCALAPPDATA: local } };
+    expect(claudeDesktopDetected(machine)).toBe(false);
+
+    await mkdir(
+      join(
+        local,
+        "Packages",
+        "Claude_pzs8sxrjxfjjc",
+        "LocalCache",
+        "Roaming",
+        "Claude",
+        "claude-code",
+      ),
+      { recursive: true },
+    );
+
+    expect(claudeDesktopDetected(machine)).toBe(true);
+  });
+
+  test("never on Linux, which has no app", () => {
+    expect(appClaudeCodeDirs({ platform: "linux", home: "/home/jo", env: {} })).toEqual([]);
+  });
+});
+
+describe("the renderer the app is given", () => {
+  test("keeps a Windows path whole, backslashes and spaces and all", () => {
+    expect(
+      desktopRendererCommand(["C:\\Users\\Jo Doe\\.local\\bin\\obrigado.exe", "statusline"]),
+    ).toBe("'C:\\Users\\Jo Doe\\.local\\bin\\obrigado.exe' statusline");
   });
 });

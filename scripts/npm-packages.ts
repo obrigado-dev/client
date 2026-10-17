@@ -16,11 +16,13 @@ import { join } from "node:path";
 
 import {
   mainManifest,
+  NOT_ON_NPM,
   NPM_PLATFORMS,
   platformManifest,
   platformReadme,
 } from "../packages/client/src/npm-packages.ts";
 import type { NpmManifest } from "../packages/client/src/npm-packages.ts";
+import { binaryAsset } from "../packages/client/src/release.ts";
 import { TARGETS } from "./build-binaries.ts";
 
 const LAUNCHER = "packages/client/npm/obrigado.sh";
@@ -37,8 +39,10 @@ function writePackage(dir: string, manifest: NpmManifest, binary: string, readme
 
 function main(assets: string, out: string): void {
   // A platform the release builds and npm does not carry would leave its machines with an
-  // install that finds nothing to run.
-  const missing = Object.keys(TARGETS).filter((asset) => !(asset in NPM_PLATFORMS));
+  // install that finds nothing to run, unless npm refuses those machines by name (`NOT_ON_NPM`).
+  const missing = Object.keys(TARGETS).filter(
+    (asset) => !(asset in NPM_PLATFORMS) && !NOT_ON_NPM.has(asset),
+  );
   if (missing.length > 0) throw new Error(`no npm package for ${missing.join(", ")}`);
 
   const manifest = JSON.parse(readFileSync("packages/client/package.json", "utf8")) as {
@@ -49,7 +53,7 @@ function main(assets: string, out: string): void {
     writePackage(
       join(out, `client-${asset}`),
       platformManifest(asset, manifest.version),
-      join(assets, `obrigado-${asset}`),
+      join(assets, binaryAsset(asset)),
       platformReadme(asset),
     );
   }

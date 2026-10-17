@@ -171,6 +171,7 @@ export async function runLauncher(argv: readonly string[]): Promise<Ran> {
     // The IDE logs to stderr at length; what it has to say about the install is on stdout.
     stderr: "ignore",
     timeout: LAUNCH_TIMEOUT_MS,
+    windowsHide: true,
   });
   const stdout = await new Response(proc.stdout).text();
   const code = await proc.exited;

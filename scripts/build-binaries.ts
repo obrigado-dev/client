@@ -19,31 +19,20 @@
  *
  * ## Windows
  *
- * Not built. `bun-windows-x64` compiles, but both ways in are POSIX shell scripts, install.sh
- * and the npm launcher (A44), and nothing has been run on Windows. install.sh sends a Windows
- * machine to WSL, where the Linux build runs, and npm refuses `@obrigado/client` there by `os`.
+ * Built since A46, for x64 and arm64: a console program named `obrigado-<target>.exe`
+ * (`release.ts`'s `binaryAsset`), because Windows runs a program by its extension. install.ps1
+ * fetches it, and so does install.sh under Git Bash. npm does not carry it: its package managers
+ * would put a shim on PATH that runs the launcher with `/bin/sh` (`scripts/npm-packages.ts`).
+ * `--windows-hide-console` is not used. It would make a program with no console, whose output a
+ * terminal never shows, and the hosts that start the renderer hide its window themselves.
  */
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 
-import { RELEASE_DEFINES } from "../packages/client/src/release.ts";
+import { binaryAsset, RELEASE_DEFINES, RELEASE_TARGETS } from "../packages/client/src/release.ts";
 
-/**
- * The platforms, keyed by the name `install.sh` builds from `uname -s`/`uname -m`.
- *
- * The key is the contract: rename one and the installer 404s for that platform only, which
- * is the kind of break that shows up as a support question rather than a failed build. The
- * installer derives the same strings, and `test/build-binaries.test.ts` pins them.
- */
-export const TARGETS = {
-  "darwin-arm64": "bun-darwin-arm64",
-  "darwin-x64": "bun-darwin-x64",
-  "linux-arm64": "bun-linux-arm64",
-  "linux-x64": "bun-linux-x64",
-  /* Alpine and the distroless images a lot of agents run inside. Bun's glibc build segfaults
-     on musl rather than failing to start, so this is a separate artifact and not a fallback. */
-  "linux-x64-musl": "bun-linux-x64-musl",
-} as const;
+/** The platforms, by the name each release binary is built as (`release.ts`). */
+export const TARGETS = RELEASE_TARGETS;
 
 export const ENTRY = "packages/client/src/cli.ts";
 
@@ -78,15 +67,21 @@ export function checksumLine(digest: string, name: string): string {
 
 /* Synchronous throughout, and deliberately: each target shells out to `bun build --compile`
    via `spawnSync`, so the loop is sequential whatever the file APIs look like. Async reads
-   here would only be async in appearance. */
-function main(): void {
+   here would only be async in appearance.
+
+   Every target, or only those named: `bun scripts/build-binaries.ts windows-x64` is how CI's
+   Windows job builds the one it runs (A46). A release builds them all. */
+function main(only: readonly string[]): void {
+  const unknown = only.filter((name) => !(name in TARGETS));
+  if (unknown.length > 0) throw new Error(`no such target: ${unknown.join(", ")}`);
   rmSync(OUT_DIR, { recursive: true, force: true });
   mkdirSync(OUT_DIR, { recursive: true });
 
   const sums: string[] = [];
 
   for (const [name, target] of Object.entries(TARGETS)) {
-    const outfile = `${OUT_DIR}/obrigado-${name}`;
+    if (only.length > 0 && !only.includes(name)) continue;
+    const outfile = `${OUT_DIR}/${binaryAsset(name)}`;
     const built = Bun.spawnSync(compileArgs(name, target, outfile));
 
     if (built.exitCode !== 0) {
@@ -95,7 +90,7 @@ function main(): void {
     }
 
     const bytes = readFileSync(outfile);
-    sums.push(checksumLine(createHash("sha256").update(bytes).digest("hex"), `obrigado-${name}`));
+    sums.push(checksumLine(createHash("sha256").update(bytes).digest("hex"), binaryAsset(name)));
     process.stdout.write(`  ${name.padEnd(16)} ${(bytes.byteLength / 1e6).toFixed(1)}MB\n`);
   }
 
@@ -105,4 +100,4 @@ function main(): void {
   process.stdout.write(`\nwrote ${sums.length} binaries and SHA256SUMS to ${OUT_DIR}\n`);
 }
 
-if (import.meta.main) main();
+if (import.meta.main) main(process.argv.slice(2));

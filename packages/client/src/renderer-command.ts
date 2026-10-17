@@ -21,7 +21,10 @@
  * not on PATH renders nothing and says nothing about why, which looks exactly like "the
  * product is broken". That is why every case is decided at install time, when the answer is a
  * fact, rather than sniffed per render.
+ *
+ * On Windows a path is written for the shell that will read it (A46): see `forShell`.
  */
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 /** Whether this module was loaded from a `bun build --compile` binary rather than from disk. */
@@ -43,6 +46,35 @@ export function absoluteRendererArgv(): string[] {
   return [process.execPath, join(dirname(import.meta.path), "cli.ts"), "statusline"];
 }
 
+/** The machine a command is written for, passed in so a test can stand up Windows anywhere. */
+export interface RendererMachine {
+  readonly platform: NodeJS.Platform;
+  readonly home: string;
+}
+
+function thisMachine(): RendererMachine {
+  return { platform: process.platform, home: homedir() };
+}
+
+/**
+ * A path as the shell a host runs the command in will read it (A46).
+ *
+ * Elsewhere a path is written as it is. On Windows, Claude Code runs a status line through Git
+ * Bash, or through PowerShell where Git Bash is not installed. Bash takes a backslash for an
+ * escape and drops it, so `C:\Users\…` arrives as `C:Users…` and the line goes blank with no
+ * error. Forward slashes name the same file to both shells, and so does `~` for the home
+ * directory, which keeps a profile folder with a space in its name (`C:\Users\Jo Doe`) out of a
+ * command that cannot quote it.
+ */
+export function forShell(path: string, machine: RendererMachine = thisMachine()): string {
+  if (machine.platform !== "win32") return path;
+  const slashed = path.replaceAll("\\", "/");
+  const home = machine.home.replaceAll("\\", "/").replace(/\/+$/u, "");
+  // Windows compares paths without case, and so must this.
+  const underHome = home.length > 0 && slashed.toLowerCase().startsWith(`${home.toLowerCase()}/`);
+  return underHome ? `~${slashed.slice(home.length)}` : slashed;
+}
+
 /** Whether npm, pnpm, bun or yarn put this binary where it is: in their `node_modules` (A44). */
 function fromPackageManager(binary: string): boolean {
   return binary.split(/[\\/]/u).includes("node_modules");
@@ -60,11 +92,14 @@ function fromPackageManager(binary: string): boolean {
  * the bare name stops resolving in any shell on another version and the line goes blank. Its
  * `obrigado` is a shell script that runs under any Node, so the path it has now keeps working.
  * Only a path that needs no quoting: `statusLineOwner` takes a quote for a command of the
- * developer's, and uninstall would then leave ours behind.
+ * developer's, and uninstall would then leave ours behind. On Windows that rules out any path
+ * with a space that `~` cannot stand in for, and the bare name is written instead (A46): it runs
+ * once `obrigado` is on PATH, and install.ps1 says how to put it there.
  */
 export function rendererCommand(
   agent?: string,
-  found?: { readonly onPath: string | null; readonly binary: string },
+  found?: Found,
+  machine: RendererMachine = thisMachine(),
 ): string {
   const suffix = agent === undefined ? "" : ` --agent ${agent}`;
   const onPath = found === undefined ? Bun.which("obrigado") : found.onPath;
@@ -73,8 +108,51 @@ export function rendererCommand(
     const byPath = fromPackageManager(binary) && /^[\w./+@-]+$/u.test(onPath);
     return `${byPath ? onPath : "obrigado"} statusline${suffix}`;
   }
-  if (isCompiledBinary()) return `${process.execPath} statusline${suffix}`;
+  const argv = installedArgv(found);
+  const command = argv.map((part) => forShell(part, machine));
+  if (machine.platform === "win32" && !command.every((part) => /^[\w./:~+@-]+$/u.test(part))) {
+    return `obrigado statusline${suffix}`;
+  }
+  return `${command.join(" ")} statusline${suffix}`;
+}
+
+/** What the installer found: `obrigado` on PATH, and the binary running the install. */
+export interface Found {
+  readonly onPath: string | null;
+  readonly binary: string;
+  /** Whether that binary is a compiled release; asked of this module when not given. */
+  readonly compiled?: boolean;
+}
+
+/** The renderer without `obrigado` on PATH: the binary itself, or Bun and a checkout's CLI. */
+function installedArgv(found?: Found): string[] {
+  const binary = found?.binary ?? process.execPath;
+  if (found?.compiled ?? isCompiledBinary()) return [binary];
   // `import.meta.path` is this module; the CLI entry sits beside it.
-  const cli = join(dirname(import.meta.path), "cli.ts");
-  return `${process.execPath} ${cli} statusline${suffix}`;
+  return [binary, join(dirname(import.meta.path), "cli.ts")];
+}
+
+/**
+ * `argv` as one command that `splitCommand` in `@obrigado/surface` reads back into the same argv:
+ * a part with anything but plain path characters goes in single quotes, inside which nothing is
+ * special. Windows paths among them, whose backslashes and spaces a shell would take apart.
+ */
+export function quotedCommand(argv: readonly string[]): string {
+  return argv
+    .map((part) => (/^[\w./:@%+=,-]+$/u.test(part) ? part : `'${part.replaceAll("'", "'\\''")}'`))
+    .join(" ");
+}
+
+/**
+ * The renderer command for a host that splits it and spawns it with no shell, as the Pi extension
+ * does (A46).
+ *
+ * Where `obrigado` is on PATH, the command `rendererCommand` writes. Elsewhere the full argv,
+ * quoted for `splitCommand`: no shell will expand `~` for this host, and a Windows path holds
+ * backslashes and, as often as not, a space.
+ */
+export function spawnedRendererCommand(found?: Found): string {
+  const onPath = found === undefined ? Bun.which("obrigado") : found.onPath;
+  if (onPath !== null) return rendererCommand(undefined, found);
+  return quotedCommand([...installedArgv(found), "statusline"]);
 }

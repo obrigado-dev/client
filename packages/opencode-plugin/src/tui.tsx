@@ -210,6 +210,8 @@ async function fetchSponsored(
       stdin: "pipe",
       stdout: "pipe",
       stderr: "ignore",
+      // No console window for the renderer on Windows, where one would flash per render (A46).
+      windowsHide: true,
     });
     proc.stdin.write(payloadFor(sessionId, cwd, prompt));
     await proc.stdin.end();

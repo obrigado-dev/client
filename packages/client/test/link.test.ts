@@ -28,6 +28,17 @@ describe("terminal detection", () => {
     expect(supportsHyperlinks(env({ TERM: "dumb", TERM_PROGRAM: "iTerm.app" }))).toBe(false);
   });
 
+  test("takes Windows Terminal and VS Code on Windows, which set no TERM (A46)", () => {
+    expect(supportsHyperlinks(env({ WT_SESSION: "abc" }), "win32")).toBe(true);
+    expect(supportsHyperlinks(env({ TERM_PROGRAM: "vscode" }), "win32")).toBe(true);
+    // A terminal that names itself is still held to the allow-list.
+    expect(supportsHyperlinks(env({ TERMINAL_EMULATOR: "JetBrains-JediTerm" }), "win32")).toBe(
+      false,
+    );
+    expect(supportsHyperlinks(env({}), "win32")).toBe(false);
+    expect(supportsHyperlinks(env({ WT_SESSION: "abc" }), "linux")).toBe(false);
+  });
+
   test("VTE below 0.50 is not supported", () => {
     expect(supportsHyperlinks(env({ TERM: "xterm", VTE_VERSION: "4801" }))).toBe(false);
   });

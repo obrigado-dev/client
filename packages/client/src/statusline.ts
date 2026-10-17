@@ -82,7 +82,8 @@ export function isOurStatusLine(value?: unknown): boolean {
    * space is. What must still be rejected is a longer word, so `statusline-extra` and
    * `statuslines` do not count as ours.
    */
-  const installedCli = /(?<![\w-])obrigado\s+statusline(?![\w-])/iu.test(command);
+  // `obrigado.exe` is the binary's name on Windows, and the path before it may be one (A46).
+  const installedCli = /(?<![\w-])obrigado(?:\.exe)?\s+statusline(?![\w-])/iu.test(command);
   const sourceCli = /[/\\]packages[/\\]client[/\\]src[/\\]cli\.ts\s+statusline(?![\w-])/iu.test(
     command,
   );
@@ -114,7 +115,7 @@ export function statusLineOwner(value?: unknown): StatusLineOwner {
    * check, `\S` and `.` cannot carry a second command.
    */
   if (/['"`;&|<>()\n]/u.test(command)) return "nested";
-  const installedCli = /^\s*(?:\S*[/\\])?obrigado\s+statusline(?:\s.*)?$/iu.test(command);
+  const installedCli = /^\s*(?:\S*[/\\])?obrigado(?:\.exe)?\s+statusline(?:\s.*)?$/iu.test(command);
   const sourceCli =
     /^\s*(?:\S*[/\\])?bun(?:\.exe)?\s+\S*[/\\]packages[/\\]client[/\\]src[/\\]cli\.ts\s+statusline(?:\s.*)?$/iu.test(
       command,

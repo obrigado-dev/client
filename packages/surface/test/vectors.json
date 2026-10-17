@@ -55,7 +55,35 @@
     },
     {
       "input": "C:\\obrigado\\bin statusline",
-      "argv": ["C:obrigadobin", "statusline"]
+      "argv": ["C:\\obrigado\\bin", "statusline"]
+    },
+    {
+      "input": "C:\\Users\\jo\\.local\\bin\\obrigado.exe statusline",
+      "argv": ["C:\\Users\\jo\\.local\\bin\\obrigado.exe", "statusline"]
+    },
+    {
+      "input": "\"C:\\Users\\Jo Doe\\obrigado.exe\" statusline",
+      "argv": ["C:\\Users\\Jo Doe\\obrigado.exe", "statusline"]
+    },
+    {
+      "input": "'C:\\Users\\Jo Doe\\obrigado.exe' statusline",
+      "argv": ["C:\\Users\\Jo Doe\\obrigado.exe", "statusline"]
+    },
+    {
+      "input": "a\\\\b",
+      "argv": ["a\\b"]
+    },
+    {
+      "input": "a\\'b",
+      "argv": ["a'b"]
+    },
+    {
+      "input": "\"in \\\\ quotes\"",
+      "argv": ["in \\ quotes"]
+    },
+    {
+      "input": "\"keeps \\d\"",
+      "argv": ["keeps \\d"]
     },
     {
       "input": "a b",

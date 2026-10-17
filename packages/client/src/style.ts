@@ -23,6 +23,7 @@
  * The developer wins over all of it: `NO_COLOR`, a terminal that cannot do
  * colour, or `color: "off"` in `~/.obrigado/config.json` produces plain text.
  */
+import { windowsTerminal } from "./terminal.ts";
 
 /** Text effects an advertiser may select. */
 export const CREATIVE_EFFECTS = ["none", "italic"] as const;
@@ -81,6 +82,7 @@ type AnyEnvironment = ColorEnvironment & Record<string, string | undefined>;
 export function supportsColor(
   env: AnyEnvironment = process.env,
   preference: "auto" | "off" = "auto",
+  platform: NodeJS.Platform = process.platform,
 ): boolean {
   // The developer's explicit choice, in ~/.obrigado/config.json.
   if (preference === "off") return false;
@@ -93,7 +95,9 @@ export function supportsColor(
   if (forceColor !== undefined && forceColor !== "" && forceColor !== "0") return true;
 
   const term = env.TERM;
-  if (term === undefined || term === "dumb") return false;
+  if (term === "dumb") return false;
+  // Windows terminals set no TERM, and draw colour all the same (A46).
+  if (term === undefined) return windowsTerminal(env, platform);
 
   return (
     env.COLORTERM !== undefined ||

@@ -107,7 +107,8 @@ internal object Renderer {
      * The fallback is `install.sh`'s own default, `~/.local/bin` (or `OBRIGADO_INSTALL_DIR`), for
      * the developer who installed it and never added that directory to PATH — the installer
      * says so and moves on, and the IDE should not be the place they find out. A name with a
-     * path separator in it is a path, and is used as given.
+     * path separator in it is a path, and is used as given. Windows names the home directory
+     * `USERPROFILE` rather than `HOME`, and install.ps1 uses the same folder under it (A46).
      */
     fun resolveExecutable(
         name: String,
@@ -117,10 +118,13 @@ internal object Renderer {
         if (name.isEmpty()) return null
         if (name.contains('/') || name.contains(File.separatorChar)) return name
 
-        val path = environment.entries.firstOrNull { it.key.equals("PATH", ignoreCase = windows) }?.value
+        // Windows reads its variables without regard to case.
+        fun variable(key: String) =
+            environment.entries.firstOrNull { it.key.equals(key, ignoreCase = windows) }?.value?.takeIf { it.isNotEmpty() }
+        val home = variable("HOME") ?: if (windows) variable("USERPROFILE") else null
         val directories =
-            path.orEmpty().split(File.pathSeparatorChar).filter { it.isNotEmpty() } +
-                listOfNotNull(environment["OBRIGADO_INSTALL_DIR"], environment["HOME"]?.let { "$it/.local/bin" })
+            variable("PATH").orEmpty().split(if (windows) ';' else ':').filter { it.isNotEmpty() } +
+                listOfNotNull(variable("OBRIGADO_INSTALL_DIR"), home?.let { File(it, ".local/bin").path })
         val names = if (windows) listOf("$name.exe", "$name.cmd", "$name.bat", name) else listOf(name)
 
         return directories

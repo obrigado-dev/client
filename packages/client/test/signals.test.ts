@@ -17,7 +17,7 @@
  */
 import { describe, expect, test } from "bun:test";
 
-import { collectSignals, timingFromPayload } from "../src/api.ts";
+import { collectSignals, terminalPresent, timingFromPayload } from "../src/api.ts";
 
 /** A realistic payload, from the shape the status-line docs publish. */
 const PAYLOAD = JSON.stringify({
@@ -257,5 +257,37 @@ describe("environment signals", () => {
     if (process.platform === "darwin") {
       expect(signals.container).toBeUndefined();
     }
+  });
+});
+
+/**
+ * Windows (A46). No Windows terminal sets `TERM`, so its absence there cannot mean a machine:
+ * read as one, every session in a bare PowerShell would be refused before it was served.
+ */
+describe("a terminal on Windows", () => {
+  test("is there when one names itself", () => {
+    for (const named of [
+      { WT_SESSION: "8c6f" },
+      { TERM_PROGRAM: "vscode" },
+      { TERMINAL_EMULATOR: "JetBrains-JediTerm" },
+      { ConEmuPID: "4242" },
+    ]) {
+      expect(terminalPresent(named, false, "win32")).toBe(true);
+    }
+  });
+
+  test("is undetermined, not absent, when none does", () => {
+    expect(terminalPresent({}, false, "win32")).toBeUndefined();
+  });
+
+  test("is read from TERM where Git Bash sets it, as everywhere", () => {
+    expect(terminalPresent({ TERM: "xterm-256color" }, false, "win32")).toBe(true);
+    expect(terminalPresent({ TERM: "dumb", WT_SESSION: "8c6f" }, false, "win32")).toBe(false);
+  });
+
+  test("leaves every other system as it was", () => {
+    expect(terminalPresent({}, false, "linux")).toBe(false);
+    expect(terminalPresent({ WT_SESSION: "8c6f" }, false, "darwin")).toBe(false);
+    expect(terminalPresent({}, true, "linux")).toBe(true);
   });
 });

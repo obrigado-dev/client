@@ -17,6 +17,10 @@
  * confirm it is the version it claims, and renames it over this binary. A render already running
  * keeps the file it started from; the next one is the new version.
  *
+ * Windows will not let a running program be replaced, and this one is running: the update is it.
+ * There the binary is renamed aside first, which Windows does allow, and deleted by a later update
+ * once nothing runs it (A46).
+ *
  * Only a release binary does any of this: `scripts/build-binaries.ts` compiles in which asset it
  * is, and a checkout, or anybody else's build, has no such name and never tries.
  *
@@ -26,8 +30,8 @@
  * version but the `User-Agent` GitHub requires.
  */
 import { spawn } from "node:child_process";
-import { chmod, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { chmod, open, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 
 import type { ClientNotice } from "@obrigado/shared";
 
@@ -39,6 +43,7 @@ import { installPiExtension } from "./pi-extension.ts";
 import { isNewer, latestReleaseTag, REPO, verifiedAsset } from "./release-assets.ts";
 import type { ReleaseDeps } from "./release-assets.ts";
 import type { PiHost } from "./pi-extension.ts";
+import { binaryAsset } from "./release.ts";
 import { CLIENT_VERSION } from "./version.ts";
 
 /** Compiled in by `scripts/build-binaries.ts` (`release.ts`); undeclared everywhere else. */
@@ -138,12 +143,14 @@ function startBackgroundUpdate(): void {
   const child = spawn(process.execPath, ["update", "--background"], {
     detached: true,
     stdio: "ignore",
+    // Windows would otherwise open a console window for it, in front of the editor (A46).
+    windowsHide: true,
   });
   child.unref();
 }
 
 export interface UpdateDeps extends ReleaseDeps {
-  /** The release asset this binary is, `darwin-arm64` and the like. */
+  /** The release target this binary is, `darwin-arm64` and the like. */
   readonly target: string;
   /** The file to replace: this binary, through any symlink. */
   readonly binary: string;
@@ -151,6 +158,10 @@ export interface UpdateDeps extends ReleaseDeps {
   readonly reportedVersion: (path: string) => Promise<string>;
   readonly now?: () => number;
   readonly statePath?: string;
+  /** The system the binary runs on, which decides how it is replaced; this one's when not given. */
+  readonly platform?: NodeJS.Platform;
+  /** Moves a file; `fs.rename` when not given, and a test's stand-in for what Windows refuses. */
+  readonly rename?: (from: string, to: string) => Promise<void>;
 }
 
 export type UpdateOutcome =
@@ -167,16 +178,21 @@ const failed = (reason: string): UpdateOutcome => ({ status: "failed", reason })
  * and the binary is the old file or the new one, never half of either.
  */
 export async function runUpdate(deps: UpdateDeps): Promise<UpdateOutcome> {
+  const windows = (deps.platform ?? process.platform) === "win32";
+  const move = deps.rename ?? rename;
+  if (windows) await sweepRetired(deps.binary);
+
   const latest = await latestReleaseTag(deps);
   if (latest === null) return failed("could not read the latest release from GitHub");
   if (!isNewer(latest, deps.current)) return { status: "current", version: deps.current };
 
   const version = latest.replace(/^v/u, "");
-  const fetched = await verifiedAsset(deps, latest, `obrigado-${deps.target}`);
+  const fetched = await verifiedAsset(deps, latest, binaryAsset(deps.target));
   if (!fetched.ok) return failed(fetched.reason);
   const { bytes } = fetched;
 
-  const staged = `${deps.binary}.obrigado-update-${process.pid}`;
+  // Run once before it is trusted, and Windows runs a program only by its extension.
+  const staged = `${deps.binary}.obrigado-update-${process.pid}${windows ? ".exe" : ""}`;
   try {
     await writeFile(staged, bytes, { mode: 0o755 });
     await chmod(staged, 0o755);
@@ -184,7 +200,7 @@ export async function runUpdate(deps: UpdateDeps): Promise<UpdateOutcome> {
     if ((await deps.reportedVersion(staged)).trim() !== version) {
       return failed(`the download does not report ${version}: not installed`);
     }
-    await rename(staged, deps.binary);
+    await (windows ? replaceRunning(staged, deps.binary, move) : move(staged, deps.binary));
   } catch (error) {
     return failed(
       `could not replace ${deps.binary}: ${error instanceof Error ? error.message : error}`,
@@ -197,6 +213,71 @@ export async function runUpdate(deps: UpdateDeps): Promise<UpdateOutcome> {
   const state = await readUpdateState(deps.statePath);
   await writeUpdateState({ ...state, updated_to: version, updated_at: now }, deps.statePath);
   return { status: "updated", from: deps.current, to: version };
+}
+
+/** What a binary set aside by a Windows update is called, after its own name (A46). */
+const RETIRED = ".obrigado-retired-";
+
+/** The errors Windows gives for a file that something has open, which pass in a moment. */
+const BUSY = new Set(["EBUSY", "EPERM", "EACCES"]);
+
+/**
+ * `step`, again after a pause while Windows calls the file busy.
+ *
+ * An antivirus scanner opens a program as soon as it is written, and Windows refuses to rename a
+ * file that is open that way until the scan lets go. Anything else fails at once.
+ */
+async function retrying(step: () => Promise<void>, attempts = 5): Promise<void> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- each try waits on the one before it
+      return await step();
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code ?? "";
+      if (attempt >= attempts || !BUSY.has(code)) throw error;
+      // oxlint-disable-next-line eslint/no-await-in-loop -- the pause is the point
+      await Bun.sleep(100 * attempt);
+    }
+  }
+}
+
+/**
+ * Swap `staged` in for a binary Windows is running (A46).
+ *
+ * Windows will not replace or delete a program while any process runs it, and this one always
+ * is: the update is that program, and a render in another session may be too. A running program
+ * can be renamed, though, and each process keeps the file it started from under its new name. So
+ * the binary steps aside and the download takes its name. The old file is deleted here when nothing
+ * runs it any more, which is never true of this process's own, so `sweepRetired` deletes it at the
+ * next update. A failure between the two renames puts the old binary back where it was.
+ */
+async function replaceRunning(
+  staged: string,
+  binary: string,
+  move: (from: string, to: string) => Promise<void>,
+): Promise<void> {
+  const aside = `${binary}${RETIRED}${Date.now()}-${process.pid}`;
+  await retrying(() => move(binary, aside));
+  try {
+    await retrying(() => move(staged, binary));
+  } catch (error) {
+    await move(aside, binary).catch(() => {});
+    throw error;
+  }
+  await rm(aside, { force: true }).catch(() => {});
+}
+
+/** Delete what earlier Windows updates set aside, where nothing runs it any more (A46). */
+async function sweepRetired(binary: string): Promise<void> {
+  const dir = dirname(binary);
+  const prefix = `${basename(binary)}${RETIRED}`;
+  const names = await readdir(dir).catch(() => [] as string[]);
+  await Promise.all(
+    names
+      .filter((name) => name.startsWith(prefix))
+      // Still running, in a session that has not ended: it goes the next time.
+      .map((name) => rm(join(dir, name), { force: true }).catch(() => {})),
+  );
 }
 
 /**

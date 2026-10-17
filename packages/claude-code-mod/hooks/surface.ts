@@ -142,6 +142,11 @@ export function parseSponsored(line: string): Sponsored | null {
  * "/Users/Jane Doe/obrigado/cli.ts" statusline` became four arguments and the spawn failed
  * silently. Double quotes, single quotes and backslash escapes are honoured; nothing else is
  * interpreted — no variables, no globs, no operators — because this is a command, not a script.
+ *
+ * A backslash escapes what the splitter itself reads, whitespace, a quote or another backslash,
+ * and inside double quotes only a quote or a backslash, as a shell's does. Before anything else
+ * it is a backslash, which keeps a Windows path such as `C:\\Users\\jo\\obrigado.exe` whole
+ * rather than `C:Usersjoobrigado.exe` (A46).
  */
 export function splitCommand(text: string): string[] {
   const out: string[] = [];
@@ -151,12 +156,13 @@ export function splitCommand(text: string): string[] {
 
   for (let index = 0; index < text.length; index += 1) {
     const character = text[index] ?? "";
+    const next = text[index + 1];
     if (quote !== null) {
       if (character === quote) {
         quote = null;
-      } else if (character === "\\" && quote === '"' && index + 1 < text.length) {
+      } else if (character === "\\" && quote === '"' && (next === '"' || next === "\\")) {
         index += 1;
-        current += text[index] ?? "";
+        current += next;
       } else {
         current += character;
       }
@@ -165,9 +171,9 @@ export function splitCommand(text: string): string[] {
     if (character === '"' || character === "'") {
       quote = character;
       inToken = true;
-    } else if (character === "\\" && index + 1 < text.length) {
+    } else if (character === "\\" && next !== undefined && escapable(next)) {
       index += 1;
-      current += text[index] ?? "";
+      current += next;
       inToken = true;
     } else if (/\s/u.test(character)) {
       if (inToken) out.push(current);
@@ -180,6 +186,11 @@ export function splitCommand(text: string): string[] {
   }
   if (inToken) out.push(current);
   return out;
+}
+
+/** What a backslash outside quotes escapes: the characters `splitCommand` itself reads. */
+function escapable(character: string): boolean {
+  return character === '"' || character === "'" || character === "\\" || /\s/u.test(character);
 }
 
 /**

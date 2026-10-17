@@ -26,7 +26,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { BACKUP_DIR, CLAUDE_SETTINGS_PATH } from "./config.ts";
-import { absoluteRendererArgv } from "./renderer-command.ts";
+import { absoluteRendererArgv, quotedCommand } from "./renderer-command.ts";
 import { backupSettings, readSettings, writeSettingsAtomically } from "./statusline.ts";
 import type { SettingsObject } from "./statusline.ts";
 
@@ -40,28 +40,53 @@ export const CLAUDE_DESKTOP_PLUGIN_ID = `obrigado@${CLAUDE_DESKTOP_MARKETPLACE}`
 /** The mod's override for the renderer, the same variable every host's shim reads. */
 const RENDERER_VARIABLE = "OBRIGADO_STATUSLINE_COMMAND";
 
+/** The machine as detection sees it, passed in so a test can stand up Windows anywhere. */
+export interface DesktopMachine {
+  readonly platform: NodeJS.Platform;
+  readonly home: string;
+  readonly env: Readonly<Record<string, string | undefined>>;
+}
+
+function thisMachine(): DesktopMachine {
+  return { platform: process.platform, home: homedir(), env: process.env };
+}
+
+/**
+ * The Windows app's package names (A46): what an MSIX install keeps its data under. Read from the
+ * app's own bundle, which looks for its folders under both.
+ */
+const MSIX_PACKAGES = ["Claude_pzs8sxrjxfjjc", "AnthropicPBC.Claude_fnn82j28hfe8t"];
+
 /**
  * Where the app keeps the Claude Code it runs, present once its Code tab has been used.
  *
- * Seen on macOS. Elsewhere the app is not detected and `--agent claude-desktop` installs it.
+ * Its data folder, `claude-code` within: under Application Support on macOS, and under
+ * `%APPDATA%` on Windows (A46). The Windows app installed from an MSIX package writes that
+ * folder into the package's own LocalCache instead, where Windows redirects it, so that copy
+ * is looked for too. Linux has no app, and `--agent claude-desktop` installs it anywhere.
  */
-const APP_CLAUDE_CODE_DIR = join(
-  homedir(),
-  "Library",
-  "Application Support",
-  "Claude",
-  "claude-code",
-);
+export function appClaudeCodeDirs(machine: DesktopMachine = thisMachine()): string[] {
+  if (machine.platform === "darwin") {
+    return [join(machine.home, "Library", "Application Support", "Claude", "claude-code")];
+  }
+  if (machine.platform !== "win32") return [];
+  const roaming = machine.env["APPDATA"] ?? join(machine.home, "AppData", "Roaming");
+  const local = machine.env["LOCALAPPDATA"] ?? join(machine.home, "AppData", "Local");
+  return [
+    join(roaming, "Claude", "claude-code"),
+    ...MSIX_PACKAGES.map((name) =>
+      join(local, "Packages", name, "LocalCache", "Roaming", "Claude", "claude-code"),
+    ),
+  ];
+}
 
-export function claudeDesktopDetected(): boolean {
-  return process.platform === "darwin" && existsSync(APP_CLAUDE_CODE_DIR);
+export function claudeDesktopDetected(machine: DesktopMachine = thisMachine()): boolean {
+  return appClaudeCodeDirs(machine).some((dir) => existsSync(dir));
 }
 
 /** The renderer command for the mod: full paths, quoted where `splitCommand` needs them. */
 export function desktopRendererCommand(argv = absoluteRendererArgv()): string {
-  return argv
-    .map((part) => (/^[\w./:@%+=,-]+$/u.test(part) ? part : `'${part.replaceAll("'", "'\\''")}'`))
-    .join(" ");
+  return quotedCommand(argv);
 }
 
 function objectAt(settings: SettingsObject, key: string): SettingsObject {

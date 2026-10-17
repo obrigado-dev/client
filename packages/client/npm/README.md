@@ -14,12 +14,16 @@ obrigado install
 `obrigado install` connects your coding agents. Without Node,
 `curl -fsSL https://obrigado.dev/install.sh | sh` installs the same binary.
 
+On Windows this package does not install: from PowerShell,
+`irm https://obrigado.dev/install.ps1 | iex` installs the Windows build of the same release.
+
 ## What this package is
 
 `@obrigado/client` is a short shell script, `bin/obrigado`, and one optional dependency per
 platform: `@obrigado/client-darwin-arm64`, `-darwin-x64`, `-linux-arm64`, `-linux-x64` and
 `-linux-x64-musl`. Your package manager installs the one that fits the machine and the script
-runs it. There is no Windows build.
+runs it. Windows has a build, but not on npm: a package manager there would run this script
+with a `/bin/sh` Windows does not have.
 
 Each holds the binary of the matching GitHub release, byte for byte. Its SHA-256 is the
 `obrigado-<platform>` line of that release's `SHA256SUMS`, which is signed (`SHA256SUMS.sig`,

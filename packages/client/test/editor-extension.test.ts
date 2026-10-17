@@ -9,8 +9,10 @@
 import { describe, expect, test } from "bun:test";
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { existsSync } from "node:fs";
+import { join } from "node:path";
 
 import {
+  editorToolPaths,
   EXTENSION_ID,
   installEditorExtension,
   installedVersion,
@@ -167,5 +169,35 @@ function listsMixedCase(): Promise<Ran> {
 describe("reading what an editor has installed", () => {
   test("matches the id however the editor cases it", async () => {
     expect(await installedVersion("code", listsMixedCase)).toBe("0.3.9");
+  });
+});
+
+/** Where an editor's tool is looked for when it is not on PATH (A46). */
+describe("the editor's tool, off PATH", () => {
+  const windows = {
+    platform: "win32" as const,
+    home: "/home",
+    env: { LOCALAPPDATA: "/local", ProgramFiles: "/programs" },
+  };
+
+  test("is VS Code's code.cmd where its user and system installers put it", () => {
+    expect(editorToolPaths("vscode", windows)).toEqual([
+      join("/local", "Programs", "Microsoft VS Code", "bin", "code.cmd"),
+      join("/programs", "Microsoft VS Code", "bin", "code.cmd"),
+    ]);
+  });
+
+  test("is Cursor's cursor.cmd inside its app", () => {
+    expect(editorToolPaths("cursor", windows)).toEqual([
+      join("/local", "Programs", "cursor", "resources", "app", "bin", "cursor.cmd"),
+    ]);
+  });
+
+  test("is inside the app on macOS, and nowhere on Linux", () => {
+    expect(editorToolPaths("cursor", { platform: "darwin", home: "/Users/jo", env: {} })).toEqual([
+      join("/Applications", "Cursor.app/Contents/Resources/app/bin/cursor"),
+      join("/Users/jo", "Applications", "Cursor.app/Contents/Resources/app/bin/cursor"),
+    ]);
+    expect(editorToolPaths("vscode", { platform: "linux", home: "/home/jo", env: {} })).toEqual([]);
   });
 });

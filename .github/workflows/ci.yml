@@ -40,6 +40,42 @@ jobs:
           path: packages/vscode-extension/dist/obrigado-vscode.vsix
           if-no-files-found: error
 
+  # Windows (A46). The release cross-compiles its Windows builds on Linux and nothing else here
+  # runs on Windows, so this does: the tests whose subject is Windows where it is real (a binary
+  # replaced while it runs, a chained status line in Git Bash, a tree killed with taskkill), then
+  # the x64 build installed and rendered the way Claude Code renders a status line, through Git
+  # Bash, Windows PowerShell and PowerShell 7 (`scripts/windows-smoke.ps1`).
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - run: bun install --frozen-lockfile
+
+      - run: >-
+          bun test
+          packages/client/test/self-update.test.ts
+          packages/client/test/renderer-command.test.ts
+          packages/client/test/statusline.test.ts
+          packages/client/test/chain.test.ts
+          packages/client/test/claude-desktop.test.ts
+          packages/client/test/jetbrains-ides.test.ts
+          packages/client/test/editor-extension.test.ts
+          packages/client/test/build-binaries.test.ts
+          packages/surface/test
+
+      - run: bun scripts/build-binaries.ts windows-x64
+
+      - name: Install, render and uninstall, as Claude Code runs a status line
+        shell: pwsh
+        run: ./scripts/windows-smoke.ps1 -Binary dist/binaries/obrigado-windows-x64.exe
+
   # The JetBrains plugin is Kotlin, so it has its own toolchain and its own job. `check` runs the
   # unit tests, including the vectors that hold its copy of `@obrigado/surface` to the TypeScript
   # one. The Plugin Verifier is not run here: it downloads several IDE releases, and it is a
