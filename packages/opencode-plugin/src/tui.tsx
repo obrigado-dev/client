@@ -32,7 +32,9 @@
  * already drives. A second delivery path is how hosts begin to disagree about what was
  * shown and what was billed.
  */
-import { parseSponsored, statuslineArgv } from "@obrigado/surface";
+import { existsSync } from "node:fs";
+
+import { installedRendererPaths, parseSponsored, statuslineArgv } from "@obrigado/surface";
 import type { Sponsored, SponsoredSpan } from "@obrigado/surface";
 import type { TuiPluginApi, TuiPluginModule } from "@opencode-ai/plugin/tui";
 import type { JSX } from "@opentui/solid";
@@ -162,13 +164,19 @@ function runStyle(span: SponsoredSpan, ad: Sponsored, hovered = false): Record<s
 }
 
 /**
- * The CLI, resolved once.
+ * The CLI.
  *
- * `obrigado` on PATH is the installed case; the override exists for running against a
- * source checkout, which is the only way to develop this before the client is published.
+ * `obrigado` on PATH is the installed case, and where the installers put it is the next place
+ * looked (A46); the override exists for running against a source checkout, which is the only
+ * way to develop this before the client is published.
  */
 function statuslineCommand(): readonly string[] {
-  return statuslineArgv(AGENT, process.env["OBRIGADO_STATUSLINE_COMMAND"]);
+  const argv = statuslineArgv(AGENT, process.env["OBRIGADO_STATUSLINE_COMMAND"]);
+  if (argv[0] !== "obrigado" || Bun.which("obrigado") !== null) return argv;
+  const installed = installedRendererPaths(process.env, process.platform).find((path) =>
+    existsSync(path),
+  );
+  return installed === undefined ? argv : [installed, ...argv.slice(1)];
 }
 
 /**

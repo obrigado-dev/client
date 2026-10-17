@@ -194,6 +194,37 @@ function escapable(character: string): boolean {
 }
 
 /**
+ * Where the installers put `obrigado`, for a host that does not find it on PATH (A46).
+ *
+ * install.sh and install.ps1 install into `OBRIGADO_INSTALL_DIR`, or `.local/bin` in the home
+ * directory, and say how to put that folder on PATH without doing it. A developer who did not is
+ * found here rather than shown nothing, as the JetBrains plugin has always found them. On Windows
+ * the program is `obrigado.exe` and the home directory is `USERPROFILE`. Paths only: whether one
+ * is there is the host's to ask.
+ */
+export function installedRendererPaths(
+  env: Readonly<Record<string, string | undefined>>,
+  platform: string,
+): string[] {
+  const windows = platform === "win32";
+  const separator = windows ? "\\" : "/";
+  const set = (name: string): string | undefined => {
+    const value = env[name];
+    return value === undefined || value === "" ? undefined : value;
+  };
+  const home = set("HOME") ?? (windows ? set("USERPROFILE") : undefined);
+  const dirs = [
+    set("OBRIGADO_INSTALL_DIR"),
+    home === undefined ? undefined : [home, ".local", "bin"].join(separator),
+  ];
+  return dirs
+    .filter((dir): dir is string => dir !== undefined)
+    .map(
+      (dir) => `${dir.replace(/[\\/]+$/u, "")}${separator}${windows ? "obrigado.exe" : "obrigado"}`,
+    );
+}
+
+/**
  * The argv a host spawns to get its line.
  *
  * `obrigado` from PATH is the installed case. An override — a setting, an environment
