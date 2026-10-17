@@ -91,6 +91,18 @@ describe("the renderer command on Windows", () => {
     ).toBe("obrigado statusline");
   });
 
+  test("names one by its full path where HOME sends Git Bash's ~ elsewhere", () => {
+    const binary = "C:\\Users\\jo\\.local\\bin\\obrigado.exe";
+    const machine = { platform: "win32" as const, home: "C:\\Users\\jo" };
+
+    expect(forShell(binary, { ...machine, homeVariable: "D:\\dotfiles" })).toBe(
+      "C:/Users/jo/.local/bin/obrigado.exe",
+    );
+    expect(forShell(binary, { ...machine, homeVariable: "C:/Users/jo/" })).toBe(
+      "~/.local/bin/obrigado.exe",
+    );
+  });
+
   test("reads home without regard to case, as Windows does", () => {
     expect(forShell("c:\\users\\jo doe\\.local\\bin\\obrigado.exe", WINDOWS)).toBe(
       "~/.local/bin/obrigado.exe",

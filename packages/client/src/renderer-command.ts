@@ -50,10 +50,17 @@ export function absoluteRendererArgv(): string[] {
 export interface RendererMachine {
   readonly platform: NodeJS.Platform;
   readonly home: string;
+  /** `HOME`, which Git Bash expands `~` to wherever it is set. */
+  readonly homeVariable?: string | undefined;
 }
 
 function thisMachine(): RendererMachine {
-  return { platform: process.platform, home: homedir() };
+  return { platform: process.platform, home: homedir(), homeVariable: process.env["HOME"] };
+}
+
+/** A Windows path in forward slashes, without a trailing one. Compared without case, as Windows does. */
+function plain(path: string): string {
+  return path.replaceAll("\\", "/").replace(/\/+$/u, "");
 }
 
 /**
@@ -68,10 +75,13 @@ function thisMachine(): RendererMachine {
  */
 export function forShell(path: string, machine: RendererMachine = thisMachine()): string {
   if (machine.platform !== "win32") return path;
-  const slashed = path.replaceAll("\\", "/");
-  const home = machine.home.replaceAll("\\", "/").replace(/\/+$/u, "");
-  // Windows compares paths without case, and so must this.
-  const underHome = home.length > 0 && slashed.toLowerCase().startsWith(`${home.toLowerCase()}/`);
+  const slashed = plain(path);
+  const home = plain(machine.home);
+  // Git Bash expands `~` to HOME where it is set, and some set it elsewhere for their dotfiles.
+  const bashHome = machine.homeVariable ?? "";
+  const tildeIsHome = bashHome === "" || plain(bashHome).toLowerCase() === home.toLowerCase();
+  const underHome =
+    tildeIsHome && home.length > 0 && slashed.toLowerCase().startsWith(`${home.toLowerCase()}/`);
   return underHome ? `~${slashed.slice(home.length)}` : slashed;
 }
 
