@@ -3,8 +3,9 @@
  *
  * Everything Obrigado owns lives under `~/.obrigado`. Installation also writes one
  * documented entry into the host-owned Claude Code settings file; see
- * `statusline.ts` for its preservation rules, and `codex-statusline.ts` for why
- * Codex currently gets no write at all.
+ * `statusline.ts` for its preservation rules, `antigravity-statusline.ts` for the same
+ * entry in Antigravity CLI's, and `codex-statusline.ts` for why Codex currently gets no
+ * write at all.
  */
 import type { SharingSettings } from "@obrigado/shared";
 
@@ -47,6 +48,10 @@ export const NOTICE_PATH = join(OBRIGADO_DIR, "notice.json");
 
 export const CLAUDE_SETTINGS_PATH = absolute(join(HOME, ".claude", "settings.json"));
 export const CODEX_HOME = absolute(process.env["CODEX_HOME"] ?? join(HOME, ".codex"));
+/** Antigravity CLI's own settings, beside the config it shares with Google's other agents. */
+export const ANTIGRAVITY_CLI_SETTINGS_PATH = absolute(
+  join(HOME, ".gemini", "antigravity-cli", "settings.json"),
+);
 
 export interface ClaudeIntegrationConfig {
   readonly installed: boolean;
@@ -79,6 +84,11 @@ export interface OpenCodeIntegrationConfig {
   readonly installed_at?: string;
 }
 
+export interface AntigravityCliIntegrationConfig {
+  readonly installed: boolean;
+  readonly installed_at?: string;
+}
+
 export interface PiIntegrationConfig {
   readonly installed: boolean;
   readonly installed_at?: string;
@@ -105,9 +115,12 @@ export interface ClientIntegrations {
   pi?: PiIntegrationConfig;
   "oh-my-pi"?: PiIntegrationConfig;
   "claude-desktop"?: ClaudeDesktopIntegrationConfig;
-  /* One extension, two editors, each with its own command-line tool — two install records. */
+  "antigravity-cli"?: AntigravityCliIntegrationConfig;
+  /* One extension, four editors, each with its own command-line tool — four install records. */
   vscode?: EditorIntegrationConfig;
   cursor?: EditorIntegrationConfig;
+  "antigravity-ide"?: EditorIntegrationConfig;
+  kiro?: EditorIntegrationConfig;
   /*
    * One record for every JetBrains IDE: the install puts the plugin into all it finds at once.
    * `installed: false` after an uninstall is also what keeps the plugin, which only the IDE can
@@ -289,6 +302,12 @@ export function claudeDesktopIntegration(
   return config?.integrations?.["claude-desktop"] ?? null;
 }
 
+export function antigravityCliIntegration(
+  config: ClientConfig | null,
+): AntigravityCliIntegrationConfig | null {
+  return config?.integrations?.["antigravity-cli"] ?? null;
+}
+
 export function piIntegration(
   config: ClientConfig | null,
   host: "pi" | "oh-my-pi",
@@ -298,7 +317,7 @@ export function piIntegration(
 
 export function editorIntegration(
   config: ClientConfig | null,
-  editor: "vscode" | "cursor" | "jetbrains",
+  editor: "vscode" | "cursor" | "antigravity-ide" | "kiro" | "jetbrains",
 ): EditorIntegrationConfig | null {
   return config?.integrations?.[editor] ?? null;
 }

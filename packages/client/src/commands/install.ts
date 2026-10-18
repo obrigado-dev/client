@@ -1,4 +1,5 @@
 import {
+  antigravityCliIntegration,
   claudeDesktopIntegration,
   editorIntegration,
   claudeIntegration,
@@ -27,7 +28,9 @@ import { claudeRow, failedRow, printInstallRows, tilde } from "./install-report.
 import { installPiHosts, removePiHost } from "./install-pi.ts";
 import {
   editorsForInstall,
+  installAntigravityHost,
   installEditorHosts,
+  removeAntigravityCli,
   removeEditor,
   removeJetBrains,
 } from "./install-editors.ts";
@@ -177,7 +180,10 @@ export async function install(argv: readonly string[] = []): Promise<number> {
     results.push(await installClaudeDesktopAdapter(existing, integrations));
   }
 
-  results.push(...(await installEditorHosts(targets, existing, integrations)));
+  results.push(
+    ...(await installAntigravityHost(targets, existing, integrations)),
+    ...(await installEditorHosts(targets, existing, integrations)),
+  );
 
   console.log("");
   printInstallRows(results.flatMap((result) => (result.row === undefined ? [] : [result.row])));
@@ -221,6 +227,9 @@ const INSTALLED_CHECK: Record<InstallAgent, (config: ClientConfig) => boolean> =
   vscode: (config) => editorIntegration(config, "vscode")?.installed === true,
   cursor: (config) => editorIntegration(config, "cursor")?.installed === true,
   jetbrains: (config) => editorIntegration(config, "jetbrains")?.installed === true,
+  "antigravity-cli": (config) => antigravityCliIntegration(config)?.installed === true,
+  "antigravity-ide": (config) => editorIntegration(config, "antigravity-ide")?.installed === true,
+  kiro: (config) => editorIntegration(config, "kiro")?.installed === true,
 };
 
 /** The hosts this install has configured, by its own record. */
@@ -301,6 +310,9 @@ const REMOVERS: Record<InstallAgent, Remover> = {
   vscode: removeEditor("vscode"),
   cursor: removeEditor("cursor"),
   jetbrains: removeJetBrains(),
+  "antigravity-cli": removeAntigravityCli,
+  "antigravity-ide": removeEditor("antigravity-ide"),
+  kiro: removeEditor("kiro"),
 };
 
 /**

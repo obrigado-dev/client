@@ -7,6 +7,7 @@
 import { existsSync } from "node:fs";
 import { dirname } from "node:path";
 
+import { antigravityCliDetected } from "../antigravity-statusline.ts";
 import { claudeDesktopDetected } from "../claude-desktop.ts";
 import { codexDetected } from "../codex-statusline.ts";
 import { CLAUDE_SETTINGS_PATH } from "../config.ts";
@@ -30,10 +31,13 @@ const DETECTORS: Record<InstallableAgentId, () => boolean> = {
   "claude-desktop": claudeDesktopDetected,
   // Asked about, never detected into (A40, A43). An editor on this machine says nothing about
   // whether an agent runs in it, so a bare install asks (`install-editors.ts`), and
-  // `--agent vscode|cursor|jetbrains` installs without asking.
+  // `--agent <editor>` installs without asking.
   vscode: () => false,
   cursor: () => false,
   jetbrains: () => false,
+  "antigravity-cli": antigravityCliDetected,
+  "antigravity-ide": () => false,
+  kiro: () => false,
 };
 
 function detectInstalledAgents(): InstallableAgentId[] {

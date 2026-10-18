@@ -1,5 +1,6 @@
 /**
- * The VS Code extension, in VS Code and in Cursor (A40).
+ * The VS Code extension, in VS Code and in the forks that run it unchanged: Cursor (A40),
+ * Antigravity IDE and Kiro (A47).
  *
  * Neither store lists it yet, so the CLI installs the `.vsix` each release carries: fetched
  * through obrigado.dev, which counts the download and redirects to GitHub, checked against the
@@ -17,19 +18,31 @@ import { join } from "node:path";
 import { latestReleaseTag, verifiedAsset } from "./release-assets.ts";
 import type { ReleaseDeps } from "./release-assets.ts";
 
-export type Editor = "vscode" | "cursor";
+export type Editor = "vscode" | "cursor" | "antigravity-ide" | "kiro";
 
-export const EDITORS: readonly Editor[] = ["vscode", "cursor"];
+export const EDITORS: readonly Editor[] = ["vscode", "cursor", "antigravity-ide", "kiro"];
 
 /** `publisher.name` from the extension's manifest, which is what the editors key it by. */
 export const EXTENSION_ID = "obrigado.obrigado-vscode";
 
-const COMMAND: Record<Editor, string> = { vscode: "code", cursor: "cursor" };
+const COMMAND: Record<Editor, string> = {
+  vscode: "code",
+  cursor: "cursor",
+  "antigravity-ide": "antigravity-ide",
+  kiro: "kiro",
+};
 
-/** Where each app keeps its command-line tool on macOS, for an editor never put on PATH. */
+/**
+ * Where each app keeps its command-line tool on macOS, for an editor never put on PATH.
+ *
+ * Kiro's is still called `code` inside the app, and only its link on PATH is `kiro`.
+ * Antigravity IDE's is the 2.0 name: `Antigravity.app` is the desktop app now, not the editor.
+ */
 const MAC_TOOL: Record<Editor, string> = {
   vscode: "Visual Studio Code.app/Contents/Resources/app/bin/code",
   cursor: "Cursor.app/Contents/Resources/app/bin/cursor",
+  "antigravity-ide": "Antigravity IDE.app/Contents/Resources/app/bin/antigravity-ide",
+  kiro: "Kiro.app/Contents/Resources/app/bin/code",
 };
 
 /** The machine as the lookup sees it, passed in so a test can stand up Windows anywhere. */
@@ -57,12 +70,18 @@ export function editorToolPaths(editor: Editor, machine: EditorMachine = thisMac
   if (machine.platform !== "win32") return [];
   const local = machine.env["LOCALAPPDATA"] ?? join(machine.home, "AppData", "Local");
   const programs = machine.env["ProgramFiles"] ?? "C:\\Program Files";
-  return editor === "vscode"
-    ? [
-        join(local, "Programs", "Microsoft VS Code", "bin", "code.cmd"),
-        join(programs, "Microsoft VS Code", "bin", "code.cmd"),
-      ]
-    : [join(local, "Programs", "cursor", "resources", "app", "bin", "cursor.cmd")];
+  const windows: Record<Editor, string[]> = {
+    vscode: [
+      join(local, "Programs", "Microsoft VS Code", "bin", "code.cmd"),
+      join(programs, "Microsoft VS Code", "bin", "code.cmd"),
+    ],
+    cursor: [join(local, "Programs", "cursor", "resources", "app", "bin", "cursor.cmd")],
+    // Not yet seen on Windows, so found on PATH, where their installers offer to put them, or not
+    // at all. A guessed folder would be a path nobody checked.
+    "antigravity-ide": [],
+    kiro: [],
+  };
+  return windows[editor];
 }
 
 /** The editor's command-line tool: on PATH, or where its installer puts it. */

@@ -17,6 +17,8 @@
  * counts as well; a background task's report carries the current id rather than a new one. Hosts
  * that can tell a typed message from any other (OpenCode, Pi) name only typed ones, and say when
  * each was sent (`prompt_at`), which is used instead of the moment a render first saw it.
+ * Antigravity CLI names no prompt at all, so its is read from what its agent is doing, across two
+ * renders (`promptFromActivity`, A47).
  */
 export interface SeenPrompt {
   /** A digest of the host's prompt id. */
@@ -86,5 +88,114 @@ export function focusedFromPayload(payload: string): boolean | undefined {
     return typeof focused === "boolean" ? focused : undefined;
   } catch {
     return undefined;
+  }
+}
+
+/**
+ * What a host says the agent and the person are doing, kept from one render to the next.
+ *
+ * Antigravity CLI's payload names no prompt and no time (A47), but it says what the agent is doing
+ * (`agent_state`), whether a tool-approval dialog is open (`tool_confirmation_pending`) and how
+ * many messages are queued behind the running turn (`pending_input_count`). None of these is a
+ * moment on its own. A change between two renders is, and the host renders on every change of
+ * state, so the render that sees one is the first to know of it, as with Claude Code's
+ * `prompt_id`.
+ */
+export interface HostActivity {
+  readonly state?: string;
+  readonly confirming?: boolean;
+  readonly queued?: number;
+}
+
+/**
+ * The activity a payload reports, or null when it reports none.
+ *
+ * Antigravity CLI leaves a field out when it is false or zero (checked against 1.4.2: neither
+ * `tool_confirmation_pending` nor `pending_input_count` appears in an idle session's payload). So
+ * where the payload reports an `agent_state` at all, a missing one of the other two is read as no
+ * dialog open and nothing queued, and a dialog being answered shows as its field disappearing.
+ */
+export function activityFromPayload(payload: string): HostActivity | null {
+  if (payload.length === 0) return null;
+  try {
+    const parsed = JSON.parse(payload) as {
+      agent_state?: unknown;
+      tool_confirmation_pending?: unknown;
+      pending_input_count?: unknown;
+    };
+    const activity: { state?: string; confirming?: boolean; queued?: number } = {};
+    if (typeof parsed.agent_state === "string") activity.state = parsed.agent_state.slice(0, 32);
+    if (typeof parsed.tool_confirmation_pending === "boolean") {
+      activity.confirming = parsed.tool_confirmation_pending;
+    }
+    const queued = parsed.pending_input_count;
+    if (typeof queued === "number" && Number.isInteger(queued) && queued >= 0) {
+      activity.queued = queued;
+    }
+    if (activity.state !== undefined) {
+      activity.confirming ??= false;
+      activity.queued ??= 0;
+    }
+    return Object.keys(activity).length === 0 ? null : activity;
+  } catch {
+    return null;
+  }
+}
+
+/** The states Antigravity CLI reports while a turn runs, as against `idle` and `initializing`. */
+const BUSY = new Set(["thinking", "working", "tool_use"]);
+
+/**
+ * A new prompt, dated now, when the activity since the last render shows the person acted.
+ *
+ * Three changes count:
+ *
+ *   - the agent went from `idle` to working, which is a turn starting, almost always on a message
+ *     just sent. Like Claude Code's opaque id, it also counts a turn the agent starts itself;
+ *   - a tool-approval dialog closed, which only a person answering it does;
+ *   - the queue of messages grew, which is a person typing while the agent works.
+ *
+ * Nothing on a render with nothing to compare against, the session's first: a turn already
+ * running when first seen started at some moment this render does not know, and dating it now
+ * would make an old prompt look fresh. The key is new every time, because each change is its own
+ * act, and is never derived from anything the person wrote.
+ */
+export function promptFromActivity(
+  previous: HostActivity | undefined,
+  current: HostActivity | null,
+  now: number,
+): NamedPrompt | null {
+  if (previous === undefined || current === null) return null;
+  const started =
+    previous.state === "idle" && current.state !== undefined && BUSY.has(current.state);
+  const answered = previous.confirming === true && current.confirming === false;
+  const before = typeof previous.queued === "number" ? previous.queued : 0;
+  const typed = current.queued !== undefined && current.queued > before;
+  return started || answered || typed ? { key: `activity-${now}`, at: now } : null;
+}
+
+/**
+ * The states in which a host is drawing its status line with no session in it yet.
+ *
+ * Antigravity CLI runs its `statusLine` from the first frame, its sign-in screen included, and
+ * says so: `authenticating` there, with an empty `session_id`, and `initializing` while it starts.
+ * `authenticating` is not in its documentation; it is what a real first run sent (A47).
+ */
+const NOT_IN_SESSION = new Set(["authenticating", "initializing"]);
+
+/**
+ * Whether the host is in an agent session, by its own account. True unless it says otherwise.
+ *
+ * A line drawn on a sign-in screen is shown to nobody using an agent, so it is an impression no
+ * advertiser bought: the renderer draws nothing there, as an editor draws nothing without a live
+ * agent (A21). A host that reports no state is taken to be in one, as every host was before.
+ */
+export function inSessionFromPayload(payload: string): boolean {
+  if (payload.length === 0) return true;
+  try {
+    const state = (JSON.parse(payload) as { agent_state?: unknown }).agent_state;
+    return typeof state !== "string" || !NOT_IN_SESSION.has(state);
+  } catch {
+    return true;
   }
 }

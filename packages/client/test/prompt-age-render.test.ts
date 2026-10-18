@@ -61,7 +61,8 @@ function serve(): string {
   return `http://localhost:${server.port}`;
 }
 
-async function render(payload: Record<string, unknown>): Promise<void> {
+async function render(payload: Record<string, unknown>, agent = "claude-code"): Promise<void> {
+  server?.stop(true);
   const origin = serve();
   await mkdir(join(home, ".obrigado"), { recursive: true });
   await writeFile(
@@ -73,7 +74,7 @@ async function render(payload: Record<string, unknown>): Promise<void> {
       integrations: { "claude-code": { installed: true } },
     }),
   );
-  const proc = Bun.spawn([process.execPath, CLI, "statusline", "--agent", "claude-code"], {
+  const proc = Bun.spawn([process.execPath, CLI, "statusline", "--agent", agent], {
     stdin: new TextEncoder().encode(JSON.stringify({ session_id: "s-1", cwd: home, ...payload })),
     stdout: "ignore",
     stderr: "ignore",
@@ -122,5 +123,34 @@ describe("a render's impression", () => {
     await render({});
     expect(impressionSignals()).toHaveLength(1);
     expect(impressionSignals()[0]).not.toHaveProperty("input_age_s");
+  });
+
+  /*
+   * The payload Antigravity CLI 1.4.2 sent from its sign-in screen, trimmed: no session yet, so no
+   * line and no impression (A47).
+   */
+  test("from Antigravity CLI's sign-in screen, reports nothing at all", async () => {
+    await render(
+      { session_id: "", conversation_id: "", agent_state: "authenticating", version: "1.4.2" },
+      "antigravity-cli",
+    );
+    expect(beacons).toHaveLength(0);
+  });
+
+  /*
+   * Antigravity CLI names no prompt (A47). As 1.4.2 sends it: an empty prompt has no session yet,
+   * and the render that shows the first turn starting is the first to carry the conversation's id.
+   * The first carries no age, having nothing to compare; the second dates a prompt then.
+   */
+  test("from Antigravity CLI, carries an age once a render sees the agent start a turn", async () => {
+    await render({ session_id: "", agent_state: "idle" }, "antigravity-cli");
+    await render(
+      { session_id: "e7ea4e86-e24e-4c1b-9a0e-3f2d1c0b9a87", agent_state: "working" },
+      "antigravity-cli",
+    );
+    const signals = impressionSignals() as Array<{ input_age_s?: number }>;
+    expect(signals).toHaveLength(2);
+    expect(signals[0]).not.toHaveProperty("input_age_s");
+    expect(signals[1]).toMatchObject({ input_age_s: 0 });
   });
 });

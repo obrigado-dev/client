@@ -14,8 +14,13 @@ import type { CachedBatch } from "@obrigado/shared/rotation";
 import { ensureDir, SESSION_STATE_DIR } from "./config.ts";
 import { EDITOR_AGENT_IDS } from "@obrigado/shared/agents";
 
-import { promptFromPayload, seenPrompt } from "./prompt-signal.ts";
-import type { SeenPrompt } from "./prompt-signal.ts";
+import {
+  activityFromPayload,
+  promptFromActivity,
+  promptFromPayload,
+  seenPrompt,
+} from "./prompt-signal.ts";
+import type { HostActivity, SeenPrompt } from "./prompt-signal.ts";
 import { AGENTS } from "./version.ts";
 import type { Agent } from "./version.ts";
 
@@ -48,6 +53,8 @@ export interface AgentSessionState {
   retry_after?: number;
   /** The latest prompt a render has seen in this session (`prompt-signal.ts`). */
   prompt?: SeenPrompt;
+  /** What the host last said the agent and the person were doing, where it says (A47). */
+  activity?: HostActivity;
   updated_at: number;
 }
 
@@ -124,6 +131,9 @@ export async function readSessionState(
 /**
  * This session's state as a render sees it: what was stored, with the latest prompt the host's
  * payload names folded in (`prompt-signal.ts`). Written back by the render that read it.
+ *
+ * A host whose payload names no prompt but reports what its agent is doing (Antigravity CLI) has
+ * its prompt read from how that changed since the last render, so the activity is kept too.
  */
 export async function readRenderState(
   agent: Agent,
@@ -131,11 +141,40 @@ export async function readRenderState(
   payload: string,
 ): Promise<AgentSessionState> {
   const stored = await readSessionState(agent, sessionId);
-  const prompt = seenPrompt(stored.prompt, promptFromPayload(payload), Date.now());
-  return prompt === undefined ? stored : { ...stored, prompt };
+  const now = Date.now();
+  const activity = activityFromPayload(payload);
+  const previous = await previousActivity(agent, sessionId, stored, activity);
+  const named = promptFromPayload(payload) ?? promptFromActivity(previous, activity, now);
+  const prompt = seenPrompt(stored.prompt, named, now);
+  return {
+    ...stored,
+    ...(prompt === undefined ? {} : { prompt }),
+    ...(activity === null ? {} : { activity }),
+  };
 }
 
-export { focusedFromPayload, inputAgeSeconds } from "./prompt-signal.ts";
+/**
+ * What the host was doing at the render before this one, for a host that reports it.
+ *
+ * Usually this session's own record. But Antigravity CLI has no session until the first message:
+ * at an empty prompt it sends an empty `session_id` (state kept as "default"), and the render that
+ * shows the first turn starting is the first to carry the new conversation's id. Its own record is
+ * then empty, so it compares against the empty prompt's, which is what the person was looking at
+ * when they sent that message. Without this every conversation's first prompt went undated.
+ */
+async function previousActivity(
+  agent: Agent,
+  sessionId: string,
+  stored: AgentSessionState,
+  activity: HostActivity | null,
+): Promise<HostActivity | undefined> {
+  if (stored.activity !== undefined || activity === null || sessionId === "default") {
+    return stored.activity;
+  }
+  return (await readSessionState(agent, "default")).activity;
+}
+
+export { focusedFromPayload, inputAgeSeconds, inSessionFromPayload } from "./prompt-signal.ts";
 
 export async function writeSessionState(
   agent: Agent,

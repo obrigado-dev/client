@@ -1,5 +1,5 @@
 /**
- * The VS Code extension's install into VS Code and Cursor (A40), with the network faked at
+ * The VS Code extension's install into VS Code and its forks (A40, A47), with the network faked at
  * `fetch` and the editor's tool faked at `run`.
  *
  * The claims: what is installed is the latest release's `.vsix`, fetched through obrigado.dev so
@@ -144,6 +144,33 @@ describe("installing the extension into an editor", () => {
       reason: "`cursor` was not found",
     });
   });
+
+  /*
+   * The forks are named by the tool on PATH, which is what a developer would type: `kiro`, whose
+   * copy inside the app is still called `code`, and `antigravity-ide`, not 1.x's `agy`.
+   */
+  test("names Antigravity IDE's and Kiro's tools by what is on PATH", async () => {
+    const { deps } = world();
+
+    expect(await installEditorExtension("antigravity-ide", { ...deps, cli: null })).toEqual({
+      status: "failed",
+      reason: "`antigravity-ide` was not found",
+    });
+    expect(await installEditorExtension("kiro", { ...deps, cli: null })).toEqual({
+      status: "failed",
+      reason: "`kiro` was not found",
+    });
+  });
+
+  test("installs into a fork through the fork's own tool", async () => {
+    const { deps, fakes } = world();
+
+    expect((await installEditorExtension("kiro", { ...deps, cli: "kiro" })).status).toBe(
+      "installed",
+    );
+    const install = fakes.ran.find((argv) => argv.includes("--install-extension")) ?? [];
+    expect(install[0]).toBe("kiro");
+  });
 });
 
 describe("removing it", () => {
@@ -199,5 +226,25 @@ describe("the editor's tool, off PATH", () => {
       join("/Users/jo", "Applications", "Cursor.app/Contents/Resources/app/bin/cursor"),
     ]);
     expect(editorToolPaths("vscode", { platform: "linux", home: "/home/jo", env: {} })).toEqual([]);
+  });
+
+  /*
+   * Kiro's tool inside the app is still called `code`, and Antigravity IDE's is the 2.0 name:
+   * `Antigravity.app` is Google's desktop app now, not this editor.
+   */
+  test("is Kiro's and Antigravity IDE's own tool inside their apps on macOS", () => {
+    const mac = { platform: "darwin" as const, home: "/Users/jo", env: {} };
+    expect(editorToolPaths("kiro", mac)[0]).toBe(
+      join("/Applications", "Kiro.app/Contents/Resources/app/bin/code"),
+    );
+    expect(editorToolPaths("antigravity-ide", mac)[0]).toBe(
+      join("/Applications", "Antigravity IDE.app/Contents/Resources/app/bin/antigravity-ide"),
+    );
+  });
+
+  /* Never Cursor's folder, which is what a fork fell through to before each had its own row. */
+  test("is only PATH for Kiro and Antigravity IDE on Windows, until a folder is checked", () => {
+    expect(editorToolPaths("kiro", windows)).toEqual([]);
+    expect(editorToolPaths("antigravity-ide", windows)).toEqual([]);
   });
 });

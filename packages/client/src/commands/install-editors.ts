@@ -1,9 +1,9 @@
 /**
- * The editors: VS Code and Cursor's extension (A40), and the JetBrains IDEs' plugin (A43). Their
- * question, install, removal and refresh.
+ * The editors: the VS Code extension in VS Code and its forks (A40, A47), and the JetBrains IDEs'
+ * plugin (A43). Their question, install, removal and refresh.
  *
  * Split from `install.ts` for its line budget, as the Pi and desktop app adapters were. What is
- * fetched, checked and handed to VS Code or Cursor lives in `editor-extension.ts`, and the
+ * fetched, checked and handed to VS Code or a fork lives in `editor-extension.ts`, and the
  * JetBrains IDEs have `install-jetbrains.ts`; these decide what the developer is asked and told,
  * and what the install records.
  */
@@ -32,8 +32,14 @@ import { apiOrigin } from "./shared.ts";
 
 // Read from here by `install.ts`, which is at its limit of modules to import.
 export { removeJetBrains } from "./install-jetbrains.ts";
+export { installAntigravityHost, removeAntigravityCli } from "./install-antigravity.ts";
 
-const LABEL: Record<Editor, string> = { vscode: "VS Code", cursor: "Cursor" };
+const LABEL: Record<Editor, string> = {
+  vscode: "VS Code",
+  cursor: "Cursor",
+  "antigravity-ide": "Antigravity IDE",
+  kiro: "Kiro",
+};
 
 type Ask = (question: string) => Promise<string | null>;
 
@@ -46,7 +52,7 @@ export interface EditorHere {
   readonly label: string;
 }
 
-/** VS Code and Cursor where their tools are, then the JetBrains IDEs the plugin can go into now. */
+/** VS Code and its forks where their tools are, then the JetBrains IDEs the plugin can go into now. */
 function editorsHere(existing: ClientConfig | null): EditorHere[] {
   const here: EditorHere[] = EDITORS.filter((editor) => editorPresent(editor)).map((editor) => ({
     host: editor,
@@ -157,7 +163,7 @@ export async function installEditorHosts(
 ): Promise<AdapterResult[]> {
   const results: AdapterResult[] = [];
   for (const editor of EDITORS.filter((candidate) => targets.includes(candidate))) {
-    // oxlint-disable-next-line eslint/no-await-in-loop -- two editors, each with its own tool
+    // oxlint-disable-next-line eslint/no-await-in-loop -- each editor with its own tool
     results.push(await installEditorAdapter(editor, existing, integrations, deps));
   }
   if (targets.includes("jetbrains")) {
@@ -196,7 +202,7 @@ export async function refreshEditors(
 ): Promise<void> {
   for (const editor of EDITORS) {
     if (editorIntegration(config, editor)?.installed !== true) continue;
-    // oxlint-disable-next-line eslint/no-await-in-loop -- two editors, each with its own tool
+    // oxlint-disable-next-line eslint/no-await-in-loop -- each editor with its own tool
     const outcome = await installEditorExtension(editor, deps);
     if (outcome.status === "installed") say(`${LABEL[editor]}: extension ${outcome.version}.`);
     if (outcome.status === "failed") say(`${LABEL[editor]}: not updated: ${outcome.reason}.`);

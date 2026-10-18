@@ -6,7 +6,7 @@ This repository contains the source for the developer-installed parts of
 - the `obrigado` CLI and status-line integrations;
 - the shared wire contract and rendering rules;
 - the OpenCode plugin;
-- the VS Code and Cursor extension;
+- the VS Code extension, which Cursor, Antigravity IDE and Kiro run unchanged;
 - the JetBrains IDEs plugin.
 
 This is where that code is developed. The private

@@ -192,6 +192,57 @@ export const AGENTS = [
       "The band above the prompt in the Code tab, drawn by a mod at the documented `AbovePrompt` site.",
     inherits: null,
   },
+  {
+    // Google's terminal agent, `agy`, which replaced Gemini CLI for its consumer tiers on
+    // 2026-06-18. Not a fork of Gemini CLI: a separate program, and the first host after Claude
+    // Code to document Claude Code's own contract — a `statusLine` command fed a JSON payload on
+    // stdin (antigravity.google/docs/cli/statusline). `stack_with_default` draws the command's
+    // line under the host's built-in one rather than in its place, so nothing of the developer's
+    // is displaced and there is nothing to chain.
+    id: "antigravity-cli",
+    label: "Antigravity CLI",
+    installs: "cli",
+    kind: "terminal",
+    surface:
+      "The status line, configured by the documented `statusLine` setting and stacked under the built-in line.",
+    inherits: null,
+  },
+  {
+    // Google's Code-OSS fork, renamed from Antigravity at 2.0 (2026-05-19), which runs the VS Code
+    // extension unchanged. The rename moved everything an installer touches: the app is
+    // `Antigravity IDE.app`, its tool `antigravity-ide`, its extensions `~/.antigravity-ide`.
+    // `Antigravity.app` and `agy` now belong to the desktop app and the CLI, so neither is looked
+    // for here.
+    id: "antigravity-ide",
+    label: "Antigravity IDE",
+    installs: "cli",
+    kind: "editor",
+    surface: null,
+    inherits: "vscode",
+  },
+  {
+    // AWS's Code-OSS fork, which runs the VS Code extension unchanged from `~/.kiro/extensions`.
+    // Named `kiro` rather than `kiro-ide` because that is what it calls itself, in its app name
+    // and its command-line tool.
+    id: "kiro",
+    label: "Kiro",
+    installs: "cli",
+    kind: "editor",
+    surface: null,
+    inherits: "vscode",
+  },
+  {
+    // Kiro's terminal agent. It has a live status line, but a closed one: `/settings display`
+    // turns built-in segments on and off, and nothing else can write to it. A command-fed line
+    // like Claude Code's is an open request (kirodotdev/Kiro#9383, #4840). If it lands with that
+    // contract, `obrigado statusline` already satisfies it and support becomes a config write.
+    id: "kiro-cli",
+    label: "Kiro CLI",
+    installs: null,
+    kind: "terminal",
+    surface: null,
+    inherits: null,
+  },
 ] as const satisfies readonly AgentFacts[];
 
 /**

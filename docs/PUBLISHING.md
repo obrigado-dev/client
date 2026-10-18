@@ -140,7 +140,8 @@ the release's version by `scripts/build-editors.ts`: `obrigado-vscode-<v>.vsix`,
 since/until builds. All three are in SHA256SUMS before it is signed. Both manifests stay `0.0.0`
 in the repository; a release is the only thing that gives either a version.
 
-- **VS Code and Cursor** install the `.vsix` through `obrigado install --agent vscode|cursor`,
+- **VS Code, Cursor, Antigravity IDE and Kiro** install the `.vsix` through
+  `obrigado install --agent vscode|cursor|antigravity-ide|kiro`,
   which checks it against the signed checksums and runs the editor's own `--install-extension`,
   and the daily background update installs the next one. By hand: the release's `.vsix`, or
   https://obrigado.dev/vscode/obrigado.vsix, then **Extensions: Install from VSIX…**.

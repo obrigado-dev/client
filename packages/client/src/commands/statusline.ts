@@ -32,6 +32,7 @@ import {
   isEditorAgent,
   focusedFromPayload,
   inputAgeSeconds,
+  inSessionFromPayload,
   pruneSessionState,
   readRenderState,
   sessionIdFromPayload,
@@ -296,6 +297,10 @@ export async function statusline(argv: readonly string[] = []): Promise<number> 
      * gets it, above or below, and it was returning before either when this check came first.
      */
     if (isCiEnvironment()) return 0;
+
+    // Nor is a host's sign-in screen: Antigravity CLI draws its status line there, before any
+    // session exists, and says it is `authenticating` (A47).
+    if (!inSessionFromPayload(payload)) return 0;
 
     // An editor surface is a COMPANION to a running agent, not independent inventory (A21).
     // The gate lives here rather than in each extension so one rule governs every editor

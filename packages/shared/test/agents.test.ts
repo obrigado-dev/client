@@ -37,6 +37,10 @@ describe("the table", () => {
       "oh-my-pi",
       "jetbrains",
       "claude-desktop",
+      "antigravity-cli",
+      "antigravity-ide",
+      "kiro",
+      "kiro-cli",
     ]);
   });
 
@@ -81,6 +85,10 @@ describe("the derived views", () => {
       "oh-my-pi",
       "jetbrains",
       "claude-desktop",
+      "antigravity-cli",
+      // Two more Code-OSS forks running the VS Code extension unchanged, as Cursor does.
+      "antigravity-ide",
+      "kiro",
     ]);
   });
 
@@ -92,6 +100,7 @@ describe("the derived views", () => {
       "pi",
       "jetbrains",
       "claude-desktop",
+      "antigravity-cli",
     ]);
   });
 
@@ -125,8 +134,27 @@ describe("the derived views", () => {
     expect(ids).not.toContain("gemini-cli");
   });
 
+  /*
+   * Kiro CLI's status line is live and host-owned, but closed: nothing outside Kiro can write to
+   * it. A row so the host is known, and no surface until one opens (kirodotdev/Kiro#9383).
+   */
+  test("knows Kiro CLI without installing into it or demoing it", () => {
+    const installable = INSTALLABLE_AGENTS.map((agent) => agent.id) as readonly string[];
+    const surfaced = SURFACED_AGENTS.map((agent) => agent.id) as readonly string[];
+
+    expect(AGENT_IDS).toContain("kiro-cli");
+    expect(installable).not.toContain("kiro-cli");
+    expect(surfaced).not.toContain("kiro-cli");
+  });
+
   test("editors are the hosts polled as editors", () => {
-    expect([...EDITOR_AGENT_IDS]).toEqual(["vscode", "cursor", "jetbrains"]);
+    expect([...EDITOR_AGENT_IDS]).toEqual([
+      "vscode",
+      "cursor",
+      "jetbrains",
+      "antigravity-ide",
+      "kiro",
+    ]);
   });
 
   test("every surfaced agent actually carries the sentence the demo prints", () => {
@@ -138,7 +166,8 @@ describe("the derived views", () => {
 
 describe("surfaceLabel", () => {
   test("composes a shared surface from the hosts that share it", () => {
-    expect(surfaceLabel("vscode")).toBe("Cursor / VS Code");
+    expect(surfaceLabel("vscode")).toBe("Cursor / Antigravity IDE / Kiro / VS Code");
+    expect(surfaceAgents("vscode")).toEqual(["cursor", "antigravity-ide", "kiro", "vscode"]);
   });
 
   test("leaves a host that owns its surface alone", () => {

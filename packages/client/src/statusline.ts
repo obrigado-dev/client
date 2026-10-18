@@ -142,18 +142,20 @@ export async function readSettings(path = CLAUDE_SETTINGS_PATH): Promise<Setting
  *
  * `backupDir` is a parameter, as in `opencode-plugin.ts` and `pi-extension.ts`, so that tests
  * writing a scratch settings file also keep its backups out of the developer's own
- * `~/.obrigado/backups`.
+ * `~/.obrigado/backups`. `name` says whose settings a backup holds, since Antigravity CLI's
+ * file is written by this same code.
  */
 export async function backupSettings(
   path = CLAUDE_SETTINGS_PATH,
   backupDir = BACKUP_DIR,
+  name = "claude-settings",
 ): Promise<string | null> {
   const file = Bun.file(path);
   if (!(await file.exists())) return null;
 
   await ensureDir(backupDir);
   const stamp = new Date().toISOString().replaceAll(/[:.]/gu, "-");
-  const destination = join(backupDir, `claude-settings-${stamp}.json`);
+  const destination = join(backupDir, `${name}-${stamp}.json`);
   await Bun.write(destination, await file.text());
   return destination;
 }

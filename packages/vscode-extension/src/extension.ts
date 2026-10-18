@@ -65,12 +65,18 @@ function surfaceVersion(context: vscode.ExtensionContext): string {
 /**
  * Which host this is, as the wire records it.
  *
- * Cursor is a VS Code fork and reports its own `appName`, so one extension serves both and
- * the impression still says which editor it rendered in. Guessing "vscode" for a Cursor
- * user would blur two populations that no rollup joins back together.
+ * Cursor, Antigravity IDE and Kiro are VS Code forks and each reports its own `appName`, so one
+ * extension serves all four and the impression still says which editor it rendered in. Guessing
+ * "vscode" for a Cursor user would blur two populations that no rollup joins back together.
+ *
+ * Antigravity IDE named itself "Antigravity" before 2.0, and an install of that still reports it.
  */
 function host(): string {
-  return vscode.env.appName.toLowerCase().includes("cursor") ? "cursor" : "vscode";
+  const name = vscode.env.appName.toLowerCase();
+  if (name.includes("cursor")) return "cursor";
+  if (name.includes("antigravity")) return "antigravity-ide";
+  if (name.includes("kiro")) return "kiro";
+  return "vscode";
 }
 
 /** Whether `spawn` finds `name` on PATH: as it is, or with `.exe` or `.com` on Windows. */

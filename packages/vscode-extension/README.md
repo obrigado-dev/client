@@ -1,7 +1,7 @@
 # obrigado-vscode
 
-Obrigado's editor surface: one labeled sponsored line in the status bar. Cursor inherits it
-by being a VS Code fork.
+Obrigado's editor surface: one labeled sponsored line in the status bar. Cursor, Antigravity
+IDE and Kiro inherit it by being VS Code forks.
 
 **It renders only alongside a live agent session — see "When it shows" below.**
 
@@ -11,7 +11,7 @@ Not on the Marketplace or Open VSX yet (see `docs/PUBLISHING.md`). Every release
 `.vsix`, and the CLI installs it (A40):
 
 ```sh
-obrigado install --agent vscode    # or --agent cursor; a bare install asks when it finds one
+obrigado install --agent vscode    # or cursor, antigravity-ide, kiro; a bare install asks when it finds one
 ```
 
 It checks the download against the release's signed checksums, installs it with the editor's own
@@ -29,11 +29,11 @@ no injection, policy changes, or mutation of another extension's files (INVARIAN
 
 ## How it delivers
 
-Runs `obrigado statusline --agent vscode|cursor --json` and renders the parts, exactly as the
+Runs `obrigado statusline --agent <editor> --json` and renders the parts, exactly as the
 OpenCode plugin does. Rotation, batching, beacons and the disclosure stay in the one
 renderer Claude Code already drives — there is no second delivery path.
 
-The host is read from `vscode.env.appName`, so one extension serves both editors and the
+The host is read from `vscode.env.appName`, so one extension serves all four editors and the
 impression still records which one rendered it. Reporting "vscode" for a Cursor user would
 blur two populations no rollup joins back together.
 
@@ -54,7 +54,7 @@ impression there *implies* an agent was running — which is the assumption §14
 rules are built on.
 
 So an editor surface renders **only while an agent session is live**: the client checks
-whether any agent host (Claude Code, Codex, OpenCode) has rendered within the last five
+whether any agent host (Claude Code, OpenCode, Pi, Antigravity CLI) has rendered within the last five
 minutes, and returns nothing otherwise. The editor item is a companion to a running agent,
 in a place the agent's own UI cannot reach — not independent inventory (A21).
 

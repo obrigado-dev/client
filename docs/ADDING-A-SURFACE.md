@@ -111,6 +111,9 @@ The host decides this, not us. There are three precedents:
 1. **The host calls a command.** Claude Code is configured to run `obrigado statusline`, and
    the client prints one line to stdout. This is the simplest case and the one to copy when
    the host supports a status-line command. See `packages/client/src/commands/statusline.ts`.
+   Antigravity CLI documents the same contract, so its integration is only the settings write
+   (`packages/client/src/antigravity-statusline.ts`): when a host copies Claude Code's
+   `statusLine`, copy that.
 2. **The host loads a plugin.** OpenCode registers `@obrigado/opencode-plugin` in its own
    `tui.json` (OpenCode 2: `cli.json`), loads the package's `./tui` export, and the plugin
    renders into the host's `app_bottom` slot (OpenCode 2: `app`). One module serves both

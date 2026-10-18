@@ -1,5 +1,5 @@
 /**
- * Whether a bare install puts the line in VS Code, Cursor or the JetBrains IDEs too (A40, A43):
+ * Whether a bare install puts the line in VS Code, its forks or the JetBrains IDEs too (A40, A43, A47):
  * asked, default no, before anything is installed, and never without somebody there to answer.
  */
 import { describe, expect, test } from "bun:test";
