@@ -2,7 +2,8 @@
 #
 #   pwsh scripts/windows-smoke.ps1 -Binary dist/binaries/obrigado-windows-x64.exe
 #
-# Installed into the settings of a scratch profile, with the program off PATH as install.ps1
+# Signed with a throwaway certificate first, to show a signature leaves it runnable. Then
+# installed into the settings of a scratch profile, with the program off PATH as install.ps1
 # leaves it, then rendered from the command it wrote through each shell Claude Code uses: Git
 # Bash, Windows PowerShell and PowerShell 7, each handed the session's JSON on stdin. A render
 # names its session's state file after the `session_id` it read, so that file proves the shell
@@ -33,6 +34,22 @@ $env:WT_SESSION = 'windows-smoke'
 
 $version = (& $exe version | Out-String).Trim()
 Check 'reports its version' ($version -match '^\d+\.\d+\.\d+$') $version
+
+# Authenticode appends a signature to the file, and the program has to go on finding its own code
+# inside it. A throwaway certificate stands in for the release's: what is under test is that the
+# signed copy still runs, not that Windows trusts who signed it.
+$cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject 'CN=obrigado smoke test' -CertStoreLocation Cert:\CurrentUser\My
+try {
+    $signed = Join-Path $profileDir 'signed.exe'
+    Copy-Item -LiteralPath $exe -Destination $signed
+    Set-AuthenticodeSignature -FilePath $signed -Certificate $cert -HashAlgorithm SHA256 | Out-Null
+    $signature = Get-AuthenticodeSignature -FilePath $signed
+    Check 'takes an Authenticode signature' ($null -ne $signature.SignerCertificate -and $signature.SignerCertificate.Thumbprint -eq $cert.Thumbprint) "$($signature.Status) $($signature.StatusMessage)"
+    $signedVersion = (& $signed version | Out-String).Trim()
+    Check '  and still runs once signed' ($signedVersion -eq $version) $signedVersion
+} finally {
+    Remove-Item -LiteralPath "Cert:\CurrentUser\My\$($cert.Thumbprint)" -ErrorAction SilentlyContinue
+}
 
 $said = & $exe install --agent claude-code --no-input 2>&1 | Out-String
 & $exe config auto_update false | Out-Null
