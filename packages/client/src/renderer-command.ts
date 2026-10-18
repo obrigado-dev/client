@@ -171,6 +171,8 @@ export function spawnedRendererCommand(
 ): string {
   const onPath = found === undefined ? Bun.which("obrigado") : found.onPath;
   // On Windows by its own path whatever PATH says, as `rendererCommand` explains.
-  if (onPath !== null && machine.platform !== "win32") return rendererCommand(undefined, found);
+  if (onPath !== null && machine.platform !== "win32") {
+    return rendererCommand(undefined, found, machine);
+  }
   return quotedCommand([...installedArgv(found), "statusline"]);
 }

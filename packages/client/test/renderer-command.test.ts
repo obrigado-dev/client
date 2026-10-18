@@ -8,6 +8,9 @@ import { forShell, rendererCommand, spawnedRendererCommand } from "../src/render
 import { statusLineOwner } from "../src/statusline.ts";
 
 const NODE = "/home/dev/.nvm/versions/node/v22.11.0";
+/** Linux and macOS, named rather than taken from the machine the tests run on. */
+const LINUX = { platform: "linux" as const, home: "/home/dev" };
+const MAC = { platform: "darwin" as const, home: "/Users/Jo Doe" };
 const FROM_NPM = {
   onPath: `${NODE}/bin/obrigado`,
   binary: `${NODE}/lib/node_modules/@obrigado/client/node_modules/@obrigado/client-linux-x64/bin/obrigado`,
@@ -17,19 +20,19 @@ describe("the renderer command", () => {
   test("names an install.sh binary bare, which survives the binary moving", () => {
     const binary = "/home/dev/.local/bin/obrigado";
 
-    expect(rendererCommand("claude-code", { onPath: binary, binary })).toBe(
+    expect(rendererCommand("claude-code", { onPath: binary, binary }, LINUX)).toBe(
       "obrigado statusline --agent claude-code",
     );
   });
 
   test("names a package manager's by the path it has, which runs under any Node version", () => {
-    expect(rendererCommand("codex", FROM_NPM)).toBe(
+    expect(rendererCommand("codex", FROM_NPM, LINUX)).toBe(
       `${NODE}/bin/obrigado statusline --agent codex`,
     );
   });
 
   test("writes that path in a form uninstall still takes for ours alone", () => {
-    const command = rendererCommand("claude-code", FROM_NPM);
+    const command = rendererCommand("claude-code", FROM_NPM, LINUX);
 
     expect(statusLineOwner({ type: "command", command })).toBe("ours");
   });
@@ -38,10 +41,14 @@ describe("the renderer command", () => {
     const home = "/Users/Jo Doe/.nvm/versions/node/v22.11.0";
 
     expect(
-      rendererCommand(undefined, {
-        onPath: `${home}/bin/obrigado`,
-        binary: `${home}/lib/node_modules/@obrigado/client/node_modules/@obrigado/client-darwin-arm64/bin/obrigado`,
-      }),
+      rendererCommand(
+        undefined,
+        {
+          onPath: `${home}/bin/obrigado`,
+          binary: `${home}/lib/node_modules/@obrigado/client/node_modules/@obrigado/client-darwin-arm64/bin/obrigado`,
+        },
+        MAC,
+      ),
     ).toBe("obrigado statusline");
   });
 });
