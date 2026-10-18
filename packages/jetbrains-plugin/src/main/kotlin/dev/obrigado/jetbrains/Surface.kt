@@ -149,21 +149,22 @@ internal fun splitCommand(text: String): List<String> {
     var index = 0
     while (index < text.length) {
         val character = text[index]
+        val next = text.getOrNull(index + 1)
         if (quote != null) {
             if (character == quote) {
                 quote = null
-            } else if (character == '\\' && quote == '"' && index + 1 < text.length) {
+            } else if (character == '\\' && quote == '"' && next != null && (next == '"' || next == '\\')) {
                 index += 1
-                current.append(text[index])
+                current.append(next)
             } else {
                 current.append(character)
             }
         } else if (character == '"' || character == '\'') {
             quote = character
             inToken = true
-        } else if (character == '\\' && index + 1 < text.length) {
+        } else if (character == '\\' && next != null && escapable(next)) {
             index += 1
-            current.append(text[index])
+            current.append(next)
             inToken = true
         } else if (isJsWhitespace(character)) {
             if (inToken) out += current.toString()
@@ -178,6 +179,10 @@ internal fun splitCommand(text: String): List<String> {
     if (inToken) out += current.toString()
     return out
 }
+
+/** What a backslash outside quotes escapes: the characters `splitCommand` itself reads. */
+private fun escapable(character: Char): Boolean =
+    character == '"' || character == '\'' || character == '\\' || isJsWhitespace(character)
 
 /**
  * The argv a host spawns to get its line.

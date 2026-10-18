@@ -159,6 +159,15 @@ describe("capability detection", () => {
   test("FORCE_COLOR=0 is not a request to force colour", () => {
     expect(supportsColor(env({ TERM: "dumb", FORCE_COLOR: "0" }))).toBe(false);
   });
+
+  // Windows terminals set no TERM (A46).
+  test("takes a Windows terminal that names itself, and only on Windows", () => {
+    expect(supportsColor(env({ WT_SESSION: "abc" }), "auto", "win32")).toBe(true);
+    expect(supportsColor(env({ TERM_PROGRAM: "vscode" }), "auto", "win32")).toBe(true);
+    expect(supportsColor(env({}), "auto", "win32")).toBe(false);
+    expect(supportsColor(env({ WT_SESSION: "abc" }), "auto", "linux")).toBe(false);
+    expect(supportsColor(env({ WT_SESSION: "abc", NO_COLOR: "1" }), "auto", "win32")).toBe(false);
+  });
 });
 
 describe("the label is never styled", () => {

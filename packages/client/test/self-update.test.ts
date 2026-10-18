@@ -7,7 +7,7 @@
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHash, generateKeyPairSync } from "node:crypto";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -286,6 +286,163 @@ describe("an update", () => {
   test("fails quietly when GitHub cannot be reached", async () => {
     expect((await runUpdate(deps(offline))).status).toBe("failed");
     expect(await readFile(binary, "utf8")).toBe("the old one");
+  });
+});
+
+/** A rename the way Windows does one onto a running program: refused while the target exists. */
+async function windowsRename(from: string, to: string): Promise<void> {
+  if (await Bun.file(to).exists()) {
+    throw Object.assign(new Error(`EPERM: operation not permitted, rename '${from}'`), {
+      code: "EPERM",
+    });
+  }
+  await rename(from, to);
+}
+
+/** What a Windows update set aside beside the binary (A46). */
+async function retired(): Promise<string[]> {
+  return (await readdir(dir)).filter((name) => name.includes("obrigado-retired"));
+}
+
+/** `deps` on Windows: its release target, and its rename (A46). */
+function onWindows(fetchImpl: UpdateDeps["fetch"], overrides: Partial<UpdateDeps> = {}) {
+  return {
+    ...deps(fetchImpl),
+    target: "windows-x64",
+    platform: "win32" as const,
+    rename: windowsRename,
+    ...overrides,
+  };
+}
+
+describe("an update on Windows", () => {
+  const SUMS_WINDOWS = `${DIGEST}  obrigado-windows-x64.exe\n`;
+
+  test("takes the release's .exe, stepping the running binary aside rather than over it", async () => {
+    const asked: string[] = [];
+    const release = github("v0.9.0", { sums: SUMS_WINDOWS });
+    const outcome = await runUpdate(
+      onWindows((input, init) => {
+        asked.push(input);
+        return release(input, init);
+      }),
+    );
+
+    expect(outcome).toEqual({ status: "updated", from: "0.3.0", to: "0.9.0" });
+    expect(asked).toContain(
+      "https://github.com/obrigado-dev/client/releases/download/v0.9.0/obrigado-windows-x64.exe",
+    );
+    expect(await readFile(binary)).toEqual(Buffer.from(NEW_BINARY));
+    expect(await leftovers()).toEqual([]);
+    // Deleted at once here, where nothing runs it; on Windows the update itself still would.
+    expect(await retired()).toEqual([]);
+  });
+
+  test("is refused by that rename where it does not step aside first", async () => {
+    const outcome = await runUpdate(
+      onWindows(github("v0.9.0", { sums: SUMS_WINDOWS }), { platform: "darwin" }),
+    );
+
+    expect(outcome.status).toBe("failed");
+    expect(await readFile(binary, "utf8")).toBe("the old one");
+  });
+
+  test("runs the download once under a name Windows will run", async () => {
+    const ran: string[] = [];
+    await runUpdate(
+      onWindows(github("v0.9.0", { sums: SUMS_WINDOWS }), {
+        reportedVersion: (path) => {
+          ran.push(path);
+          return Promise.resolve("0.9.0\n");
+        },
+      }),
+    );
+
+    expect(ran).toHaveLength(1);
+    expect(ran[0]).toEndWith(".exe");
+  });
+
+  test("waits out a scanner that holds the download for a moment", async () => {
+    let refusals = 0;
+    const outcome = await runUpdate(
+      onWindows(github("v0.9.0", { sums: SUMS_WINDOWS }), {
+        rename: async (from, to) => {
+          if (from.includes("obrigado-update") && refusals < 2) {
+            refusals += 1;
+            throw Object.assign(new Error("EBUSY: resource busy or locked"), { code: "EBUSY" });
+          }
+          await windowsRename(from, to);
+        },
+      }),
+    );
+
+    expect(outcome.status).toBe("updated");
+    expect(refusals).toBe(2);
+    expect(await readFile(binary)).toEqual(Buffer.from(NEW_BINARY));
+  });
+
+  test("puts the binary back when the download cannot take its place", async () => {
+    const outcome = await runUpdate(
+      onWindows(github("v0.9.0", { sums: SUMS_WINDOWS }), {
+        rename: async (from, to) => {
+          if (from.includes("obrigado-update")) {
+            throw Object.assign(new Error("EXDEV: cross-device link"), { code: "EXDEV" });
+          }
+          await windowsRename(from, to);
+        },
+      }),
+    );
+
+    expect(outcome.status).toBe("failed");
+    expect(await readFile(binary, "utf8")).toBe("the old one");
+    expect(await retired()).toEqual([]);
+    expect(await leftovers()).toEqual([]);
+  });
+
+  /*
+   * On Windows itself: the binary replaced while it runs, which a stand-in rename cannot show.
+   * A copy of a program Windows ships runs from the binary's path for the whole update, as a
+   * render in another session, or the update itself, would.
+   */
+  test.if(process.platform === "win32")("replaces a program while Windows runs it", async () => {
+    const running = join(dir, "obrigado.exe");
+    await copyFile(
+      join(process.env["SystemRoot"] ?? "C:\\Windows", "System32", "ping.exe"),
+      running,
+    );
+    const proc = Bun.spawn([running, "-n", "30", "127.0.0.1"], {
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    try {
+      const outcome = await runUpdate({
+        ...deps(github("v0.9.0", { sums: SUMS_WINDOWS })),
+        target: "windows-x64",
+        binary: running,
+      });
+
+      expect(outcome).toEqual({ status: "updated", from: "0.3.0", to: "0.9.0" });
+      expect(await readFile(running)).toEqual(Buffer.from(NEW_BINARY));
+      // Still running from its new name, so it could not be deleted yet.
+      expect(await retired()).toHaveLength(1);
+    } finally {
+      proc.kill();
+      await proc.exited;
+    }
+
+    await Bun.sleep(500);
+    await runUpdate({ ...deps(github("v0.3.0")), target: "windows-x64", binary: running });
+    expect(await retired()).toEqual([]);
+  });
+
+  test("deletes what an earlier update set aside, whatever this check finds", async () => {
+    await writeFile(join(dir, "obrigado.obrigado-retired-1-2"), "the one before");
+
+    expect(await runUpdate(onWindows(github("v0.3.0")))).toEqual({
+      status: "current",
+      version: "0.3.0",
+    });
+    expect(await retired()).toEqual([]);
   });
 });
 

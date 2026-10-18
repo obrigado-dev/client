@@ -148,6 +148,18 @@ IntelliJ Platform does from the installed descriptor, read it from there. Our sh
 the server can tell which of the two a developer needs to update. A host that runs the binary
 directly, as Claude Code does, sends nothing.
 
+## On Windows
+
+A surface that starts the renderer runs on Windows too (A46), and three things that cost nothing
+elsewhere decide whether it works there:
+
+- **`windowsHide`** on the spawn. Without it Windows opens a console window for the renderer, in
+  front of whatever the developer is doing, on every render.
+- **`splitCommand`** from `@obrigado/surface` for a configured command, never a shell. It keeps a
+  Windows path's backslashes, which a POSIX split drops.
+- **`installedRendererPaths`** when PATH has no `obrigado`. install.ps1, like install.sh, says how
+  to put its folder on PATH and does not do it.
+
 ## Before you open the PR
 
 ```sh

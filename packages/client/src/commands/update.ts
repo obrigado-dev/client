@@ -19,6 +19,8 @@ async function reportedVersion(path: string): Promise<string> {
     stdout: "pipe",
     stderr: "ignore",
     timeout: 15_000,
+    // A background update has no console, and Windows would open one for this (A46).
+    windowsHide: true,
   });
   const out = await new Response(proc.stdout).text();
   await proc.exited;
@@ -31,8 +33,9 @@ export async function update(argv: readonly string[]): Promise<number> {
   if (target === null) {
     if (!background) {
       console.log("This is not a release binary, so it does not update itself.");
+      const installer = process.platform === "win32" ? "install.ps1" : "install.sh";
       console.log(
-        "A checkout updates with git; https://obrigado.dev/install.sh installs a release.",
+        `A checkout updates with git; https://obrigado.dev/${installer} installs a release.`,
       );
     }
     return background ? 0 : 1;

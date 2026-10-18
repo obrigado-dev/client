@@ -117,6 +117,15 @@ class RendererTest {
     }
 
     @Test
+    fun `on Windows the installer's folder is under USERPROFILE, and obrigado is obrigado exe`() {
+        val installed = dir.resolve(".local/bin").createDirectories()
+        val binary = installed.resolve("obrigado.exe").toFile().apply { writeText("MZ"); setExecutable(true) }
+        val profile = mapOf("Path" to "C:\\Windows\\System32", "USERPROFILE" to dir.toString())
+
+        assertEquals(binary.absolutePath, Renderer.resolveExecutable("obrigado", profile, windows = true))
+    }
+
+    @Test
     fun `a file that is not executable is not a renderer, and a path is used as given`() {
         dir.resolve(".local/bin").createDirectories().resolve("obrigado").writeText("not a program")
         val home = mapOf("PATH" to "/usr/bin:/bin", "HOME" to dir.toString())

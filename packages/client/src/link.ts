@@ -16,6 +16,8 @@
  */
 import { isControlCharacter } from "@obrigado/shared";
 
+import { windowsTerminal } from "./terminal.ts";
+
 /**
  * Terminals with known OSC 8 support.
  *
@@ -50,15 +52,20 @@ interface LinkEnvironmentVars {
 export type LinkEnvironment = LinkEnvironmentVars & Record<string, string | undefined>;
 
 /** Whether to emit OSC 8 sequences in this environment. */
-export function supportsHyperlinks(env: LinkEnvironment = process.env): boolean {
+export function supportsHyperlinks(
+  env: LinkEnvironment = process.env,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
   // An explicit override wins in both directions — useful for a terminal we
   // have not heard of, and for turning it off if a rendering bug appears.
   const override = env.OBRIGADO_HYPERLINKS;
   if (override === "1" || override === "true") return true;
   if (override === "0" || override === "false") return false;
 
-  // A dumb or absent terminal never gets escape sequences.
-  if (env.TERM === "dumb" || env.TERM === undefined) return false;
+  // A dumb or absent terminal never gets escape sequences. Windows terminals set no TERM, and
+  // one that names itself is judged below like any other (A46).
+  if (env.TERM === "dumb") return false;
+  if (env.TERM === undefined && !windowsTerminal(env, platform)) return false;
 
   if (env.TERM_PROGRAM !== undefined && SUPPORTED_TERM_PROGRAMS.has(env.TERM_PROGRAM)) return true;
 

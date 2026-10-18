@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   configDirectory,
@@ -33,6 +34,17 @@ const mac = (): Machine => ({
   arch: "arm64",
   home: join(root, "home"),
   env: {},
+});
+/** Windows, with its folders in the scratch tree (A46). */
+const windows = (): Machine => ({
+  platform: "win32",
+  arch: "x64",
+  home: join(root, "home"),
+  env: {
+    ProgramFiles: join(root, "Program Files"),
+    LOCALAPPDATA: join(root, "home/AppData/Local"),
+    APPDATA: join(root, "home/AppData/Roaming"),
+  },
 });
 const linux = (env: Record<string, string> = {}): Machine => ({
   platform: "linux",
@@ -150,6 +162,47 @@ describe("finding the IDEs", () => {
     expect(found[0]?.launcher).toContain(join(root, "a"));
   });
 
+  test("finds Windows installs where the installers and the Toolbox App put them", async () => {
+    const launch = [{ os: "Windows", arch: "amd64", launcherPath: "bin/idea64.exe" }];
+    await product(join(root, "Program Files/JetBrains/IntelliJ IDEA 2025.2/product-info.json"), {
+      launch,
+    });
+    await product(join(root, "home/AppData/Local/Programs/PyCharm/product-info.json"), {
+      name: "PyCharm",
+      code: "PY",
+      data: "PyCharm2025.2",
+      launch: [{ os: "Windows", arch: "amd64", launcherPath: "bin/pycharm64.exe" }],
+    });
+    await product(
+      join(root, "home/AppData/Local/JetBrains/Toolbox/apps/WebStorm/ch-0/252.1/product-info.json"),
+      {
+        name: "WebStorm",
+        code: "WS",
+        data: "WebStorm2025.2",
+        launch: [{ os: "Windows", arch: "amd64", launcherPath: "bin/webstorm64.exe" }],
+      },
+    );
+    await product(join(root, "Program Files/Android/Android Studio/product-info.json"), {
+      name: "Android Studio",
+      code: "AI",
+      data: "AndroidStudio2025.1",
+      vendor: "Google",
+      launch: [{ os: "Windows", arch: "amd64", launcherPath: "bin/studio64.exe" }],
+    });
+
+    const found = jetbrainsIdes(windows());
+
+    expect(found.map((ide) => ide.name)).toEqual([
+      "Android Studio",
+      "IntelliJ IDEA",
+      "PyCharm",
+      "WebStorm",
+    ]);
+    expect(found[1]?.launcher).toBe(
+      join(root, "Program Files/JetBrains/IntelliJ IDEA 2025.2/bin/idea64.exe"),
+    );
+  });
+
   test("takes Android Studio's own vendor folder", async () => {
     await app(join(root, "Applications"), "Android Studio.app", {
       name: "Android Studio",
@@ -194,10 +247,16 @@ describe("where an IDE keeps its settings and plugins", () => {
     );
   });
 
+  test("on Windows, the plugins inside the settings, both under APPDATA", () => {
+    const settings = join(root, "home/AppData/Roaming/JetBrains/IntelliJIdea2025.2");
+    expect(configDirectory(IDE, windows())).toBe(settings);
+    expect(pluginsDirectory(IDE, windows())).toBe(join(settings, "plugins"));
+  });
+
   test("on Linux, wherever the XDG variables move them", () => {
     const moved = linux({ XDG_CONFIG_HOME: "/x/config", XDG_DATA_HOME: "/x/data" });
-    expect(configDirectory(IDE, moved)).toBe("/x/config/JetBrains/IntelliJIdea2025.2");
-    expect(pluginsDirectory(IDE, moved)).toBe("/x/data/JetBrains/IntelliJIdea2025.2");
+    expect(configDirectory(IDE, moved)).toBe(join("/x/config", "JetBrains", "IntelliJIdea2025.2"));
+    expect(pluginsDirectory(IDE, moved)).toBe(join("/x/data", "JetBrains", "IntelliJIdea2025.2"));
   });
 });
 
@@ -216,7 +275,7 @@ describe("whether the plugin can go in now", () => {
   });
 
   test("the oldest release claimed is the plugin's own", async () => {
-    const plugin = new URL("../../jetbrains-plugin/", import.meta.url).pathname;
+    const plugin = fileURLToPath(new URL("../../jetbrains-plugin/", import.meta.url));
     const build = await readFile(join(plugin, "build.gradle.kts"), "utf8");
     const properties = await readFile(join(plugin, "gradle.properties"), "utf8");
 

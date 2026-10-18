@@ -85,6 +85,12 @@ binaries through six packages, all at the CLI's version:
   `packages/client/npm/obrigado.sh`, a POSIX shell script that finds that package and runs its
   binary. It is shell because agents run it on every render, some with no node on their PATH.
 
+Windows is not among them (A46). Every Windows package manager runs a package's `bin` through the
+`/bin/sh` its first line names, which Windows lacks, and `bin` is one file on every system, so the
+release's Windows builds stay on GitHub, for install.ps1. `@obrigado/client` declares `os` darwin
+and linux so npm says so on Windows by name, and `scripts/npm-packages.ts` refuses a release target
+that is neither published nor in `NOT_ON_NPM`.
+
 `packages/client/src/npm-packages.ts` describes them, and `scripts/npm-packages.ts` lays them out
 from a release's assets. `packages/client/package.json` stays private: it is the checkout's
 manifest, whose `bin` is `src/cli.ts`, and not what npm gets.

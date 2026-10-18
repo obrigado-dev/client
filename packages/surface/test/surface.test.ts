@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { parseSponsored, splitCommand, statuslineArgv, type Sponsored } from "../src/index.ts";
+import {
+  installedRendererPaths,
+  parseSponsored,
+  splitCommand,
+  statuslineArgv,
+  type Sponsored,
+} from "../src/index.ts";
 
 describe("parseSponsored", () => {
   const line = JSON.stringify({
@@ -199,4 +205,30 @@ describe("the shared vectors", () => {
       expect(parseSponsored(line)).toEqual(sponsored);
     },
   );
+});
+
+/** Where a host looks when PATH has no `obrigado` (A46): the folder the installers put it in. */
+describe("installedRendererPaths", () => {
+  test("is .local/bin in the home directory, after any folder named for the install", () => {
+    expect(installedRendererPaths({ HOME: "/home/jo" }, "linux")).toEqual([
+      "/home/jo/.local/bin/obrigado",
+    ]);
+    expect(
+      installedRendererPaths(
+        { HOME: "/home/jo", OBRIGADO_INSTALL_DIR: "/opt/obrigado/" },
+        "darwin",
+      ),
+    ).toEqual(["/opt/obrigado/obrigado", "/home/jo/.local/bin/obrigado"]);
+  });
+
+  test("is obrigado.exe under USERPROFILE on Windows, which sets no HOME", () => {
+    expect(installedRendererPaths({ USERPROFILE: "C:\\Users\\Jo Doe" }, "win32")).toEqual([
+      "C:\\Users\\Jo Doe\\.local\\bin\\obrigado.exe",
+    ]);
+  });
+
+  test("is nothing where there is no home to look in", () => {
+    expect(installedRendererPaths({ USERPROFILE: "C:\\Users\\jo" }, "linux")).toEqual([]);
+    expect(installedRendererPaths({ HOME: "" }, "darwin")).toEqual([]);
+  });
 });

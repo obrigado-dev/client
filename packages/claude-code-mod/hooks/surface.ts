@@ -142,6 +142,11 @@ export function parseSponsored(line: string): Sponsored | null {
  * "/Users/Jane Doe/obrigado/cli.ts" statusline` became four arguments and the spawn failed
  * silently. Double quotes, single quotes and backslash escapes are honoured; nothing else is
  * interpreted — no variables, no globs, no operators — because this is a command, not a script.
+ *
+ * A backslash escapes what the splitter itself reads, whitespace, a quote or another backslash,
+ * and inside double quotes only a quote or a backslash, as a shell's does. Before anything else
+ * it is a backslash, which keeps a Windows path such as `C:\\Users\\jo\\obrigado.exe` whole
+ * rather than `C:Usersjoobrigado.exe` (A46).
  */
 export function splitCommand(text: string): string[] {
   const out: string[] = [];
@@ -151,12 +156,13 @@ export function splitCommand(text: string): string[] {
 
   for (let index = 0; index < text.length; index += 1) {
     const character = text[index] ?? "";
+    const next = text[index + 1];
     if (quote !== null) {
       if (character === quote) {
         quote = null;
-      } else if (character === "\\" && quote === '"' && index + 1 < text.length) {
+      } else if (character === "\\" && quote === '"' && (next === '"' || next === "\\")) {
         index += 1;
-        current += text[index] ?? "";
+        current += next;
       } else {
         current += character;
       }
@@ -165,9 +171,9 @@ export function splitCommand(text: string): string[] {
     if (character === '"' || character === "'") {
       quote = character;
       inToken = true;
-    } else if (character === "\\" && index + 1 < text.length) {
+    } else if (character === "\\" && next !== undefined && escapable(next)) {
       index += 1;
-      current += text[index] ?? "";
+      current += next;
       inToken = true;
     } else if (/\s/u.test(character)) {
       if (inToken) out.push(current);
@@ -180,6 +186,42 @@ export function splitCommand(text: string): string[] {
   }
   if (inToken) out.push(current);
   return out;
+}
+
+/** What a backslash outside quotes escapes: the characters `splitCommand` itself reads. */
+function escapable(character: string): boolean {
+  return character === '"' || character === "'" || character === "\\" || /\s/u.test(character);
+}
+
+/**
+ * Where the installers put `obrigado`, for a host that does not find it on PATH (A46).
+ *
+ * install.sh and install.ps1 install into `OBRIGADO_INSTALL_DIR`, or `.local/bin` in the home
+ * directory, and say how to put that folder on PATH without doing it. A developer who did not is
+ * found here rather than shown nothing, as the JetBrains plugin has always found them. On Windows
+ * the program is `obrigado.exe` and the home directory is `USERPROFILE`. Paths only: whether one
+ * is there is the host's to ask.
+ */
+export function installedRendererPaths(
+  env: Readonly<Record<string, string | undefined>>,
+  platform: string,
+): string[] {
+  const windows = platform === "win32";
+  const separator = windows ? "\\" : "/";
+  const set = (name: string): string | undefined => {
+    const value = env[name];
+    return value === undefined || value === "" ? undefined : value;
+  };
+  const home = set("HOME") ?? (windows ? set("USERPROFILE") : undefined);
+  const dirs = [
+    set("OBRIGADO_INSTALL_DIR"),
+    home === undefined ? undefined : [home, ".local", "bin"].join(separator),
+  ];
+  return dirs
+    .filter((dir): dir is string => dir !== undefined)
+    .map(
+      (dir) => `${dir.replace(/[\\/]+$/u, "")}${separator}${windows ? "obrigado.exe" : "obrigado"}`,
+    );
 }
 
 /**

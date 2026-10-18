@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import { CHAIN_MARKER, isChainedRender, runChained } from "../src/chain.ts";
+import { CHAIN_MARKER, chainArgv, isChainedRender, runChained } from "../src/chain.ts";
+import type { ChainMachine } from "../src/chain.ts";
 
 const PAYLOAD = JSON.stringify({
   session_id: "abc",
@@ -90,5 +91,76 @@ describe("re-entrancy, for a chain that comes back around", () => {
     );
 
     expect(output).toBe("1");
+  });
+});
+
+/** A Windows machine with these files, these programs on PATH and this environment. */
+function windows(files: readonly string[], onPath: Record<string, string> = {}, env = {}) {
+  const machine: ChainMachine = {
+    platform: "win32",
+    env,
+    which: (program) => onPath[program] ?? null,
+    exists: (path) => files.includes(path),
+  };
+  return machine;
+}
+
+/**
+ * Windows (A46): Claude Code runs a status line through Git Bash when it finds one and PowerShell
+ * when it does not, so the developer's own runs in whichever of the two ran it before.
+ */
+describe("the shell a chained command runs in", () => {
+  test("is sh everywhere but Windows", () => {
+    expect(chainArgv("my-line", { ...windows([]), platform: "linux" })).toEqual([
+      "sh",
+      "-c",
+      "my-line",
+    ]);
+  });
+
+  test("is Git Bash where Git installs it", () => {
+    const bash = "C:\\Program Files\\Git\\bin\\bash.exe";
+
+    expect(chainArgv("my-line", windows([bash]))).toEqual([bash, "-c", "my-line"]);
+  });
+
+  test("is the Git Bash Claude Code was pointed at, first", () => {
+    const pointed = "D:\\tools\\git\\bin\\bash.exe";
+    const machine = windows(
+      [pointed, "C:\\Program Files\\Git\\bin\\bash.exe"],
+      {},
+      {
+        CLAUDE_CODE_GIT_BASH_PATH: pointed,
+      },
+    );
+
+    expect(chainArgv("my-line", machine)[0]).toBe(pointed);
+  });
+
+  test("is the Git Bash beside the git on PATH", () => {
+    const bash = "D:\\Git\\bin\\bash.exe";
+    const machine = windows([bash], { git: "D:\\Git\\cmd\\git.exe" });
+
+    expect(chainArgv("my-line", machine)[0]).toBe(bash);
+  });
+
+  test("is PowerShell, with Claude Code's flags, where there is no Git Bash", () => {
+    const pwsh = "C:\\Program Files\\PowerShell\\7\\pwsh.exe";
+
+    expect(chainArgv("my-line", windows([], { pwsh }))).toEqual([
+      pwsh,
+      "-NoProfile",
+      "-NonInteractive",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-Command",
+      "my-line",
+    ]);
+  });
+
+  test("is Windows PowerShell where it is the only one", () => {
+    expect(chainArgv("my-line", windows([], {}, { SystemRoot: "C:\\Windows" }))[0]).toBe(
+      "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+    );
   });
 });

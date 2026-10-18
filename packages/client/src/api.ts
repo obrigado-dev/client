@@ -35,6 +35,7 @@ import type {
 } from "@obrigado/shared";
 import { DESKTOP_APP_ID, EDITOR_AGENT_IDS } from "@obrigado/shared/agents";
 
+import { windowsTerminal } from "./terminal.ts";
 import { CLIENT_VERSION } from "./version.ts";
 
 const SESSION_TIMEOUT_MS = 4_000;
@@ -339,17 +340,35 @@ function hasTerminal(agent: string, env: NodeJS.ProcessEnv): boolean {
   return !(agent === DESKTOP_APP_ID && env["CLAUDE_CODE_ENTRYPOINT"] === DESKTOP_APP_ENTRYPOINT);
 }
 
+/**
+ * Whether a person's terminal is there: true, false, or undefined where nothing can say.
+ *
+ * A terminal sets `TERM`, and a machine leaves it out or sets it to `dumb`, which is false. On
+ * Windows no terminal sets it, so there its absence says nothing either way (A46): a Windows
+ * terminal that names itself is true, and one that does not, the console a bare PowerShell
+ * window gives, is left undetermined. Undetermined still renders, and is not billed.
+ */
+export function terminalPresent(
+  env: Readonly<Record<string, string | undefined>>,
+  stderrIsTty: boolean,
+  platform: NodeJS.Platform = process.platform,
+): boolean | undefined {
+  if (stderrIsTty) return true;
+  const term = env["TERM"];
+  if (term !== undefined) return term !== "dumb";
+  if (platform !== "win32") return false;
+  return windowsTerminal(env, platform) ? true : undefined;
+}
+
 export function collectSignals(context: SignalContext): SessionSignals {
   const env = process.env;
+  const tty = hasTerminal(context.agent, env)
+    ? terminalPresent(env, process.stderr.isTTY === true)
+    : undefined;
 
   const signals: SessionSignals = {
     ci: isCiEnvironment(env),
-    ...(hasTerminal(context.agent, env)
-      ? {
-          tty:
-            process.stderr.isTTY === true || (env["TERM"] !== undefined && env["TERM"] !== "dumb"),
-        }
-      : {}),
+    ...(tty === undefined ? {} : { tty }),
     display: env["DISPLAY"] !== undefined || env["WAYLAND_DISPLAY"] !== undefined,
     // Passed in rather than hardcoded. This was the literal string "claude-code" until a
     // second host was on the horizon, at which point the field would have quietly lied about

@@ -30,8 +30,15 @@
  * that order only runs one way.
  */
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { delimiter, join } from "node:path";
 
-import { parseSponsored, statuslineArgv, type Sponsored } from "@obrigado/surface";
+import {
+  installedRendererPaths,
+  parseSponsored,
+  statuslineArgv,
+  type Sponsored,
+} from "@obrigado/surface";
 import * as vscode from "vscode";
 
 import { statusText, tooltipMarkdown } from "./creative.ts";
@@ -66,9 +73,21 @@ function host(): string {
   return vscode.env.appName.toLowerCase().includes("cursor") ? "cursor" : "vscode";
 }
 
+/** Whether `spawn` finds `name` on PATH: as it is, or with `.exe` or `.com` on Windows. */
+function onPath(name: string): boolean {
+  const extensions = process.platform === "win32" ? [".exe", ".com"] : [""];
+  return (process.env["PATH"] ?? "")
+    .split(delimiter)
+    .some(
+      (dir) =>
+        dir !== "" && extensions.some((extension) => existsSync(join(dir, name + extension))),
+    );
+}
+
 /**
- * The CLI. `obrigado` on PATH is the installed case; the override exists so this can be
- * developed against a source checkout before the client is published.
+ * The CLI. `obrigado` on PATH is the installed case, and where the installers put it is the
+ * next place looked (A46); the override exists so this can be developed against a source
+ * checkout before the client is published.
  */
 function command(): readonly string[] {
   // A setting first, because an editor launched from the Dock inherits no shell
@@ -79,7 +98,12 @@ function command(): readonly string[] {
     configured !== undefined && configured.trim().length > 0
       ? configured
       : process.env["OBRIGADO_STATUSLINE_COMMAND"];
-  return statuslineArgv(host(), override);
+  const argv = statuslineArgv(host(), override);
+  if (argv[0] !== "obrigado" || onPath("obrigado")) return argv;
+  const installed = installedRendererPaths(process.env, process.platform).find((path) =>
+    existsSync(path),
+  );
+  return installed === undefined ? argv : [installed, ...argv.slice(1)];
 }
 
 /**
@@ -112,7 +136,9 @@ function fetchSponsored(
       resolve(value);
     };
 
-    const child = spawn(bin, args, { cwd, stdio: ["pipe", "pipe", "ignore"] });
+    // `windowsHide`: the editor has no console, and Windows would open one for the renderer on
+    // every render without it (A46).
+    const child = spawn(bin, args, { cwd, stdio: ["pipe", "pipe", "ignore"], windowsHide: true });
     // Fires only when the child has produced no line in time. A child that answered is
     // still shipping the impression it just rendered, and must not be killed for it.
     const timer = setTimeout(() => {

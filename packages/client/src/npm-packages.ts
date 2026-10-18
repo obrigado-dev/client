@@ -93,7 +93,8 @@ export function mainManifest(version: string): NpmManifest {
       "One sponsored line in your coding agent's status bar, paying the open source maintainers of the packages you use.",
     ...ORIGIN,
     bin: { obrigado: "bin/obrigado" },
-    // A Windows machine is told so by its package manager, rather than given a script it cannot run.
+    // A Windows machine is told so by its package manager, rather than given a script it cannot
+    // run: install.ps1 is the way in there (`NOT_ON_NPM`).
     os: ["darwin", "linux"],
     cpu: ["arm64", "x64"],
     files: ["bin"],
@@ -102,6 +103,17 @@ export function mainManifest(version: string): NpmManifest {
     ),
   };
 }
+
+/**
+ * Release binaries npm does not carry (A46).
+ *
+ * Windows. Every package manager there puts a shim on PATH that reads `bin/obrigado`'s first line
+ * and runs `/bin/sh`, which Windows does not have, and a package's `bin` is one file on every
+ * system, so a launcher for Windows would cost macOS and Linux theirs: Node on every render, or an
+ * install script that pnpm and bun do not run. `mainManifest`'s `os` has npm refuse the package on
+ * Windows by name instead, and install.ps1 installs the same binary there.
+ */
+export const NOT_ON_NPM: ReadonlySet<string> = new Set(["windows-x64", "windows-arm64"]);
 
 /** The page npm shows for a platform package, which nobody should install by name. */
 export function platformReadme(asset: string): string {

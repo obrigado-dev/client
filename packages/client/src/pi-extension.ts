@@ -26,7 +26,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { BACKUP_DIR, ensureDir } from "./config.ts";
-import { rendererCommand } from "./renderer-command.ts";
+import { spawnedRendererCommand } from "./renderer-command.ts";
 import { CLIENT_VERSION } from "./version.ts";
 import EXTENSION_TEXT from "@obrigado/pi-extension/extension" with { type: "text" };
 
@@ -151,12 +151,14 @@ function rewrite(source: string, marker: string, replacement: string): string {
  * The same decision `statusline.ts` makes for Claude Code, for the same reason: `obrigado` on
  * PATH is the published case, but a source checkout has no such binary, and an extension that
  * spawns a missing command renders nothing and says nothing about why. `process.execPath` is
- * the Bun running this installer, which is by definition one that can run the CLI.
+ * the Bun running this installer, which is by definition one that can run the CLI. Pi spawns
+ * the command with no shell, so a full path is quoted for its `splitCommand` rather than written
+ * for one (A46).
  */
 export function sourceForHost(
   source: string,
   host: PiHost,
-  command = rendererCommand(),
+  command = spawnedRendererCommand(),
   version = CLIENT_VERSION,
 ): string {
   const withCommand = rewrite(

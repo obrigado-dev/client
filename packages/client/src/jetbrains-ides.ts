@@ -9,7 +9,7 @@
  * The directories are the ones JetBrains documents ("Directories used by the IDE to store
  * settings, caches, plugins and logs"), under the IDE's own vendor folder: `Google` for Android
  * Studio. A developer who moved them with `idea.config.path` or `idea.plugins.path` is not
- * followed there.
+ * followed there. On Windows they are under `%APPDATA%`, plugins inside the settings (A46).
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -72,9 +72,27 @@ function setting(env: Machine["env"], name: string): string | undefined {
   return value === undefined || value === "" ? undefined : value;
 }
 
+/** `%APPDATA%`, where a Windows IDE keeps its settings and plugins. */
+function roaming(machine: Machine): string {
+  return setting(machine.env, "APPDATA") ?? join(machine.home, "AppData", "Roaming");
+}
+
 /** Where IDEs are installed, and how far below each folder one can sit. */
 function installRoots(machine: Machine): ReadonlyArray<readonly [string, number]> {
   const { home } = machine;
+  if (machine.platform === "win32") {
+    const local = setting(machine.env, "LOCALAPPDATA") ?? join(home, "AppData", "Local");
+    const programs = setting(machine.env, "ProgramFiles") ?? "C:\\Program Files";
+    return [
+      // The installers' default, Program Files\JetBrains\<name>, and Android Studio's beside it.
+      [join(programs, "JetBrains"), 1],
+      [join(programs, "Android"), 1],
+      // The Toolbox App's since its second version, Programs\<name>, and a per-user install's.
+      [join(local, "Programs"), 2],
+      // The Toolbox App's first version: apps\<code>\ch-0\<build>.
+      [join(local, "JetBrains", "Toolbox", "apps"), 3],
+    ];
+  }
   if (machine.platform === "darwin") {
     return [
       ["/Applications", 1],
@@ -138,9 +156,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** What `product-info.json` calls each operating system. */
+const OS_NAME: Partial<Record<NodeJS.Platform, string>> = {
+  darwin: "macOS",
+  linux: "Linux",
+  win32: "Windows",
+};
+
 /** The launcher this machine runs, by the `launch` entry for its operating system. */
 function launcherOf(info: Record<string, unknown>, file: string, machine: Machine): string | null {
-  const os = machine.platform === "darwin" ? "macOS" : "Linux";
+  const os = OS_NAME[machine.platform];
   const entries = (Array.isArray(info["launch"]) ? info["launch"] : [])
     .filter((entry): entry is Record<string, unknown> => isRecord(entry))
     .filter((entry) => entry["os"] === os && typeof entry["launcherPath"] === "string");
@@ -208,13 +233,16 @@ export function configDirectory(ide: JetBrainsIde, machine: Machine): string {
   if (machine.platform === "darwin") {
     return join(machine.home, "Library/Application Support", ide.vendor, ide.dataDirectory);
   }
+  if (machine.platform === "win32") return join(roaming(machine), ide.vendor, ide.dataDirectory);
   const config = setting(machine.env, "XDG_CONFIG_HOME") ?? join(machine.home, ".config");
   return join(config, ide.vendor, ide.dataDirectory);
 }
 
-/** Where its plugins are unpacked: inside the settings on macOS, beside them on Linux. */
+/** Where its plugins are unpacked: inside the settings on macOS and Windows, beside them on Linux. */
 export function pluginsDirectory(ide: JetBrainsIde, machine: Machine): string {
-  if (machine.platform === "darwin") return join(configDirectory(ide, machine), "plugins");
+  if (machine.platform === "darwin" || machine.platform === "win32") {
+    return join(configDirectory(ide, machine), "plugins");
+  }
   const data = setting(machine.env, "XDG_DATA_HOME") ?? join(machine.home, ".local/share");
   return join(data, ide.vendor, ide.dataDirectory);
 }

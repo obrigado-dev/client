@@ -32,16 +32,44 @@ const MAC_TOOL: Record<Editor, string> = {
   cursor: "Cursor.app/Contents/Resources/app/bin/cursor",
 };
 
-/** The editor's command-line tool: on PATH, or inside the app on macOS. */
-function editorCli(editor: Editor): string | null {
-  const onPath = Bun.which(COMMAND[editor]);
-  if (onPath !== null) return onPath;
-  if (process.platform !== "darwin") return null;
-  for (const root of ["/Applications", join(homedir(), "Applications")]) {
-    const tool = join(root, MAC_TOOL[editor]);
-    if (existsSync(tool)) return tool;
+/** The machine as the lookup sees it, passed in so a test can stand up Windows anywhere. */
+export interface EditorMachine {
+  readonly platform: NodeJS.Platform;
+  readonly home: string;
+  readonly env: Readonly<Record<string, string | undefined>>;
+}
+
+function thisMachine(): EditorMachine {
+  return { platform: process.platform, home: homedir(), env: process.env };
+}
+
+/**
+ * Where an editor's installer puts its command-line tool, for one never put on PATH: inside the
+ * app on macOS, and on Windows (A46) in the folder the user installer and the system one choose,
+ * a `.cmd` that the editor's installer would otherwise have put on PATH.
+ */
+export function editorToolPaths(editor: Editor, machine: EditorMachine = thisMachine()): string[] {
+  if (machine.platform === "darwin") {
+    return ["/Applications", join(machine.home, "Applications")].map((root) =>
+      join(root, MAC_TOOL[editor]),
+    );
   }
-  return null;
+  if (machine.platform !== "win32") return [];
+  const local = machine.env["LOCALAPPDATA"] ?? join(machine.home, "AppData", "Local");
+  const programs = machine.env["ProgramFiles"] ?? "C:\\Program Files";
+  return editor === "vscode"
+    ? [
+        join(local, "Programs", "Microsoft VS Code", "bin", "code.cmd"),
+        join(programs, "Microsoft VS Code", "bin", "code.cmd"),
+      ]
+    : [join(local, "Programs", "cursor", "resources", "app", "bin", "cursor.cmd")];
+}
+
+/** The editor's command-line tool: on PATH, or where its installer puts it. */
+function editorCli(editor: Editor): string | null {
+  return (
+    Bun.which(COMMAND[editor]) ?? editorToolPaths(editor).find((tool) => existsSync(tool)) ?? null
+  );
 }
 
 /** Whether `editor` is on this machine: its tool is on PATH or inside its app. */
@@ -64,7 +92,12 @@ export interface EditorDeps extends ReleaseDeps {
 }
 
 export async function runTool(argv: readonly string[]): Promise<Ran> {
-  const proc = Bun.spawn([...argv], { stdin: "ignore", stdout: "pipe", stderr: "ignore" });
+  const proc = Bun.spawn([...argv], {
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "ignore",
+    windowsHide: true,
+  });
   const stdout = await new Response(proc.stdout).text();
   return { code: await proc.exited, stdout };
 }

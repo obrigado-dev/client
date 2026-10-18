@@ -104,12 +104,13 @@ export function splitCommand(text: string): string[] {
 
   for (let index = 0; index < text.length; index += 1) {
     const character = text[index] ?? "";
+    const next = text[index + 1];
     if (quote !== null) {
       if (character === quote) {
         quote = null;
-      } else if (character === "\\" && quote === '"' && index + 1 < text.length) {
+      } else if (character === "\\" && quote === '"' && (next === '"' || next === "\\")) {
         index += 1;
-        current += text[index] ?? "";
+        current += next;
       } else {
         current += character;
       }
@@ -118,9 +119,15 @@ export function splitCommand(text: string): string[] {
     if (character === '"' || character === "'") {
       quote = character;
       inToken = true;
-    } else if (character === "\\" && index + 1 < text.length) {
+    } else if (
+      character === "\\" &&
+      next !== undefined &&
+      (next === '"' || next === "'" || next === "\\" || /\s/u.test(next))
+    ) {
+      // Only what the splitter reads: before anything else a backslash is one, as in a
+      // Windows path (A46).
       index += 1;
-      current += text[index] ?? "";
+      current += next;
       inToken = true;
     } else if (/\s/u.test(character)) {
       if (inToken) out.push(current);
@@ -219,6 +226,8 @@ async function fetchLine(
     const child = spawn(command, args, {
       stdio: ["pipe", "pipe", "ignore"],
       env: spawnEnvironment(),
+      // No console window for the renderer on Windows, where one would flash per render (A46).
+      windowsHide: true,
     });
     // Fires only when the child has produced no line in time. A child that answered is still
     // shipping the impression it just rendered, and must not be killed for it.
