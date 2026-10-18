@@ -54,10 +54,14 @@ describe("the renderer command on Windows", () => {
   const WINDOWS = { platform: "win32" as const, home: "C:\\Users\\Jo Doe" };
   const INSTALLED = "C:\\Users\\Jo Doe\\.local\\bin\\obrigado.exe";
 
-  test("names a binary on PATH bare, as everywhere", () => {
-    expect(rendererCommand("claude-code", { onPath: INSTALLED, binary: INSTALLED }, WINDOWS)).toBe(
-      "obrigado statusline --agent claude-code",
-    );
+  test("names the binary by its own path even on PATH, for an agent started before PATH had it", () => {
+    expect(
+      rendererCommand(
+        "claude-code",
+        { onPath: INSTALLED, binary: INSTALLED, compiled: true },
+        WINDOWS,
+      ),
+    ).toBe("~/.local/bin/obrigado.exe statusline --agent claude-code");
   });
 
   test("names one off PATH from home, which needs no quoting with a space in the profile", () => {
@@ -121,7 +125,20 @@ describe("the renderer command for a host with no shell", () => {
   test("is the shell's command wherever obrigado is on PATH", () => {
     const binary = "/home/dev/.local/bin/obrigado";
 
-    expect(spawnedRendererCommand({ onPath: binary, binary })).toBe("obrigado statusline");
+    expect(
+      spawnedRendererCommand({ onPath: binary, binary }, { platform: "linux", home: "/home/dev" }),
+    ).toBe("obrigado statusline");
+  });
+
+  test("is the full path on Windows whatever PATH says", () => {
+    const binary = "C:\\Users\\jo\\.local\\bin\\obrigado.exe";
+
+    expect(
+      spawnedRendererCommand(
+        { onPath: binary, binary, compiled: true },
+        { platform: "win32", home: "C:\\Users\\jo" },
+      ),
+    ).toBe("'C:\\Users\\jo\\.local\\bin\\obrigado.exe' statusline");
   });
 
   test("is the full path elsewhere, in the quotes `splitCommand` keeps it whole in", () => {

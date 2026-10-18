@@ -102,9 +102,13 @@ function fromPackageManager(binary: string): boolean {
  * the bare name stops resolving in any shell on another version and the line goes blank. Its
  * `obrigado` is a shell script that runs under any Node, so the path it has now keeps working.
  * Only a path that needs no quoting: `statusLineOwner` takes a quote for a command of the
- * developer's, and uninstall would then leave ours behind. On Windows that rules out any path
- * with a space that `~` cannot stand in for, and the bare name is written instead (A46): it runs
- * once `obrigado` is on PATH, and install.ps1 says how to put it there.
+ * developer's, and uninstall would then leave ours behind.
+ *
+ * On Windows the binary is named by its own path even where PATH has it (A46). install.ps1 puts
+ * its folder on PATH, but an agent already running keeps the PATH it started with, and would not
+ * find the bare name until it restarted: the agent that ran the install for you, among them. The
+ * bare name is written only where no unquoted path will do, a folder with a space in its name
+ * that `~` cannot stand in for.
  */
 export function rendererCommand(
   agent?: string,
@@ -113,7 +117,7 @@ export function rendererCommand(
 ): string {
   const suffix = agent === undefined ? "" : ` --agent ${agent}`;
   const onPath = found === undefined ? Bun.which("obrigado") : found.onPath;
-  if (onPath !== null) {
+  if (onPath !== null && machine.platform !== "win32") {
     const binary = found?.binary ?? process.execPath;
     const byPath = fromPackageManager(binary) && /^[\w./+@-]+$/u.test(onPath);
     return `${byPath ? onPath : "obrigado"} statusline${suffix}`;
@@ -157,12 +161,16 @@ export function quotedCommand(argv: readonly string[]): string {
  * The renderer command for a host that splits it and spawns it with no shell, as the Pi extension
  * does (A46).
  *
- * Where `obrigado` is on PATH, the command `rendererCommand` writes. Elsewhere the full argv,
- * quoted for `splitCommand`: no shell will expand `~` for this host, and a Windows path holds
- * backslashes and, as often as not, a space.
+ * Where `obrigado` is on PATH, the command `rendererCommand` writes, except on Windows. Elsewhere,
+ * and always on Windows, the full argv, quoted for `splitCommand`: no shell will expand `~` for
+ * this host, and a Windows path holds backslashes and, as often as not, a space.
  */
-export function spawnedRendererCommand(found?: Found): string {
+export function spawnedRendererCommand(
+  found?: Found,
+  machine: RendererMachine = thisMachine(),
+): string {
   const onPath = found === undefined ? Bun.which("obrigado") : found.onPath;
-  if (onPath !== null) return rendererCommand(undefined, found);
+  // On Windows by its own path whatever PATH says, as `rendererCommand` explains.
+  if (onPath !== null && machine.platform !== "win32") return rendererCommand(undefined, found);
   return quotedCommand([...installedArgv(found), "statusline"]);
 }
