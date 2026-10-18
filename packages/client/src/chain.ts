@@ -134,10 +134,12 @@ function killTree(proc: {
 }): void {
   if (process.platform === "win32") {
     try {
-      Bun.spawn(["taskkill", "/pid", String(proc.pid), "/T", "/F"], {
+      const killer = Bun.spawn(["taskkill", "/pid", String(proc.pid), "/T", "/F"], {
         stdio: ["ignore", "ignore", "ignore"],
         windowsHide: true,
       });
+      // The shell itself, whatever taskkill managed: after it, so the tree is walked first.
+      void killer.exited.then(() => proc.kill());
     } catch {
       proc.kill();
     }
@@ -147,6 +149,20 @@ function killTree(proc: {
     process.kill(-proc.pid, "SIGKILL");
   } catch {
     proc.kill("SIGKILL");
+  }
+}
+
+/** All of `reader`'s text, to the end of the stream. */
+async function readText(reader: {
+  read(): Promise<{ readonly done: boolean; readonly value?: Uint8Array | undefined }>;
+}): Promise<string> {
+  const decoder = new TextDecoder();
+  let text = "";
+  for (;;) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- a stream is read one chunk after another
+    const { done, value } = await reader.read();
+    if (done) return text + decoder.decode();
+    text += decoder.decode(value, { stream: true });
   }
 }
 
@@ -180,15 +196,28 @@ export async function runChained(command: string, stdinPayload: string): Promise
       env: { ...process.env, [CHAIN_MARKER]: "1" },
     });
 
-    let timedOut = false;
-    const timeout = setTimeout(() => {
-      timedOut = true;
-      killTree(proc);
-    }, CHAIN_TIMEOUT_MS);
-    const [output, exitCode] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
-    clearTimeout(timeout);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<null>((resolve) => {
+      timer = setTimeout(() => {
+        killTree(proc);
+        resolve(null);
+      }, CHAIN_TIMEOUT_MS);
+    });
+    const reader = proc.stdout.getReader();
+    const finished = Promise.all([readText(reader), proc.exited]);
+    finished.catch(() => {});
+    const result = await Promise.race([finished, timedOut]);
+    clearTimeout(timer);
 
-    if (timedOut || exitCode !== 0) return null;
+    if (result === null) {
+      // Without waiting for their output to close. Something the command started can hold it
+      // open past the kill: on Windows `taskkill` was seen to leave a Git Bash `sleep` holding it
+      // for the whole of its 30 seconds (A46). The line goes on without theirs.
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    const [output, exitCode] = result;
+    if (exitCode !== 0) return null;
     const trimmed = output.replace(/\n+$/u, "");
     return trimmed.length > 0 ? trimmed : null;
   } catch {

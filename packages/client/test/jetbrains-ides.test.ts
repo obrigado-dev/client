@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   configDirectory,
@@ -274,7 +275,7 @@ describe("whether the plugin can go in now", () => {
   });
 
   test("the oldest release claimed is the plugin's own", async () => {
-    const plugin = new URL("../../jetbrains-plugin/", import.meta.url).pathname;
+    const plugin = fileURLToPath(new URL("../../jetbrains-plugin/", import.meta.url));
     const build = await readFile(join(plugin, "build.gradle.kts"), "utf8");
     const properties = await readFile(join(plugin, "gradle.properties"), "utf8");
 
