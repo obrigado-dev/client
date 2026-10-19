@@ -22,7 +22,7 @@ name: Publish
 
 on:
   push:
-    tags: ["*-v*"]
+    tags: ["*-v*", "!browser-extension-v*"]
   workflow_dispatch:
     inputs:
       package:

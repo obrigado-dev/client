@@ -1,0 +1,19 @@
+{
+  "extends": "./.wxt/tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "types": ["bun"]
+  },
+  "include": [
+    "entrypoints/**/*.ts",
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "wxt.config.ts",
+    ".wxt/wxt.d.ts",
+    "scripts/**/*.ts"
+  ]
+}

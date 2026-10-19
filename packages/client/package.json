@@ -17,10 +17,13 @@
   },
   "type": "module",
   "exports": {
-    ".": "./src/cli.ts"
+    ".": "./src/cli.ts",
+    "./browser": "./src/browser.ts",
+    "./browser-exposure": "./src/browser-exposure.ts"
   },
   "dependencies": {
     "@obrigado/pi-extension": "workspace:*",
-    "@obrigado/shared": "workspace:*"
+    "@obrigado/shared": "workspace:*",
+    "zod": "catalog:"
   }
 }

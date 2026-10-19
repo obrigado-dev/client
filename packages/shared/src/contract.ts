@@ -58,7 +58,15 @@ export const EMPTY_BATCH_TTL_SECONDS = 60;
 export const NONCE_TTL_SECONDS = 900;
 
 /** Continuous, focused browser exposure required before a website impression is confirmed. */
-export const WEBSITE_VIEWABLE_MS = 1_000;
+export { WEBSITE_VIEWABLE_MS } from "./exposure.ts";
+
+/** How long a recent human action supports attendance on a persistent surface. */
+export { ATTENTION_WINDOW_S } from "./exposure.ts";
+
+/** The browser never uploads a provider, page URL, conversation or dependency inventory. */
+export const BrowserSessionRequestSchema = z.object({
+  version: z.string().regex(/^[0-9A-Za-z.+-]{1,32}$/u),
+});
 
 /** Header carrying the opaque install key. INVARIANT 7: the server stores only
  *  its sha256, never this value. */

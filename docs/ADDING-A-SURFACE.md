@@ -7,6 +7,11 @@ to review it.
 
 This is what that change looks like.
 
+The browser extension is a separate runtime of the client, with an explicit exception for
+extension-owned DOM rather than a documented provider slot. Its limits and counting rules are
+in [BROWSER-EXTENSION.md](./BROWSER-EXTENSION.md). The terminal/editor integration rules below
+still apply to those hosts.
+
 ## First: does the host have a countable surface?
 
 This is the question to settle before writing any code, because it decides whether the

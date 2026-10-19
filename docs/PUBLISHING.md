@@ -162,3 +162,90 @@ Marketplace and Open VSX need the `obrigado` publisher claimed. The JetBrains Ma
 vendor profile, a first upload by hand, and JetBrains' review, whose guidelines exclude "features
 for additional promotion"; a reviewer may read a sponsored line that way, so that listing is not
 a given.
+
+## Chrome extension
+
+The Chrome extension has its own version in `packages/browser-extension/package.json` and
+tags `browser-extension-v<version>`. It is private on npm. `browser-release.yml` runs the
+client gate and Chromium smoke test, builds the WXT ZIP, checks its embedded manifest for the
+tagged version and production API permission, and creates a GitHub release with a SHA-256
+checksum. Browser releases use `--latest=false`: the CLI updater must keep finding the CLI's
+latest release. Existing release assets are kept; a submission retry downloads those original
+bytes and verifies their checksum and manifest.
+
+### First release: manual store submission
+
+1. Deploy the platform's browser API before making the extension available. Test all four
+   authenticated provider layouts; the automated tests use controlled provider fixtures.
+2. Commit and push the client changes, then tag that commit `browser-extension-v0.1.0` and
+   push that specific tag. With `CHROME_EXTENSION_ID` unset, the workflow creates the GitHub
+   ZIP release and explicitly skips store submission. Download its ZIP for the next step.
+3. Register a Chrome Web Store developer account, enable two-step verification, and create
+   the extension listing in the [Developer Dashboard](https://chrome.google.com/webstore/devconsole).
+   Upload the ZIP, complete the listing, screenshots, permissions and privacy disclosures,
+   link the public extension privacy policy, and submit for review. The listing and privacy
+   policy must match the extension's popup and actual behaviour.
+4. Save the assigned extension ID and publisher ID. Finish the initial manual publication,
+   then configure the service account below. WXT cannot create the first listing. Google
+   reviews updates too; a successful CI submission means submitted, not approved.
+
+### One-time setup for automatic updates
+
+The workflow uses WXT's Chrome Web Store **v2** publisher and a short-lived service-account
+access token from GitHub OIDC. It stores no service-account key or OAuth refresh token.
+
+1. In a Google Cloud project, enable the Chrome Web Store API and IAM Service Account
+   Credentials API. Create a dedicated service account, then add its email under Account
+   in the Chrome Web Store Developer Dashboard. This grants access to the publisher's items.
+2. Follow Google's [Workload Identity Federation through a service account](https://github.com/google-github-actions/auth#workload-identity-federation-through-a-service-account)
+   setup. Use `https://token.actions.githubusercontent.com` as issuer and map
+   `google.subject=assertion.sub`, `attribute.repository=assertion.repository` and
+   `attribute.workflow_ref=assertion.workflow_ref`. Restrict the provider with this condition:
+
+   ```text
+   assertion.repository == 'obrigado-dev/client' && assertion.workflow_ref.startsWith('obrigado-dev/client/.github/workflows/browser-release.yml@refs/tags/browser-extension-v')
+   ```
+
+   Grant `roles/iam.workloadIdentityUser` on that service account to
+   `principalSet://iam.googleapis.com/projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/POOL_ID/attribute.repository/obrigado-dev/client`.
+   The auth action requests only the `https://www.googleapis.com/auth/chromewebstore` scope.
+3. Add these **repository Actions variables** in `obrigado-dev/client`:
+
+   | Variable | Value |
+   |---|---|
+   | `CHROME_WORKLOAD_IDENTITY_PROVIDER` | Full provider resource: `projects/…/locations/global/workloadIdentityPools/…/providers/…` |
+   | `CHROME_SERVICE_ACCOUNT` | The dedicated service-account email |
+   | `CHROME_PUBLISHER_ID` | Publisher → Settings in the store dashboard |
+   | `CHROME_EXTENSION_ID` | The existing store item's ID; set this last to enable submission on future tags |
+
+4. Verify access without uploading or submitting anything. Dispatch on the existing **tag**
+   so the OIDC workflow identity matches the provider condition:
+
+   ```sh
+   gh workflow run browser-release.yml --repo obrigado-dev/client \
+     --ref browser-extension-v0.1.0 \
+     -f tag=browser-extension-v0.1.0 -f operation=check
+   ```
+
+### Later releases
+
+1. Bump the browser manifest's package version to a three-part numeric version (for example,
+   `0.1.1`), and update its workspace version in both client and platform `bun.lock` files.
+2. Run the client gate and the platform's full E2E suite, commit and push the client first,
+   then update the platform pin and deploy any required server change.
+3. Tag the client release commit `browser-extension-v0.1.1` and push that specific tag. The
+   workflow runs the gate and browser smoke, publishes the ZIP release, then uses `wxt submit`
+   to upload and submit the update for Google's review. It publishes automatically after
+   approval. It does not cancel an existing review or bypass review.
+
+The workflow also accepts manual `operation=package` (GitHub ZIP only), `check` (store
+authentication only), or `submit` (upload and request review), with an existing browser tag.
+For `check` or `submit`, pass `--ref` with the same tag as `-f tag=…`. A missing store variable
+fails an explicit check or submission. If the upload or submission already reached Google,
+check the Developer Dashboard before retrying: Chrome rejects re-uploading the same version.
+The workflow does not cancel a review or overwrite a GitHub release to recover from that.
+
+References: [WXT publishing](https://wxt.dev/guide/essentials/publishing.html),
+[WXT submit options](https://wxt.dev/api/cli/wxt-submit),
+[Chrome API setup](https://developer.chrome.com/docs/webstore/using-api),
+[Chrome service accounts](https://developer.chrome.com/docs/webstore/service-accounts).

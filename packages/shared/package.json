@@ -16,6 +16,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./agents": "./src/agents.ts",
+    "./exposure": "./src/exposure.ts",
     "./money": "./src/money.ts",
     "./contract": "./src/contract.ts",
     "./wall-contract": "./src/wall-contract.ts",

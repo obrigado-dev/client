@@ -25,7 +25,7 @@ import type { ClientConfig } from "../config.ts";
 import { isPrivateRepo, resolveDeps } from "../deps.ts";
 import { stripControlCharacters } from "../link.ts";
 import { noticeForRender, noticeLine, noticeParts } from "../notice.ts";
-import { copyParts, renderCopy } from "../render.ts";
+import { copyParts, renderCopy, SPONSOR_LABEL } from "../render.ts";
 import { drainRetrieval } from "../retrieval.ts";
 import {
   agentSessionLive,
@@ -42,16 +42,6 @@ import type { AgentSessionState } from "../session-state.ts";
 import { DEFAULT_AGENT, isAgent } from "../version.ts";
 import type { Agent } from "../version.ts";
 import { apiOrigin } from "./shared.ts";
-
-/**
- * The disclosure, as §3 requires it and A34 lets a developer turn it off.
- *
- * `oss-sponsor` rather than `sponsored`: it still names the line as paid placement, which is
- * what the disclosure is for, and it names what the money does, which is what makes this
- * product different from the one §3 was written against. Advertisers cannot change it — only
- * the person reading the line can, with `obrigado config label off`.
- */
-const SPONSOR_LABEL = "oss-sponsor";
 
 /**
  * Which host is rendering this line.

@@ -8,6 +8,7 @@ This repository contains the source for the developer-installed parts of
 - the OpenCode plugin;
 - the VS Code extension, which Cursor, Antigravity IDE and Kiro run unchanged;
 - the JetBrains IDEs plugin.
+- the WXT Chrome extension for Claude, ChatGPT, DeepSeek and Replit (coming soon).
 
 This is where that code is developed. The private
 [`obrigado-dev/platform`](https://github.com/obrigado-dev/platform) repository holds the
@@ -32,10 +33,16 @@ Requires Bun 1.4 or newer.
 bun install --frozen-lockfile
 bun run check
 bun run package:vscode
+bun run package:browser
 ```
 
 The JetBrains plugin is Kotlin and builds with its own Gradle wrapper; it needs JDK 21. See
 [its README](./packages/jetbrains-plugin/README.md).
+
+The [Chrome extension](./packages/browser-extension/README.md) starts paused and needs no CLI.
+Its [design notes](./docs/BROWSER-EXTENSION.md) cover privacy, impression counting and the
+limitations of provider DOM adapters. `bun run --cwd packages/browser-extension test:browser`
+runs its Chromium fixtures after `bunx playwright install chromium` in that package.
 
 ```sh
 cd packages/jetbrains-plugin

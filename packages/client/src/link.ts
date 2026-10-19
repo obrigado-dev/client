@@ -14,7 +14,7 @@
  * escape bytes as visible garbage in the developer's status line. That is worse
  * than an unclickable ad, so support is opt-in by detection, never assumed.
  */
-import { isControlCharacter } from "@obrigado/shared";
+export { stripControlCharacters } from "./text.ts";
 
 import { windowsTerminal } from "./terminal.ts";
 
@@ -84,31 +84,6 @@ export function supportsHyperlinks(
 
 const ESC = "\u001B";
 const BEL = "\u0007";
-
-/**
- * Strip control characters from text destined for the terminal.
- *
- * The last line of defence for §3's "always labeled". `ESC [ 2K` erases the
- * line and `ESC [ 1G` returns the cursor to column one, so ad copy containing
- * them would delete the `sponsored` label written immediately before it. The
- * server rejects such copy at ingest and the database has a CHECK, but the
- * client must not write bytes to a developer's terminal on the strength of a
- * server response being well-behaved.
- *
- * Stripped rather than rejected HERE, unlike at ingest: by this point the only
- * options are "render something safe" or "render nothing", and silently losing
- * the developer's status line is the worse of the two.
- */
-export function stripControlCharacters(text: string): string {
-  let out = "";
-  for (const character of text) {
-    // The same set the contract refuses at ingest: C0/C1 controls, which a terminal executes,
-    // and the bidirectional controls, which reorder the row the label shares with the copy.
-    if (isControlCharacter(character)) continue;
-    out += character;
-  }
-  return out;
-}
 
 /**
  * Wrap `text` in an OSC 8 hyperlink, or return it unchanged when the terminal

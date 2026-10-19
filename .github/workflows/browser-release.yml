@@ -1,0 +1,186 @@
+name: Browser release
+
+on:
+  push:
+    tags: ["browser-extension-v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing browser tag (e.g. browser-extension-v0.1.0)"
+        required: true
+      operation:
+        description: "Package for manual upload, check store access, or submit an update"
+        type: choice
+        default: package
+        options: [package, check, submit]
+
+# One store item: releases must not upload competing versions or cancel one another.
+concurrency:
+  group: browser-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.target.outputs.version }}
+      zip: ${{ steps.target.outputs.zip }}
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: The tag is the extension version
+        id: target
+        run: bun packages/browser-extension/scripts/release.ts target
+      - run: bun install --frozen-lockfile
+      - run: bun run check
+      - run: bunx playwright install --with-deps chromium
+        working-directory: packages/browser-extension
+      - run: bun run test:browser
+        working-directory: packages/browser-extension
+      - run: bun run package:browser
+
+      - name: Verify the ZIP and checksum it
+        working-directory: packages/browser-extension
+        env:
+          ZIP: ${{ steps.target.outputs.zip }}
+        run: |
+          set -eu
+          unzip -p ".output/$ZIP" manifest.json > "$RUNNER_TEMP/browser-manifest.json"
+          bun scripts/release.ts verify "$RUNNER_TEMP/browser-manifest.json"
+          cd .output
+          sha256sum "$ZIP" > SHA256SUMS
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: obrigado-browser-${{ steps.target.outputs.version }}
+          path: |
+            packages/browser-extension/.output/${{ steps.target.outputs.zip }}
+            packages/browser-extension/.output/SHA256SUMS
+          if-no-files-found: error
+
+      - name: Record the browser release
+        if: inputs.operation != 'check'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ZIP: ${{ steps.target.outputs.zip }}
+          VERSION: ${{ steps.target.outputs.version }}
+          CHROME_EXTENSION_ID: ${{ vars.CHROME_EXTENSION_ID }}
+        run: |
+          set -eu
+          if gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            echo "Release exists; store submission uses its original ZIP."
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --latest=false \
+              --title "Obrigado for Chrome $VERSION" \
+              --notes "Chrome extension package. Store submission and review status are shown in the Browser release workflow; this GitHub release alone does not publish to Chrome users." \
+              "packages/browser-extension/.output/$ZIP" \
+              packages/browser-extension/.output/SHA256SUMS
+          fi
+          if [ -z "$CHROME_EXTENSION_ID" ]; then
+            echo "Store submission is not configured. Upload this ZIP manually for the first release; see docs/PUBLISHING.md." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  store:
+    needs: package
+    # An absent item ID is the first-release bootstrap: publish only the GitHub ZIP.
+    # Explicit check/submit requests still fail clearly if any configuration is missing.
+    if: >-
+      (github.event_name == 'push' && vars.CHROME_EXTENSION_ID != '') ||
+      (github.event_name == 'workflow_dispatch' && inputs.operation != 'package')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      ZIP: ${{ needs.package.outputs.zip }}
+      CHROME_EXTENSION_ID: ${{ vars.CHROME_EXTENSION_ID }}
+      CHROME_PUBLISHER_ID: ${{ vars.CHROME_PUBLISHER_ID }}
+      CHROME_SERVICE_ACCOUNT: ${{ vars.CHROME_SERVICE_ACCOUNT }}
+      CHROME_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.CHROME_WORKLOAD_IDENTITY_PROVIDER }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: bun install --frozen-lockfile
+
+      - name: Require store configuration
+        run: |
+          set -eu
+          for name in CHROME_EXTENSION_ID CHROME_PUBLISHER_ID CHROME_SERVICE_ACCOUNT CHROME_WORKLOAD_IDENTITY_PROVIDER; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing repository variable $name; see docs/PUBLISHING.md"
+              exit 1
+            fi
+          done
+
+      # Use the immutable release on retries, rather than replacing it with a rebuilt ZIP.
+      - name: Download the released package
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release download "$RELEASE_TAG" --dir packages/browser-extension/.output \
+            --pattern "$ZIP" --pattern SHA256SUMS
+
+      - name: Verify the release package
+        working-directory: packages/browser-extension
+        run: |
+          set -eu
+          cd .output
+          sha256sum -c SHA256SUMS
+          cd ..
+          unzip -p ".output/$ZIP" manifest.json > "$RUNNER_TEMP/browser-manifest.json"
+          bun scripts/release.ts verify "$RUNNER_TEMP/browser-manifest.json"
+
+      - name: Get a short-lived store token
+        id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.CHROME_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.CHROME_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/chromewebstore
+          create_credentials_file: false
+          export_environment_variables: false
+
+      - name: Submit with WXT through Chrome API v2
+        working-directory: packages/browser-extension
+        env:
+          CHROME_SERVICE_ACCOUNT_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          OPERATION: ${{ github.event_name == 'push' && 'submit' || inputs.operation }}
+        run: |
+          set -eu
+          if [ "$OPERATION" = check ]; then
+            bun run submit:chrome --chrome-zip ".output/$ZIP" --dry-run
+            echo "Chrome store access verified; nothing uploaded or submitted." >> "$GITHUB_STEP_SUMMARY"
+          else
+            bun run submit:chrome --chrome-zip ".output/$ZIP"
+            echo "Chrome update submitted for review and automatic publication after approval." >> "$GITHUB_STEP_SUMMARY"
+          fi

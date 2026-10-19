@@ -1,0 +1,58 @@
+@import "../../src/styles/tokens.css";
+
+:root {
+  color-scheme: light dark;
+  font:
+    14px/1.6 system-ui,
+    sans-serif;
+  color: light-dark(#242424, #e9e6df);
+  background: light-dark(#f6f3eb, #1b1c1b);
+}
+body {
+  width: 340px;
+  margin: 0;
+}
+main {
+  padding: var(--space-6);
+}
+h1 {
+  margin: 0 0 var(--space-4);
+  font:
+    500 32px/1.1 Georgia,
+    serif;
+}
+p {
+  margin: 0 0 var(--space-4);
+}
+.eyebrow {
+  font-size: var(--text-3xs);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+button {
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  padding: var(--space-3);
+  background: light-dark(#254a37, #b9d4b9);
+  color: light-dark(#fff, #14271b);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+#state {
+  margin-block-start: var(--space-3);
+  font-size: var(--text-2xs);
+}
+a {
+  color: inherit;
+  text-underline-offset: 3px;
+}
+:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}

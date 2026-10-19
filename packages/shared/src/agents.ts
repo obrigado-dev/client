@@ -318,8 +318,22 @@ export function isKnownAgent(reported: string): boolean {
  */
 export const WEBSITE_RENDERER_ID = "obrigado-web";
 
+/** One extension across providers; the provider stays on the device. */
+export const BROWSER_RENDERER_ID = "obrigado-browser";
+
+/** A browser surface may be bought as a whole, without reporting which provider is open. */
+export const TARGETABLE_RENDERER_IDS: readonly string[] = [...AGENT_IDS, BROWSER_RENDERER_ID];
+
+export function rendererLabel(id: string): string {
+  if (id === BROWSER_RENDERER_ID) return "Chrome extension";
+  if (id === WEBSITE_RENDERER_ID) return "Obrigado website";
+  return AGENTS.find((agent) => agent.id === id)?.label ?? id;
+}
+
 export function isKnownRenderer(reported: string): boolean {
-  return isKnownAgent(reported) || reported === WEBSITE_RENDERER_ID;
+  return (
+    isKnownAgent(reported) || reported === WEBSITE_RENDERER_ID || reported === BROWSER_RENDERER_ID
+  );
 }
 
 /**
