@@ -5,6 +5,9 @@ const target = browserBuildTarget(process.env["OBRIGADO_BROWSER_E2E_ORIGIN"]);
 
 export default defineConfig({
   imports: false,
+  // Bundle the workspace source, including before surface has been built for npm.
+  // WXT also writes this alias into its generated TypeScript configuration.
+  alias: { "@obrigado/surface": "../surface/src/index.ts" },
   outDir: target.outDir,
   vite: () => ({
     define: { "import.meta.env.VITE_OBRIGADO_API_ORIGIN": JSON.stringify(target.origin) },
