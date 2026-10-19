@@ -27,16 +27,17 @@ jobs:
 
       - run: bun install --frozen-lockfile
       - run: bun run check
-      - run: bun run package:browser
       - run: bunx playwright install --with-deps chromium
         working-directory: packages/browser-extension
       - run: bun run test:browser
         working-directory: packages/browser-extension
+      - run: bun run package:browser
       - uses: actions/upload-artifact@v7
         with:
           name: obrigado-browser-${{ github.sha }}
           path: packages/browser-extension/.output/*.zip
           if-no-files-found: error
+          include-hidden-files: true
       # vsce runs under Node, not Bun (its bin is `#!/usr/bin/env node`), and 4.0 requires
       # Node 22. Pinned rather than left to whatever the runner image ships.
       - uses: actions/setup-node@v7

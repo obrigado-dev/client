@@ -74,6 +74,7 @@ jobs:
             packages/browser-extension/.output/${{ steps.target.outputs.zip }}
             packages/browser-extension/.output/SHA256SUMS
           if-no-files-found: error
+          include-hidden-files: true
 
       - name: Record the browser release
         if: inputs.operation != 'check'
