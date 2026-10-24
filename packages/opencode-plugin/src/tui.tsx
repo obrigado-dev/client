@@ -149,6 +149,8 @@ function runStyle(span: SponsoredSpan, ad: Sponsored, hovered = false): Record<s
     ...(span.bold === true ? { bold: true } : {}),
     ...(span.italic === true || ad.effect === "italic" ? { italic: true } : {}),
     ...(span.highlight === true ? { inverse: true } : {}),
+    ...(span.strike === true ? { strikethrough: true } : {}),
+    ...(span.dim === true ? { dim: true } : {}),
     // Underline means "this is a link" and nothing else — applied exactly when the run
     // really is one, never as an advertiser-selectable flourish. OpenTUI does not
     // underline `a` itself, and a link nobody can see is a link nobody clicks.

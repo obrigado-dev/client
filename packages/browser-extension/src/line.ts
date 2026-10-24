@@ -10,6 +10,11 @@ function drawSpan(span: SponsoredSpan, url: string): HTMLElement {
   }
   if (span.bold === true) node.style.fontWeight = "600";
   if (span.italic === true) node.style.fontStyle = "italic";
+  // Added to the link's underline rather than replacing it: underline is how a link is found.
+  if (span.strike === true) {
+    node.style.textDecorationLine = span.link === true ? "underline line-through" : "line-through";
+  }
+  if (span.dim === true) node.style.opacity = "0.65";
   if (span.color !== undefined) node.dataset["color"] = span.color;
   return node;
 }

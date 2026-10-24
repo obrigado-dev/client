@@ -16,6 +16,8 @@
  * | `` `text` ``    | highlight (reverse video — uses the reader's colours)|
  * | `[text]`        | the tracking link; at most one per creative         |
  * | `{cyan:text}`   | colour, from the creative palette                   |
+ * | `~~text~~`      | struck through, for a price that went down          |
+ * | `{dim:text}`    | dimmed, for the part that matters less              |
  * | `\*`            | a literal marker character                          |
  *
  * ## Why the limits exist
@@ -37,18 +39,31 @@
  * click report.
  */
 
+import { isStatusSymbol } from "./status-symbols.ts";
+
 /** Colours a span may use — the creative palette, minus the no-op. */
 export const SPAN_COLORS = ["cyan", "blue", "green", "magenta"] as const;
 export type SpanColor = (typeof SPAN_COLORS)[number];
 
+/**
+ * One styled run. The optional fields admit `undefined` so the wire's own spans, which zod
+ * types that way, are spans too, and a renderer takes either without a conversion.
+ */
 export interface Span {
   readonly text: string;
-  readonly bold?: boolean;
-  readonly italic?: boolean;
-  readonly highlight?: boolean;
-  readonly color?: SpanColor;
+  readonly bold?: boolean | undefined;
+  readonly italic?: boolean | undefined;
+  readonly highlight?: boolean | undefined;
+  readonly color?: SpanColor | undefined;
+  /**
+   * Struck through and dimmed. Both make a run QUIETER, never louder, so neither counts
+   * against the emphasis allowance below. Optional on the wire: a client older than them
+   * drops the flag and draws the run plain, which is the right way for them to degrade.
+   */
+  readonly strike?: boolean | undefined;
+  readonly dim?: boolean | undefined;
   /** Part of the single tracking link. */
-  readonly link?: boolean;
+  readonly link?: boolean | undefined;
 }
 
 /** The status-line budget, measured in VISIBLE characters — markup is free. */
@@ -71,7 +86,8 @@ export const MAX_EMPHASIS_CHARS = 16;
 /** A highlight longer than this stops being a highlight and becomes a banner. */
 export const MAX_HIGHLIGHT_LENGTH = 16;
 
-const MAX_SPANS = 48;
+/** The most runs a line may have: the wire's `spans` bound. */
+export const MAX_SPANS = 48;
 const MAX_DEPTH = 3;
 
 export interface ParseResult {
@@ -85,6 +101,8 @@ interface Active {
   bold: boolean;
   italic: boolean;
   highlight: boolean;
+  strike: boolean;
+  dim: boolean;
   link: boolean;
   color: SpanColor | undefined;
 }
@@ -134,6 +152,7 @@ const TOGGLES = [
   { marker: "**", key: "bold" },
   { marker: "_", key: "italic" },
   { marker: "`", key: "highlight" },
+  { marker: "~~", key: "strike" },
 ] as const;
 
 type ToggleKey = (typeof TOGGLES)[number]["key"];
@@ -154,10 +173,15 @@ class Parser {
   readonly #spans: Span[] = [];
   readonly #problems: string[] = [];
   readonly #openers: string[] = [];
+  /** The open `{…:` groups, innermost last: a `}` closes the latest. */
+  readonly #braces: Array<"color" | "dim"> = [];
+  readonly #statusSymbols = new Set<string>();
   readonly #active: Active = {
     bold: false,
     italic: false,
     highlight: false,
+    strike: false,
+    dim: false,
     link: false,
     color: undefined,
   };
@@ -179,12 +203,21 @@ class Parser {
     return {
       spans: this.#spans,
       plain,
-      problems: [...this.#problems, ...proportionProblems(this.#spans, plain)],
+      problems: [
+        ...this.#problems,
+        ...[...this.#statusSymbols].map(
+          (symbol) =>
+            `"${symbol}" reads as a status indicator (a result, a warning or something running), ` +
+            "and an ad must not look like the developer's own tools — try → or ★",
+        ),
+        ...proportionProblems(this.#spans, plain),
+      ],
     };
   }
 
   #step(): void {
-    const character = this.#source[this.#index] ?? "";
+    // By code point, so a symbol outside the BMP is one character to the checks below.
+    const character = String.fromCodePoint(this.#source.codePointAt(this.#index) ?? 0);
 
     if (character === "\\") return this.#escape();
     if (isControl(character)) {
@@ -194,7 +227,7 @@ class Parser {
     }
 
     const toggle = matchToggle(this.#source, this.#index);
-    if (toggle !== undefined) {
+    if (toggle !== undefined && this.#opensOrCloses(toggle.key, toggle.marker)) {
       this.#flush();
       this.#toggle(toggle.key, toggle.marker);
       this.#index += toggle.marker.length;
@@ -203,11 +236,12 @@ class Parser {
 
     if (character === "[") return this.#openLink();
     if (character === "]") return this.#closeLink();
-    if (character === "{") return this.#openColor();
-    if (character === "}" && this.#active.color !== undefined) return this.#closeColor();
+    if (character === "{") return this.#openBrace();
+    if (character === "}" && this.#braces.length > 0) return this.#closeBrace();
 
+    if (isStatusSymbol(character)) this.#statusSymbols.add(character);
     this.#buffer += character;
-    this.#index += 1;
+    this.#index += character.length;
   }
 
   /** An escape makes the next character literal. */
@@ -215,6 +249,18 @@ class Parser {
     const next = this.#source[this.#index + 1];
     if (next !== undefined && !isControl(next)) this.#buffer += next;
     this.#index += next === undefined ? 1 : 2;
+  }
+
+  /**
+   * Whether a marker here is markup rather than text.
+   *
+   * Every marker is, except a strike that nothing closes. `~~` came after copy already existed,
+   * and copy like `NEON DA BEST~~~` was never written as markup: read as an opener it would
+   * have struck the rest of the line out, or been refused as unclosed.
+   */
+  #opensOrCloses(key: ToggleKey, marker: string): boolean {
+    if (key !== "strike" || this.#active.strike) return true;
+    return this.#source.includes(marker, this.#index + marker.length);
   }
 
   #toggle(key: ToggleKey, marker: string): void {
@@ -254,14 +300,16 @@ class Parser {
     this.#index += 1;
   }
 
-  #openColor(): void {
+  /** `{cyan:…}` and the other colours, or `{dim:…}`. Anything else is a literal brace. */
+  #openBrace(): void {
     const colon = this.#source.indexOf(":", this.#index);
     const name = colon === -1 ? "" : this.#source.slice(this.#index + 1, colon);
+    const isColor = (SPAN_COLORS as readonly string[]).includes(name);
 
-    if (colon === -1 || !(SPAN_COLORS as readonly string[]).includes(name)) {
+    if (colon === -1 || (!isColor && name !== "dim")) {
       if (name.length > 0 && !name.includes(" ")) {
         this.#problems.push(
-          `"${name}" is not an available colour — choose from ${SPAN_COLORS.join(", ")}`,
+          `"${name}" is not an available colour — choose from ${SPAN_COLORS.join(", ")}, or dim`,
         );
       }
       this.#buffer += "{";
@@ -270,20 +318,24 @@ class Parser {
     }
 
     this.#flush();
-    if (this.#active.color !== undefined) {
-      this.#problems.push("colour markers cannot be nested");
+    const kind = isColor ? "color" : "dim";
+    if (this.#braces.includes(kind)) {
+      this.#problems.push(isColor ? "colour markers cannot be nested" : "dim cannot be nested");
     } else if (this.#openers.length >= MAX_DEPTH) {
       this.#problems.push(`markup nested more than ${MAX_DEPTH} deep`);
     } else {
-      this.#active.color = name as SpanColor;
+      if (isColor) this.#active.color = name as SpanColor;
+      else this.#active.dim = true;
+      this.#braces.push(kind);
       this.#openers.push("{");
     }
     this.#index = colon + 1;
   }
 
-  #closeColor(): void {
+  #closeBrace(): void {
     this.#flush();
-    this.#active.color = undefined;
+    if (this.#braces.pop() === "color") this.#active.color = undefined;
+    else this.#active.dim = false;
     this.#openers.pop();
     this.#index += 1;
   }
@@ -298,6 +350,8 @@ class Parser {
       ...(this.#active.bold ? { bold: true } : {}),
       ...(this.#active.italic ? { italic: true } : {}),
       ...(this.#active.highlight ? { highlight: true } : {}),
+      ...(this.#active.strike ? { strike: true } : {}),
+      ...(this.#active.dim ? { dim: true } : {}),
       ...(this.#active.link ? { link: true } : {}),
       ...(this.#active.color === undefined ? {} : { color: this.#active.color }),
     });
@@ -408,7 +462,7 @@ export function plainText(source: string): string {
  * is the review being wrong rather than merely inconsistent — and the way they would come to
  * disagree is by each keeping its own copy of this mapping.
  *
- * `.slot-*`, `.is-bold`, `.is-italic` and `.is-highlight` are defined once, in
+ * `.slot-*`, `.is-bold`, `.is-italic`, `.is-highlight`, `.is-strike` and `.is-dim` are defined once, in
  * `styles/base.css`, which both tiers serve.
  */
 export function spanClasses(span: Span): string {
@@ -416,6 +470,8 @@ export function spanClasses(span: Span): string {
     span.bold === true ? "is-bold" : "",
     span.italic === true ? "is-italic" : "",
     span.highlight === true ? "is-highlight" : "",
+    span.strike === true ? "is-strike" : "",
+    span.dim === true ? "is-dim" : "",
     span.color === undefined ? "" : `slot-${span.color}`,
   ]
     .filter((rule) => rule.length > 0)

@@ -54,6 +54,9 @@ export interface SponsoredSpan {
   readonly highlight?: boolean;
   /** One of the four slots an advertiser may choose. */
   readonly color?: SpanColor;
+  /** Struck through and dimmed: both quieter, never louder. A host that cannot draw them ignores them. */
+  readonly strike?: boolean;
+  readonly dim?: boolean;
   /** Part of the single tracking link whose URL is `Sponsored.url`. */
   readonly link?: boolean;
 }

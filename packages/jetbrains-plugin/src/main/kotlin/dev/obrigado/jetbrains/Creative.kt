@@ -64,7 +64,8 @@ internal fun escapeHtml(value: String): String =
 private fun emphasise(span: SponsoredSpan, ad: Sponsored): String {
     val italic = span.italic || ad.effect == "italic"
     val text = escapeHtml(span.text)
-    return (if (span.bold) "<b>" else "") + (if (italic) "<i>" else "") + text +
+    return (if (span.bold) "<b>" else "") + (if (italic) "<i>" else "") +
+        (if (span.strike) "<s>" else "") + text + (if (span.strike) "</s>" else "") +
         (if (italic) "</i>" else "") + (if (span.bold) "</b>" else "")
 }
 

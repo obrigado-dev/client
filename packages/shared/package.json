@@ -21,6 +21,7 @@
     "./contract": "./src/contract.ts",
     "./wall-contract": "./src/wall-contract.ts",
     "./markup": "./src/markup.ts",
+    "./line": "./src/line.ts",
     "./rotation": "./src/rotation.ts",
     "./socials": "./src/socials.ts"
   },
