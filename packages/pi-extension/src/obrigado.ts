@@ -173,27 +173,25 @@ interface TypedPrompt {
 let lastPrompt: TypedPrompt | null = null;
 
 /**
- * The environment the renderer runs in, with hyperlinks turned OFF.
+ * The environment the renderer runs in: hyperlinks on in Pi, off in oh-my-pi.
  *
- * This is the one place Pi's surface differs from every other terminal host, and it is a
- * deliberate refusal rather than a missing feature. Pi's footer truncates the joined status
- * line to the terminal width, and its truncator stops at the first grapheme that would overflow
- * — dropping every ANSI segment after that point and appending only an SGR reset. An OSC 8
- * hyperlink OPENED before the cut therefore never gets its closing sequence, and a terminal
- * that honours OSC 8 keeps applying that URL to whatever is drawn next.
+ * Pi's footer truncates the joined status line to the terminal width, and its truncator drops
+ * every ANSI segment past the cut, the closing half of an OSC 8 link included. That used to let
+ * the advertiser's URL bleed onto whatever was drawn next. Pi has ended every rendered line with
+ * an OSC 8 close since 0.43.0 ("reset styles per line"), so a cut link now ends at the edge of
+ * the footer and the line can be clicked like every other terminal host's.
  *
- * The failure is not a lost link. It is the advertiser's URL silently attached to unrelated
- * parts of the developer's UI, which is exactly the kind of bleed §3 exists to prevent. So the
- * copy renders coloured and unclickable here, and the trailing domain in the creative stays the
- * way a reader acts on it. `OBRIGADO_HYPERLINKS` is the documented override for precisely this
- * case: "turning it off if a rendering bug appears".
+ * oh-my-pi is a separate build whose status handling is not verified to do the same, so it keeps
+ * `OBRIGADO_HYPERLINKS=0`, the renderer's documented override for a host that renders links
+ * badly. There the copy is coloured and unclickable, and the trailing domain is how a reader
+ * acts on it.
  */
 function spawnEnvironment(): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (value !== undefined) env[key] = value;
   }
-  env["OBRIGADO_HYPERLINKS"] = "0";
+  if (AGENT !== "pi") env["OBRIGADO_HYPERLINKS"] = "0";
   return env;
 }
 

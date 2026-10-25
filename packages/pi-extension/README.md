@@ -42,11 +42,11 @@ named rather than silently letting the second overwrite the first.
 which the installer rewrites for oh-my-pi. It namespaces per-session state and attributes the
 impression, so the two hosts cannot consume each other's inventory.
 
-**Hyperlinks are off on this surface.** The renderer emits OSC 8 links where the terminal
-supports them, but Pi's footer truncates the joined status line to the terminal width and its
-truncator drops trailing ANSI — so a hyperlink opened before the cut never gets its closing
-sequence, and the URL bleeds onto whatever is drawn next. The extension runs the renderer with
-`OBRIGADO_HYPERLINKS=0`. The copy is coloured and unclickable here, which is the correct trade.
+**Hyperlinks are on in Pi and off in oh-my-pi.** Pi's footer truncator drops the ANSI past the
+cut, the closing half of an OSC 8 link included, but Pi has closed every rendered line's links
+since 0.43.0, so a cut link ends at the footer's edge. oh-my-pi's status handling is not verified
+to do the same, so there the extension runs the renderer with `OBRIGADO_HYPERLINKS=0` and the copy
+is coloured and unclickable.
 
 ## Development
 
