@@ -150,11 +150,17 @@ const BOLD = `${ESC}[1m`;
 const RESET_BOLD = `${ESC}[22m`;
 const REVERSE = `${ESC}[7m`;
 const RESET_REVERSE = `${ESC}[27m`;
+const STRIKE = `${ESC}[9m`;
+const RESET_STRIKE = `${ESC}[29m`;
+/** Faint. Its reset is bold's too (`22`), which is harmless: both close at the span's end. */
+const DIM = `${ESC}[2m`;
 
 export interface SpanAttributes {
   readonly bold?: boolean | undefined;
   readonly italic?: boolean | undefined;
   readonly highlight?: boolean | undefined;
+  readonly strike?: boolean | undefined;
+  readonly dim?: boolean | undefined;
   readonly color?: "cyan" | "blue" | "green" | "magenta" | undefined;
 }
 
@@ -170,8 +176,11 @@ export interface SpanAttributes {
  * reader's own foreground and background, so it cannot render unreadably
  * against a theme we know nothing about; a hardcoded background can and does.
  *
- * Every attribute resets only itself (`[22m`, `[23m`, `[27m`, `[39m`) so a span
- * cannot clear styling that belongs to the rest of the line.
+ * Strike and dim make a run quieter, never louder: a terminal that ignores them draws the
+ * run plain, which loses nothing an advertiser was promised.
+ *
+ * Every attribute resets only itself (`[22m`, `[23m`, `[27m`, `[29m`, `[39m`) so a span
+ * cannot clear styling that belongs to the rest of the line. Dim shares `[22m` with bold.
  */
 export function spanAttributes(
   text: string,
@@ -184,6 +193,8 @@ export function spanAttributes(
   let out = text;
   if (span.color !== undefined) out = `${FOREGROUND[span.color]}${out}${RESET_FOREGROUND}`;
   if (span.highlight === true) out = `${REVERSE}${out}${RESET_REVERSE}`;
+  if (span.strike === true) out = `${STRIKE}${out}${RESET_STRIKE}`;
+  if (span.dim === true) out = `${DIM}${out}${RESET_BOLD}`;
   if (span.italic === true) out = `${ITALIC}${out}${RESET_ITALIC}`;
   if (span.bold === true) out = `${BOLD}${out}${RESET_BOLD}`;
   return out;

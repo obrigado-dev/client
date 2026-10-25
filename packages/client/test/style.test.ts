@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import {
-  CreativeEffectSchema as WireEffect,
-  CreativeStyleSchema as WireStyle,
-} from "@obrigado/shared";
+import { WireEffectSchema as WireEffect, CreativeStyleSchema as WireStyle } from "@obrigado/shared";
 
 import {
   applyStyle,
@@ -11,6 +8,7 @@ import {
   CREATIVE_STYLES,
   isCreativeEffect,
   isCreativeStyle,
+  spanAttributes,
   supportsColor,
 } from "../src/style.ts";
 import type { CreativeStyle } from "../src/style.ts";
@@ -178,5 +176,16 @@ describe("the label is never styled", () => {
 
     expect(line.startsWith("oss-sponsor · ")).toBe(true);
     expect(line.indexOf(ESC)).toBeGreaterThan(line.indexOf("oss-sponsor"));
+  });
+});
+
+describe("strike and dim", () => {
+  test("each opens its own attribute and resets only what it set", () => {
+    expect(spanAttributes("$20", { strike: true }, colorful)).toBe(`${ESC}[9m$20${ESC}[29m`);
+    expect(spanAttributes("from", { dim: true }, colorful)).toBe(`${ESC}[2mfrom${ESC}[22m`);
+  });
+
+  test("a terminal that gets no colour gets the text plain", () => {
+    expect(spanAttributes("$20", { strike: true, dim: true }, env({ NO_COLOR: "1" }))).toBe("$20");
   });
 });

@@ -54,7 +54,7 @@ const AGENT = "opencode";
  * separately and need different sentences to fix. `package.json` must agree; a test holds them
  * together, the same way `CLIENT_VERSION` is held to the client's manifest.
  */
-const SURFACE_VERSION = "0.4.2";
+const SURFACE_VERSION = "0.4.3";
 
 /**
  * How often the line may be re-rendered: a beat that draws a new line only after something
@@ -149,6 +149,8 @@ function runStyle(span: SponsoredSpan, ad: Sponsored, hovered = false): Record<s
     ...(span.bold === true ? { bold: true } : {}),
     ...(span.italic === true || ad.effect === "italic" ? { italic: true } : {}),
     ...(span.highlight === true ? { inverse: true } : {}),
+    ...(span.strike === true ? { strikethrough: true } : {}),
+    ...(span.dim === true ? { dim: true } : {}),
     // Underline means "this is a link" and nothing else — applied exactly when the run
     // really is one, never as an advertiser-selectable flourish. OpenTUI does not
     // underline `a` itself, and a link nobody can see is a link nobody clicks.

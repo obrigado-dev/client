@@ -115,15 +115,36 @@ describe("the footer entry", () => {
   });
 
   /*
-   * Pi's footer truncator drops trailing ANSI, so an OSC 8 hyperlink opened before the cut is
-   * never closed and the advertiser's URL bleeds onto whatever is drawn next. The renderer's
-   * documented override is how this surface refuses to emit them at all.
+   * Pi closes every rendered line's links (0.43.0 on), so a link the footer truncator cuts ends
+   * at the footer's edge: the renderer is left to emit them. oh-my-pi is not verified to, so the
+   * copy the installer writes there turns them off with the renderer's documented override.
    */
-  test("runs the renderer with hyperlinks turned off", async () => {
-    const cli = await stubCli(`printf 'hyperlinks=%s\\n' "$OBRIGADO_HYPERLINKS"`);
+  test("leaves hyperlinks to the renderer in Pi", async () => {
+    const cli = await stubCli(`printf 'hyperlinks=%s\\n' "\${OBRIGADO_HYPERLINKS-unset}"`);
     process.env["OBRIGADO_STATUSLINE_COMMAND"] = cli;
+    const original = process.env["OBRIGADO_HYPERLINKS"];
+    delete process.env["OBRIGADO_HYPERLINKS"];
+    try {
+      const { handlers, api } = harness();
+      extension(api);
+
+      await handlers.get("session_start")?.({}, context(true, recorded));
+    } finally {
+      if (original !== undefined) process.env["OBRIGADO_HYPERLINKS"] = original;
+    }
+
+    expect(recorded.statuses).toEqual([["obrigado", "hyperlinks=unset"]]);
+  });
+
+  test("runs the renderer with hyperlinks turned off in oh-my-pi", async () => {
+    const cli = await stubCli(`printf 'hyperlinks=%s\\n' "\${OBRIGADO_HYPERLINKS-unset}"`);
+    process.env["OBRIGADO_STATUSLINE_COMMAND"] = cli;
+    const source = await Bun.file(new URL("../src/obrigado.ts", import.meta.url)).text();
+    const omp = join(await mkdtemp(join(tmpdir(), "obrigado-omp-")), "obrigado.ts");
+    await writeFile(omp, source.replace('const AGENT = "pi";', 'const AGENT = "oh-my-pi";'));
+    const { default: ompExtension } = (await import(omp)) as { default: typeof extension };
     const { handlers, api } = harness();
-    extension(api);
+    ompExtension(api);
 
     await handlers.get("session_start")?.({}, context(true, recorded));
 

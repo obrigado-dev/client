@@ -119,13 +119,17 @@ function logoLine(brand: SponsoredBrand | null): readonly string[] {
 
 const LOGO_PREFIX = "data:image/png;base64,";
 
-/** A run's emphasis, the subset of the terminal's styling that markdown can carry. */
+/**
+ * A run's emphasis, the subset of the terminal's styling that markdown can carry. Strike is
+ * GitHub markdown's `~~`, which the hover renders; dim has no markdown and is drawn plain.
+ */
 function emphasise(span: SponsoredSpan, ad: Sponsored): string {
   const text = escapeMarkdown(span.text);
   const italic = span.italic === true || ad.effect === "italic";
-  return `${span.bold === true ? "**" : ""}${italic ? "_" : ""}${text}${italic ? "_" : ""}${
-    span.bold === true ? "**" : ""
-  }`;
+  const strike = span.strike === true;
+  return `${span.bold === true ? "**" : ""}${italic ? "_" : ""}${strike ? "~~" : ""}${text}${
+    strike ? "~~" : ""
+  }${italic ? "_" : ""}${span.bold === true ? "**" : ""}`;
 }
 
 /**

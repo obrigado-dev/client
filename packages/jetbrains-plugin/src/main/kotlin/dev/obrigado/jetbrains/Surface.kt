@@ -36,6 +36,10 @@ internal data class SponsoredSpan(
     val italic: Boolean = false,
     /** Reverse video in a terminal; a status bar has no such thing and ignores it. */
     val highlight: Boolean = false,
+    /** Struck through; drawn in the tooltip. Quieter, never louder. */
+    val strike: Boolean = false,
+    /** Dimmed in a terminal; a tooltip has no faint text and draws it plain. */
+    val dim: Boolean = false,
     /** Carried as sent, like the TypeScript copy; nothing here paints it. */
     val color: String? = null,
     /** Part of the single tracking link whose URL is `Sponsored.url`. */
@@ -116,6 +120,8 @@ private fun spans(raw: Json?): List<SponsoredSpan>? {
             bold = span["bold"] == Json.Bool(true),
             italic = span["italic"] == Json.Bool(true),
             highlight = span["highlight"] == Json.Bool(true),
+            strike = span["strike"] == Json.Bool(true),
+            dim = span["dim"] == Json.Bool(true),
             color = (span["color"] as? Json.Str)?.value,
             link = span["link"] == Json.Bool(true),
         )

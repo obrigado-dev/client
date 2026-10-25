@@ -297,8 +297,20 @@ export type CreativeStyle = z.infer<typeof CreativeStyleSchema>;
  * AMPLIFIES the copy, making it louder than the `sponsored` label that discloses
  * it. Reverse, blink and backgrounds are excluded for the same reason as bold.
  */
-export const CreativeEffectSchema = z.enum(["none", "italic"]);
+export const CreativeEffectSchema = z.enum(["none", "italic", "gradient"]);
 export type CreativeEffect = z.infer<typeof CreativeEffectSchema>;
+
+/**
+ * The effects a client is told about, which are fewer than an advertiser may pick.
+ *
+ * `gradient` is drawn as coloured runs (`withGradient` in `markup.ts`) before the wire, so the
+ * batch carries `none` and the colours are in `spans`. That is not tidiness: a client parses
+ * `effect` with this enum, and a value it has never seen would fail the whole batch. Every
+ * install out there would stop showing ads the day the server sent one. So this enum only ever
+ * widens together with a client release, and the server never sends a value outside it.
+ */
+export const WireEffectSchema = z.enum(["none", "italic"]);
+export type WireEffect = z.infer<typeof WireEffectSchema>;
 
 // ─────────────── POST /api/v1/session ───────────────
 
@@ -325,6 +337,9 @@ export const WireSpanSchema = z.object({
   italic: z.boolean().optional(),
   highlight: z.boolean().optional(),
   color: z.enum(["cyan", "blue", "green", "magenta"]).optional(),
+  /** Optional, so a client older than them strips the flags and draws the run plain. */
+  strike: z.boolean().optional(),
+  dim: z.boolean().optional(),
   link: z.boolean().optional(),
 });
 export type WireSpan = z.infer<typeof WireSpanSchema>;
@@ -360,7 +375,7 @@ export const BatchItemSchema = z.object({
   body: z.string().max(160),
   click_url: z.url(),
   style: CreativeStyleSchema.default("default"),
-  effect: CreativeEffectSchema.default("none"),
+  effect: WireEffectSchema.default("none"),
   /** Per-run styling. Empty means render `body` plainly. */
   spans: z.array(WireSpanSchema).max(48).default([]),
   /** Nullable so a renderer never has to assume one exists; the server always sends it. */
