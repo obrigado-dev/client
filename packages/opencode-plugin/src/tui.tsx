@@ -54,7 +54,7 @@ const AGENT = "opencode";
  * separately and need different sentences to fix. `package.json` must agree; a test holds them
  * together, the same way `CLIENT_VERSION` is held to the client's manifest.
  */
-const SURFACE_VERSION = "0.4.2";
+const SURFACE_VERSION = "0.4.3";
 
 /**
  * How often the line may be re-rendered: a beat that draws a new line only after something
