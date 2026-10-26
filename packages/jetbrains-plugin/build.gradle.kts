@@ -70,3 +70,12 @@ tasks.test {
     inputs.file(vectors)
     systemProperty("obrigado.vectors", vectors.asFile.absolutePath)
 }
+
+// Compiled every time, never taken from the build cache. When `SponsoredSpan` gained two fields
+// (A52), CI recompiled the main classes but restored the test classes from the cache, still
+// linked to the old constructor, and every test that builds a span died with NoSuchMethodError.
+// The test classpath this plugin wires up does not reach the cache key, so a main-only change
+// cannot invalidate it. The test sources compile in seconds, so the cache saves nothing here.
+tasks.named("compileTestKotlin") {
+    outputs.cacheIf { false }
+}
