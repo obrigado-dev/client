@@ -40,7 +40,7 @@
     "js-yaml": "4.3.2",
     "markdown-it": "14.3.2",
     "nanoid": "3.3.19",
-    "qs": "6.16.0",
+    "qs": "6.16.1",
     "seroval": "1.6.8",
     "seroval-plugins": "1.6.8",
     "toml": "5.0.1",
