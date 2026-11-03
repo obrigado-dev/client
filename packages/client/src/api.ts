@@ -15,6 +15,7 @@ import {
   EmailLinkConfirmResponseSchema,
   EmailLinkStatusResponseSchema,
   EmailUnlinkResponseSchema,
+  LinkSummaryResponseSchema,
   MAX_DURATION_S,
   PackageId,
   SessionResponseSchema,
@@ -27,6 +28,8 @@ import type {
   EmailLinkRequest,
   EmailLinkStatusResponse,
   EmailUnlinkResponse,
+  LinkSummaryRequest,
+  LinkSummaryResponse,
   SessionResponse,
   SessionSignals,
   SharingSettings,
@@ -207,6 +210,16 @@ export function unlinkEmail(
 ): Promise<LinkResult<EmailUnlinkResponse>> {
   return postLink(options, "unlink", { email }, (json) =>
     parsedOrNull(EmailUnlinkResponseSchema.safeParse(json)),
+  );
+}
+
+/** The monthly summary on or off for one linked address (A54). */
+export function setLinkSummary(
+  options: StatsOptions,
+  request: LinkSummaryRequest,
+): Promise<LinkResult<LinkSummaryResponse>> {
+  return postLink(options, "summary", request, (json) =>
+    parsedOrNull(LinkSummaryResponseSchema.safeParse(json)),
   );
 }
 

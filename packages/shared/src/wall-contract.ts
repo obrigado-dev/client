@@ -119,6 +119,15 @@ export const LinkedEmailWireSchema = z.object({
   pending_review: z.boolean(),
   /** Whether this install's impressions have qualified the entry this period. */
   qualified_this_period: z.boolean(),
+  /** Whether this address gets the monthly summary (A54). Absent from a server before it. */
+  monthly_summary: z.boolean().optional(),
+  /**
+   * The question to ask before turning the monthly summary on, authored by the server so the
+   * CLI shows (and the server keeps) exactly what was asked, sender and mailing address
+   * included. Present only for a verified address that does not get it and a server that can
+   * send it.
+   */
+  summary_offer: z.string().max(600).optional(),
 });
 export type LinkedEmailWire = z.infer<typeof LinkedEmailWireSchema>;
 
@@ -127,6 +136,20 @@ export const EmailLinkConfirmResponseSchema = z.object({
   entry: LinkedEmailWireSchema.optional(),
 });
 export type EmailLinkConfirmResponse = z.infer<typeof EmailLinkConfirmResponseSchema>;
+
+/**
+ * The monthly summary on or off for one linked address (A54). `asked` is the `summary_offer` the
+ * CLI showed, required to turn it on: the server keeps it as the record of the yes.
+ */
+export const LinkSummaryRequestSchema = z.object({
+  email: LinkEmail,
+  on: z.boolean(),
+  asked: z.string().min(1).max(600).optional(),
+});
+export type LinkSummaryRequest = z.infer<typeof LinkSummaryRequestSchema>;
+
+export const LinkSummaryResponseSchema = z.object({ monthly_summary: z.boolean() });
+export type LinkSummaryResponse = z.infer<typeof LinkSummaryResponseSchema>;
 
 /** A GitHub account as `obrigado link` reports it (A31). The login is GitHub's, not typed. */
 export const LinkedGitHubWireSchema = z.object({

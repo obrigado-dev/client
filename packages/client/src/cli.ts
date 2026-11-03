@@ -37,6 +37,7 @@ const USAGE = `obrigado — sponsored status lines that fund open source maintai
   obrigado link you@company.com  request a code; link --code 123456 confirms
   obrigado unlink you@company.com  remove the email and its listing
   obrigado unlink github       remove the GitHub account and its listing
+  obrigado link summary        a monthly email of what you contributed; "summary off" stops it
   obrigado config              show settings; config <name> <value> to change one
   obrigado privacy             what advertisers may target you on (all off by default)
   obrigado privacy <name> on|off   packages, region, network or activity

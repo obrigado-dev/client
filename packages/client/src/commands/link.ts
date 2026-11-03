@@ -16,6 +16,7 @@ import { explain, parseLinkArgs } from "./link-args.ts";
 import type { LinkArgs, LinkFlow } from "./link-args.ts";
 import { gitHubStatusLines, linkGitHub, unlinkGitHubCommand } from "./link-github.ts";
 import { apiOrigin } from "./shared.ts";
+import { offerSummary, summaryCommand } from "./summary-offer.ts";
 import type { LinkedEmailWire } from "@obrigado/shared";
 import { LinkCode, LinkEmail, SOCIAL_PLATFORM_IDS } from "@obrigado/shared";
 
@@ -45,6 +46,8 @@ const LINK_USAGE = `obrigado link — put your name (or your company's domain) o
   obrigado link you@company.com --no-list  verify without being listed
   obrigado unlink you@company.com        remove the link and the listing
   obrigado unlink github [login]         remove a GitHub account and its listing
+  obrigado link summary                  ask for a monthly email of what you contributed
+  obrigado link summary off              stop it
 
 Links, on an email or beside a GitHub login:
   --url https://ada.dev                  one website
@@ -59,6 +62,11 @@ itself on the 1st.
 `;
 
 function describe(entry: LinkedEmailWire): string {
+  const standing = standingOf(entry);
+  return entry.monthly_summary === true ? `${standing}; monthly summary on` : standing;
+}
+
+function standingOf(entry: LinkedEmailWire): string {
   if (!entry.verified) return "unverified";
   if (entry.pending_review) return "verified, awaiting review";
   if (!entry.listed) return "verified, not listed";
@@ -98,6 +106,7 @@ async function confirmFlow(flow: Flow, args: LinkArgs, code: string): Promise<nu
   const entry = result.data.entry;
   console.log(`  Verified ${email}: ${describe(entry)}.`);
   if (entry.listed || entry.pending_review) console.log("  Undo with `obrigado unlink`.");
+  await offerSummary(flow, entry);
   return 0;
 }
 
@@ -173,6 +182,14 @@ export async function link(argv: readonly string[]): Promise<number> {
   if (config === null) {
     console.log("Obrigado is not installed. Run `obrigado install`.");
     return 1;
+  }
+
+  if (argv[0] === "summary") {
+    const origin = apiOrigin(config);
+    return await summaryCommand(
+      { config, origin, options: { apiOrigin: origin, installKey: config.install_key } },
+      argv.slice(1),
+    );
   }
 
   const args = parseLinkArgs(argv[0] === "github" ? argv.slice(1) : argv);
