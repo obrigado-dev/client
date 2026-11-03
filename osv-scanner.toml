@@ -1,0 +1,28 @@
+# Advisories this repository has judged not to apply, each with its reason and a date to look
+# again. osv-scanner reads this file from beside the lockfile it scans: see
+# .github/workflows/dependency-audit.yml.
+#
+# An entry here is a decision, not a silence: it names why the flaw cannot be reached from
+# this code, and it expires, so the audit goes red again and somebody checks whether a fix has
+# shipped or the reasoning has stopped being true.
+
+[[IgnoredVulns]]
+id = "GHSA-g3hv-75wg-m249"
+ignoreUntil = 2026-11-06
+reason = """\
+minimatch 8.0.7 and 10.2.6, globparts amplification. The fix is minimatch 11 (11.0.3 is the \
+one to take: 11.0.4 is newer than bunfig's seven-day minimumReleaseAge until 2026-11-09), \
+which clears that gate on 2026-11-04. Both copies are dev-time only: @vscode/vsce matches \
+our own .vscodeignore patterns when packaging, and glob 9 (below) runs under the OpenTUI \
+babel plugin at build time. Neither sees a pattern we did not write. Take the override then.\
+"""
+
+[[IgnoredVulns]]
+id = "GHSA-3g3m-2fjr-6pw4"
+ignoreUntil = 2026-11-06
+reason = """\
+glob 9.3.5, AbortSignal cancellation bypass. The fix is glob 14.0.3, which clears bunfig's \
+seven-day minimumReleaseAge on 2026-11-04. Only babel-plugin-module-resolver uses it, under \
+@opentui/solid's build plugin, and it calls glob.sync with no AbortSignal, so there is no \
+cancellation to bypass. Take the override then, with minimatch 11.\
+"""
