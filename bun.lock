@@ -30,7 +30,7 @@
     },
     "packages/client": {
       "name": "@obrigado/client",
-      "version": "0.3.20",
+      "version": "0.3.21",
       "bin": {
         "obrigado": "./src/cli.ts",
       },
