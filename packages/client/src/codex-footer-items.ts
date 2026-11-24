@@ -26,7 +26,7 @@ import {
 } from "./codex-footer-usage.ts";
 
 /** The colour roles Codex's footer names, `StatusLineAccent` upstream. */
-export type StatusColor =
+type StatusColor =
   | "status-model"
   | "status-path"
   | "status-branch"

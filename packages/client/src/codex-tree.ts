@@ -14,9 +14,9 @@
  */
 
 /** A colour Codex names: its theme's, a terminal's, one of its own footer roles, or `#RRGGBB`. */
-export type TreeColor = string;
+type TreeColor = string;
 
-export interface TextProps {
+interface TextProps {
   readonly color?: TreeColor;
   readonly weight?: "normal" | "bold";
   readonly italic?: boolean;

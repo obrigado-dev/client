@@ -51,7 +51,7 @@ import type { View } from "./codex-footer-state.ts";
 import { at } from "./codex-footer-state.ts";
 import type { UiNode } from "./codex-tree.ts";
 
-export type { FooterItemId, FooterItemSource, StatusColor } from "./codex-footer-items.ts";
+export type { FooterItemId, FooterItemSource } from "./codex-footer-items.ts";
 export type { FooterMachine } from "./codex-footer-local.ts";
 export type { UiNode } from "./codex-tree.ts";
 
@@ -67,7 +67,7 @@ export const DEFAULT_ITEMS: readonly string[] = [
  * side; here the spaces are the row's gap, since a tree drops a leaf's own leading and trailing
  * spaces.
  */
-export const FOOTER_SEPARATOR = "·";
+const FOOTER_SEPARATOR = "·";
 
 /**
  * The most this module puts in a tree, well inside Codex's limits (256 nodes, 16 KiB of text,
@@ -75,7 +75,7 @@ export const FOOTER_SEPARATOR = "·";
  * no such limits, but it shows three terminal lines at most, so what is cut was never on screen.
  * A footer here is one row of items and separators, at most three levels deep.
  */
-export const FOOTER_MAX_ITEMS = 64;
+const FOOTER_MAX_ITEMS = 64;
 export const FOOTER_MAX_NODES = FOOTER_MAX_ITEMS * 3;
 export const FOOTER_MAX_TEXT_BYTES = 8 * 1024;
 

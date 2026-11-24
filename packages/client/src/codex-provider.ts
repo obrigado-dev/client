@@ -56,7 +56,7 @@ const TOOL = {
 } as const;
 
 /** A JSON-RPC error with its code, for the one place that writes the reply. */
-export class RpcError extends Error {
+class RpcError extends Error {
   readonly code: number;
 
   constructor(code: number, message: string) {
