@@ -26,18 +26,14 @@
  * is the only place all four consumers can reach. The web importing the client to read one
  * array would drag a published CLI's dependency tree into the site build.
  *
- * ## What `installs: "cli"` means, and the codex case
+ * ## What `installs: "cli"` means
  *
- * It means this client owns the installer for that host — not that installing succeeds today.
- * Codex is the case that separates the two: `--agent codex` is accepted precisely so it can be
- * refused with the reason and a non-zero exit, rather than answering "Unsupported agent" to a
- * developer who asked for something real. Its surface is `null` because SPEC-AMENDMENTS A19
- * found none of Codex's reachable surfaces is a persistent host-owned line, so none is a
- * countable impression.
- *
- * That pairing — an installer we own, no surface to install into — is the honest description
- * of where Codex actually is, and it is why the landing page and the installer disagree about
- * it without either being wrong.
+ * It means this client owns the installer for that host, not that installing succeeds on every
+ * machine. Codex is the case that separates the two. Until Codex 0.171.0 it had no surface at all
+ * (SPEC-AMENDMENTS A19), and `--agent codex` was accepted precisely so it could be refused with
+ * the reason and a non-zero exit, rather than answering "Unsupported agent" to a developer who
+ * asked for something real. It has one now (A55), and a Codex older than that is refused the same
+ * way, with the version to update to.
  */
 
 /**
@@ -93,9 +89,11 @@ export const AGENTS = [
     label: "Codex",
     installs: "cli",
     kind: "terminal",
-    // A19: a warning cell, an Enterprise-only push field, the model's own plan output and a
-    // thread title. None is persistent and host-owned, so none is a countable impression.
-    surface: null,
+    // A55. Codex 0.171.0's status line provider, documented in its bundled `create-statusline`
+    // guide. The provider draws the whole footer, so ours draws the developer's back first; see
+    // `client/src/codex-provider.ts`. Before 0.171.0 there was no surface that counted (A19).
+    surface:
+      "The footer, through the status line provider Codex 0.171 added: your own footer as it was, then ours, as a real link.",
     inherits: null,
   },
   {

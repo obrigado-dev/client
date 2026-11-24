@@ -1,174 +1,240 @@
 /**
- * Codex's status line — the shape this takes the day upstream support lands.
+ * Codex's status line: three settings in `~/.codex/config.toml`.
  *
- * Codex renders its footer from a CLOSED set of built-in item identifiers
- * (`model-with-reasoning`, `context-remaining`, `current-dir`, `thread-title`,
- * …). There is no item that runs a command, reads a file, or renders literal
- * text, and unknown identifiers are rejected by config validation rather than
- * passed through. So there is currently nowhere for a sponsor to go.
+ * Until 0.171.0 Codex drew its footer from a closed list of its own items, and there was nowhere
+ * for a line of ours to go: install refused, and said why (A19). 0.171.0 added a provider, a stdio
+ * MCP server Codex starts and reads its footer from (openai/codex#17827, closed 2026-11-21). The
+ * provider is `obrigado codex-provider` (`codex-provider.ts`), and this module is the write that
+ * tells Codex to use it:
  *
- * Everything reachable today was measured and rejected:
+ *   - `[mcp_servers.obrigado]`, the command that starts it;
+ *   - `tui.status_line_provider`, which picks it for the footer;
+ *   - `features.tui_extensions_statusline`, because Codex ships the provider behind an
+ *     experimental switch that is off until somebody turns it on. Those three in the file are the
+ *     whole of it: no `/experimental`, no `/statusline` picker (checked on 0.171.0).
  *
- *   - `Stop` / `UserPromptSubmit` hooks. Delivered, then withdrawn. Codex frames
- *     hook output as `• Stop (completed) says: …` — host-owned chrome we cannot
- *     remove — renders Markdown literally, and strips OSC 8. The result was an
- *     unlabeled-looking warning cell with no clickable copy. Shipping it would
- *     have traded the product's whole presentation for coverage.
- *   - `workspace-headline`. The one built-in fed by an external push, and the
- *     proof this renderer CAN carry async remote text — but it is Enterprise-only
- *     and sourced from OpenAI's backend.
- *   - `task-progress`. Fed by the model's `update_plan` tool, so filling it means
- *     putting sponsored copy in generated output. §3 forbids exactly that.
- *   - `thread-title`. The only externally writable slot, via the app-server's
- *     `thread/name/set`. Rotating a sponsor through it would overwrite the
- *     developer's own thread title in persisted state, where it shows up in
- *     `/rename`, the resume picker, and the desktop app. Their session metadata
- *     is not ours to spend.
+ * The rules are the ones every installer here keeps (INVARIANT 11): only our keys are written, a
+ * backup is taken first, the write is atomic, and uninstall puts back exactly what was there. Two
+ * things are particular to this host.
  *
- * What lands instead is a command-backed item, tracked in
- * https://github.com/openai/codex/issues/17827. Its contract is deliberately
- * Claude Code's `statusLine` contract — JSON session context on stdin, one line
- * of text on stdout — so `obrigado statusline` is already the whole adapter and
- * this module only has to write config. That is why nothing here re-implements
- * delivery: there is no second renderer to keep in sync, by design.
+ * The provider slot is the whole footer, not a place beside it. So install looks at what the
+ * developer has there before it takes it. Codex's own footer is redrawn item for item, and where
+ * it shows something a provider is not told (`UNREDRAWABLE_ITEMS`) install refuses and names it.
+ * Another provider in the slot is left there, unless `--chain` asks for ours to run it and draw
+ * its footer beside ours (`codex-chain.ts`). `--replace` takes the slot either way, as it does
+ * for Claude Code, and uninstall hands it back.
  *
- * Until it lands, `install` REFUSES rather than degrading. A refusal that names
- * the blocker costs a developer one command; a worse surface installed quietly
- * costs them trust in the disclosure, which is the only thing making sponsored
- * copy acceptable in their terminal at all.
+ * And the file is TOML that a developer keeps by hand, so it is edited on its lines and the result
+ * is held to the change that was asked for (`toml-edit.ts`), then read by Codex itself in a
+ * scratch directory before it replaces anything. A file this cannot edit safely is left alone,
+ * with the three settings printed for the developer to add.
  */
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { realpath, rename, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 
-import { join } from "node:path";
+import { providerIdFrom } from "./codex-chain.ts";
+import { isOurs, planCodexInstall, planCodexUninstall } from "./codex-plan.ts";
+import type { CodexRecord, CodexRefusal, CodexRemoval } from "./codex-plan.ts";
+import { BACKUP_DIR, CODEX_HOME, ensureDir } from "./config.ts";
+import type { CodexIntegrationConfig } from "./config.ts";
+import { providerArgv } from "./renderer-command.ts";
+import { parseToml } from "./toml-edit.ts";
 
-import { CODEX_HOME } from "./config.ts";
-import { rendererCommand } from "./renderer-command.ts";
+/** Codex's user-level config. */
+export const CODEX_CONFIG_PATH = join(CODEX_HOME, "config.toml");
 
-/** Codex's user-level config. The `[tui]` table lives here. */
-const CODEX_CONFIG_PATH = join(CODEX_HOME, "config.toml");
+/** The first Codex with a status line provider. */
+const MINIMUM_VERSION = [0, 171, 0] as const;
+export const MINIMUM_CODEX = MINIMUM_VERSION.join(".");
 
-/** Where the sponsored item sits among Codex's built-in footer items. */
-const CODEX_STATUS_LINE_ITEM = "custom";
-
-/** The upstream capability this integration waits on. */
-export const CODEX_TRACKING_ISSUE = "https://github.com/openai/codex/issues/17827";
+/** Where upstream announced it, for a refusal that has to point somewhere. */
+export const CODEX_PROVIDER_ISSUE = "https://github.com/openai/codex/issues/17827";
 
 /**
- * The command Codex will invoke.
+ * How Codex starts the provider: the client, `codex-provider`, and where Codex's config is when
+ * that is not `~/.codex`.
  *
- * Mirrors `statusLineCommand()` — including the source-checkout fallback, since
- * a command that is not on PATH renders nothing and looks exactly like a broken
- * product — and adds the host so impressions attribute to `codex` rather than
- * inheriting the Claude default. Attribution is decided at install time because
- * that is when it is a fact; sniffing it per render would be a guess.
+ * Codex starts an MCP server with a short list of variables, `HOME` and `PATH` among them and
+ * `CODEX_HOME` not (checked on 0.171.0). A developer who keeps Codex's files somewhere else has
+ * said so in a variable the provider will never see, so install says it again as an argument.
  */
-export function codexStatusLineCommand(): string {
-  const override = process.env["OBRIGADO_CODEX_STATUSLINE_COMMAND"];
-  if (override !== undefined && override.length > 0) return override;
-  return rendererCommand("codex");
+export function codexProviderArgv(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): string[] {
+  const moved = env["CODEX_HOME"] !== undefined && env["CODEX_HOME"].length > 0;
+  return [...providerArgv(), ...(moved ? ["--codex-home", CODEX_HOME] : [])];
 }
 
-/**
- * The exact TOML we will write, rendered so it can be reviewed — and pasted by
- * hand today by anyone running a build with the patch.
- *
- * Keys follow the contract on the reference branch: a `command` string, a
- * refresh interval whose floor upstream sets at 1s, and a timeout. `custom` is
- * additive — it takes a position among the built-ins rather than replacing the
- * footer, because Codex's operational fields (model, permissions, context) are
- * the developer's, not inventory.
- */
-export function codexConfigBlock(command = codexStatusLineCommand()): string {
-  return [
-    "[tui]",
-    `status_line = ["model-with-reasoning", "context-remaining", "current-dir", "${CODEX_STATUS_LINE_ITEM}"]`,
-    "",
-    "[tui.status_line_command]",
-    `command = ${JSON.stringify(command)}`,
-    "refresh_interval_ms = 30000",
-    "timeout_ms = 1000",
-  ].join("\n");
-}
-
-/**
- * Refusal carrying the reason, so the CLI never has to restate it and the two
- * cannot drift apart.
- */
-export class CodexUnsupportedError extends Error {
-  constructor() {
-    super(
-      [
-        "Codex has no status-line extension point yet, so Obrigado has nothing safe to install.",
-        "",
-        "Its footer accepts only built-in item identifiers; no item runs a command or renders",
-        "supplied text. The lifecycle-hook surface was tried and withdrawn — Codex frames hook",
-        "output as its own warning cell, renders Markdown literally, and strips terminal",
-        "hyperlinks, so the copy cannot be labeled or clicked the way §3 requires.",
-        "",
-        `Tracking upstream: ${CODEX_TRACKING_ISSUE}`,
-        "",
-        "That issue's contract is Claude Code's statusLine contract, so `obrigado statusline`",
-        "already satisfies it. When it ships, this becomes a config write and nothing else.",
-        "",
-        `If you build Codex with the patch, add this to ${CODEX_CONFIG_PATH}:`,
-        "",
-        codexConfigBlock()
-          .split("\n")
-          .map((line) => (line.length === 0 ? "" : `  ${line}`))
-          .join("\n"),
-      ].join("\n"),
-    );
-    this.name = "CodexUnsupportedError";
-  }
-}
-
-/** Whether Codex is present at all, independent of whether we can serve it. */
+/** Whether Codex is present at all, independent of whether its version can serve us. */
 export function codexDetected(): boolean {
   return Bun.which("codex") !== null || existsSync(CODEX_HOME);
 }
 
-export interface CodexSupport {
-  readonly supported: boolean;
-  readonly reason: string;
-  readonly issue: string;
-}
-
 /**
- * One place that answers "can we serve Codex yet". `status`, `doctor`, and
- * `install` all read it, so the day upstream ships there is a single flag to
- * flip rather than three call sites to find.
- */
-export function codexSupport(): CodexSupport {
-  return {
-    supported: false,
-    reason: "Codex exposes no command-backed status-line item yet",
-    issue: CODEX_TRACKING_ISSUE,
-  };
-}
-
-/**
- * Write the status-line config into Codex's user config.
+ * The version of the `codex` on PATH, or null where there is none or it will not say.
  *
- * Unimplemented on purpose. The upstream contract is still being chosen between
- * two competing reference branches, and the risky half of this function is not
- * the shape of the block — that is settled — but editing a developer's live
- * `config.toml` in place while preserving their comments, table order, and
- * formatting. Writing that against a contract that can still move would mean
- * maintaining a TOML rewriter for a key that might be renamed.
+ * Asked of the program, since nothing in `~/.codex` records it. The Codex inside the ChatGPT
+ * desktop app is a different copy with its own version and no footer; it is not what this asks.
  */
-export function installCodexStatusLine(): Promise<never> {
-  return Promise.reject(new CodexUnsupportedError());
+export function codexVersion(binary: string | null = Bun.which("codex")): string | null {
+  if (binary === null) return null;
+  try {
+    const result = Bun.spawnSync([binary, "--version"], {
+      stdout: "pipe",
+      stderr: "ignore",
+      timeout: 5000,
+      windowsHide: true,
+    });
+    if (result.exitCode !== 0) return null;
+    return /\d+\.\d+\.\d+/u.exec(result.stdout.toString())?.[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether a Codex of this version reads a provider. A pre-release of 0.171.0 counts as one. */
+export function supportsProvider(version: string): boolean {
+  const parts = version.split(".").map((part) => Math.trunc(Number(part)));
+  for (const [index, minimum] of MINIMUM_VERSION.entries()) {
+    const part = parts[index] ?? 0;
+    if (part !== minimum) return part > minimum;
+  }
+  return true;
 }
 
 /**
- * Nothing was ever written, so there is nothing to take back.
+ * Whether Codex itself reads `text` as its config.
  *
- * Present only so `uninstall --agent codex` answers instead of crashing. An
- * earlier revision carried a remover for the withdrawn hook handlers; it was
- * deleted along with the feature, because Obrigado has no released version that
- * ever wrote them. Carrying a cleanup path for a population of zero is how a
- * codebase starts owing a compatibility debt it never actually incurred.
+ * `toml-edit.ts` holds an edit to the change it was asked for by this runtime's TOML parser. Codex
+ * has its own, and it is the one that has to open the file tomorrow. So the result is put in a
+ * scratch directory and `codex features list`, which loads the whole config and does nothing else,
+ * is run against it. Anything short of a clear refusal counts as read: no `codex` to ask, or one
+ * that hangs, is not evidence against a file the first check already passed.
  */
-export function uninstallCodexStatusLine(): Promise<"not-installed"> {
-  return Promise.resolve("not-installed");
+function readByCodex(text: string, binary: string | null): boolean {
+  if (binary === null) return true;
+  let home: string | null = null;
+  try {
+    home = mkdtempSync(join(tmpdir(), "obrigado-codex-"));
+    writeFileSync(join(home, "config.toml"), text, { mode: 0o600 });
+    const result = Bun.spawnSync([binary, "features", "list"], {
+      env: { ...process.env, CODEX_HOME: home },
+      stdout: "ignore",
+      stderr: "ignore",
+      timeout: 10_000,
+      windowsHide: true,
+    });
+    return result.exitCode === 0 || result.exitCode === null;
+  } catch {
+    return true;
+  } finally {
+    if (home !== null) rmSync(home, { recursive: true, force: true });
+  }
+}
+
+/** A copy of the file as it is now, beside the other hosts' in `~/.obrigado/backups`. */
+async function backupConfig(path: string, backupDir: string): Promise<string | null> {
+  const file = Bun.file(path);
+  if (!(await file.exists())) return null;
+  await ensureDir(backupDir);
+  const stamp = new Date().toISOString().replaceAll(/[:.]/gu, "-");
+  const destination = join(backupDir, `codex-config-${stamp}.toml`);
+  await Bun.write(destination, await file.text());
+  return destination;
+}
+
+/** Onto the file the path resolves to, so a `config.toml` that is a dotfiles symlink stays one. */
+async function writeConfigAtomically(path: string, text: string): Promise<void> {
+  const target = await realpath(path).catch(() => path);
+  await ensureDir(dirname(target));
+  const temporary = `${target}.obrigado-${process.pid}.tmp`;
+  await writeFile(temporary, text, { mode: 0o600 });
+  await rename(temporary, target);
+}
+
+async function readConfigText(path: string): Promise<string> {
+  const file = Bun.file(path);
+  return (await file.exists()) ? await file.text() : "";
+}
+
+export type CodexInstallOutcome =
+  | { readonly status: "refused"; readonly refusal: CodexRefusal }
+  | {
+      readonly status: "installed" | "already-installed";
+      readonly backup: string | null;
+      readonly record: CodexRecord;
+      readonly dropped: readonly string[];
+    };
+
+export interface CodexInstallOptions {
+  readonly chain?: boolean;
+  readonly replace?: boolean;
+  readonly record?: CodexIntegrationConfig | null;
+  /** The rest are the machine, passed in so a test can stand one up. */
+  readonly path?: string;
+  readonly backupDir?: string;
+  readonly binary?: string | null;
+  readonly version?: string | null;
+  readonly argv?: readonly string[];
+}
+
+/** Write the three settings, unless they are there already or something of the developer's is. */
+export async function installCodexStatusLine(
+  options: CodexInstallOptions = {},
+): Promise<CodexInstallOutcome> {
+  const binary = options.binary === undefined ? Bun.which("codex") : options.binary;
+  const version = options.version === undefined ? codexVersion(binary) : options.version;
+  if (version === null) return { status: "refused", refusal: { kind: "no-binary" } };
+  if (!supportsProvider(version)) {
+    return { status: "refused", refusal: { kind: "too-old", version } };
+  }
+
+  const path = options.path ?? CODEX_CONFIG_PATH;
+  const text = await readConfigText(path);
+  const plan = planCodexInstall(text, {
+    argv: options.argv ?? codexProviderArgv(),
+    record: options.record ?? null,
+    ...(options.chain === undefined ? {} : { chain: options.chain }),
+    ...(options.replace === undefined ? {} : { replace: options.replace }),
+  });
+  if (plan.status === "refused") return plan;
+  if (plan.next === text) {
+    return { status: "already-installed", backup: null, record: plan.record, dropped: [] };
+  }
+  if (!readByCodex(plan.next, binary)) {
+    return {
+      status: "refused",
+      refusal: { kind: "uneditable", why: "Codex would not read the file with the change made" },
+    };
+  }
+
+  const backup = await backupConfig(path, options.backupDir ?? BACKUP_DIR);
+  await writeConfigAtomically(path, plan.next);
+  return { status: "installed", backup, record: plan.record, dropped: plan.dropped };
+}
+
+/** Take ours out of `config.toml`, and put back what install found there. */
+export async function uninstallCodexStatusLine(
+  record: CodexIntegrationConfig | null,
+  options: Pick<CodexInstallOptions, "path" | "backupDir"> = {},
+): Promise<CodexRemoval["outcome"]> {
+  const path = options.path ?? CODEX_CONFIG_PATH;
+  const text = await readConfigText(path);
+  const removal = planCodexUninstall(text, record);
+  if (removal.next === text) return removal.outcome;
+  await backupConfig(path, options.backupDir ?? BACKUP_DIR);
+  await writeConfigAtomically(path, removal.next);
+  return removal.outcome;
+}
+
+/** Whether `config.toml` has ours in the footer's slot right now, for `status` and `doctor`. */
+export async function codexConfigured(path = CODEX_CONFIG_PATH): Promise<boolean> {
+  const tui = parseToml(await readConfigText(path))?.["tui"];
+  const selected =
+    typeof tui === "object" && tui !== null
+      ? (tui as Record<string, unknown>)["status_line_provider"]
+      : undefined;
+  return isOurs(providerIdFrom(selected));
 }

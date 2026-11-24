@@ -15,6 +15,7 @@ import { offerGitHubLink } from "./commands/link-offer.ts";
 import { privacy } from "./commands/privacy.ts";
 import { printRetrievalHook, read, summary } from "./commands/projects.ts";
 import { doctor, status } from "./commands/status.ts";
+import { codexProvider } from "./commands/codex-provider.ts";
 import { statusline } from "./commands/statusline.ts";
 import { update, version } from "./commands/update.ts";
 import { readConfig } from "./config.ts";
@@ -26,8 +27,8 @@ const USAGE = `obrigado — sponsored status lines that fund open source maintai
   obrigado install --agent <host>  just one: claude-code, claude-desktop, opencode, pi,
                                oh-my-pi, antigravity-cli, vscode, cursor,
                                antigravity-ide, kiro, jetbrains or codex
-  obrigado install --chain     keep your existing statusline, add ours beneath
-  obrigado install --above     put ours above your line instead (with --chain)
+  obrigado install --chain     keep your existing statusline, add ours beneath (in Codex, beside)
+  obrigado install --above     put ours above your line instead (with --chain, Claude Code)
   obrigado install --replace   take over an existing statusline (reversible)
   obrigado install --no-input  skip the questions: targeting stays off, no editor is touched
   obrigado uninstall [--agent <host>]
@@ -47,6 +48,7 @@ const USAGE = `obrigado — sponsored status lines that fund open source maintai
   obrigado statusline          render one line (called by the host)
   obrigado statusline --agent <host>  the same line, attributed to that host
   obrigado statusline --json   the line's parts, for a host that draws its own UI
+  obrigado codex-provider      Codex's status line provider (started by Codex)
   obrigado summary             one-line session summary (--json for a hook)
   obrigado summary --print-hook  the hook config to paste, if you want it
   obrigado read --print-hook   report which packages your agent reads (off by default)
@@ -94,6 +96,9 @@ const commands: Record<string, (argv: readonly string[]) => Promise<number>> = {
     await afterRender(await readConfig());
     return code;
   },
+  // Runs for as long as Codex keeps the pipe open, and updates nothing itself: the renderer it
+  // starts for each line is the `statusline` above, which does.
+  "codex-provider": (argv) => codexProvider(argv),
   doctor: () => doctor(),
   update: (argv) => update(argv),
   version: () => version(),
@@ -116,6 +121,8 @@ try {
   // runs after every file the agent reads, where a nonzero exit puts a "hook error" notice
   // and the first line of stderr into the session's transcript.
   if (name === "statusline" || name === "summary" || name === "read") process.exit(0);
+  // Codex reads this one's stdout as a protocol and keeps its stderr in a log.
+  if (name === "codex-provider") process.exit(1);
   if (name === "update" && process.argv.includes("--background")) process.exit(0);
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);

@@ -69,8 +69,9 @@ describe("the table", () => {
 
 describe("the derived views", () => {
   /*
-   * `installs: "cli"` means this client owns the installer, not that installing succeeds:
-   * codex is accepted by `--agent` precisely so it can be refused with the reason.
+   * `installs: "cli"` means this client owns the installer, not that installing succeeds on
+   * every machine: a Codex older than 0.171.0 is accepted by `--agent` and refused with the
+   * reason, as every Codex was before it had a surface (A19, A55).
    */
   test("installable is what `obrigado install --agent` accepts", () => {
     expect(INSTALLABLE_AGENTS.map((agent) => agent.id)).toEqual([
@@ -95,6 +96,8 @@ describe("the derived views", () => {
   test("surfaced is what the landing page can honestly demo", () => {
     expect(SURFACED_AGENTS.map((agent) => agent.id)).toEqual([
       "claude-code",
+      // Since Codex 0.171.0's status line provider (A55).
+      "codex",
       "opencode",
       "vscode",
       "pi",
@@ -126,12 +129,18 @@ describe("the derived views", () => {
     expect(surfaceAgents("pi")).toEqual(["oh-my-pi", "pi"]);
   });
 
-  /* A19: none of Codex's reachable surfaces is persistent and host-owned. */
-  test("excludes codex and gemini-cli from the surfaced view", () => {
+  /* A row so the host is known, and no surface: Gemini CLI offers no status line to draw in. */
+  test("excludes gemini-cli from the surfaced view", () => {
     const ids = SURFACED_AGENTS.map((agent) => agent.id) as readonly string[];
 
-    expect(ids).not.toContain("codex");
     expect(ids).not.toContain("gemini-cli");
+  });
+
+  /* A19 kept Codex out for want of a persistent, host-owned place; A55 is the day it got one. */
+  test("codex is surfaced, through its status line provider", () => {
+    const codex = SURFACED_AGENTS.find((agent) => agent.id === "codex");
+
+    expect(codex?.surface).toContain("status line provider");
   });
 
   /*

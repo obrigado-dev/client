@@ -147,6 +147,24 @@ function installedArgv(found?: Found): string[] {
 }
 
 /**
+ * The argv Codex starts our status line provider with (`codex-statusline.ts`).
+ *
+ * Codex starts an MCP server itself, with no shell and whatever PATH it was started with, so the
+ * program is always named by its full path. A release names the `obrigado` on PATH where there is
+ * one, which is the one that stays put when a release replaces it, and otherwise itself.
+ *
+ * A checkout names itself even where PATH has an `obrigado`. That one is a release, and it may be
+ * older than `codex-provider`: asked for a command it does not have it prints its usage, and
+ * Codex's footer reads "Status line unavailable". The renderer can afford the other order, since
+ * every release has `statusline`.
+ */
+export function providerArgv(found?: Found): string[] {
+  const onPath = found === undefined ? Bun.which("obrigado") : found.onPath;
+  const compiled = found?.compiled ?? isCompiledBinary();
+  return [...(onPath === null || !compiled ? installedArgv(found) : [onPath]), "codex-provider"];
+}
+
+/**
  * `argv` as one command that `splitCommand` in `@obrigado/surface` reads back into the same argv:
  * a part with anything but plain path characters goes in single quotes, inside which nothing is
  * special. Windows paths among them, whose backslashes and spaces a shell would take apart.

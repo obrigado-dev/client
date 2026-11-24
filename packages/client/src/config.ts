@@ -77,6 +77,18 @@ export type SponsoredPosition = "above" | "below";
 export interface CodexIntegrationConfig {
   readonly installed: boolean;
   readonly installed_at?: string;
+  /**
+   * What `tui.status_line_provider` held before install, so uninstall puts back exactly that:
+   * `"default"`, another provider's `{ server, tool }`, or null where the key was not set.
+   */
+  readonly previous_provider?: unknown;
+  /** The developer's own provider, drawn before our line (`install --chain`). */
+  readonly chained_provider?: { readonly server: string; readonly tool: string } | undefined;
+  /**
+   * What `features.tui_extensions_statusline` held before install turned it on: `false`, or null
+   * where the key was not set. Absent where it was already on, and uninstall then leaves it on.
+   */
+  readonly previous_feature?: boolean | null;
 }
 
 export interface OpenCodeIntegrationConfig {
