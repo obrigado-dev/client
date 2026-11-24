@@ -25,14 +25,15 @@ A surface counts when it is **persistent** and **host-owned**:
   for this. Text the model happens to print is not a surface; it is output, and it can be
   anything on the next run.
 
-Codex is the worked example of failing this bar, and it is in the table anyway. Its reachable
-places are a warning cell, an Enterprise-only push field, the model's own plan output, and a
-thread title. None is both persistent and host-owned, so none is a countable impression — the
-row carries `surface: null` and `obrigado install --agent codex` is accepted *specifically so
-it can be refused with the reason and a non-zero exit*, rather than answering "Unsupported
-agent" to somebody who asked about something real.
+Codex was for a long time the worked example of failing this bar, and stayed in the table
+anyway. Before 0.171.0 its reachable places were a warning cell, an Enterprise-only push field,
+the model's own plan output, and a thread title. None was both persistent and host-owned, so
+none was a countable impression: the row carried `surface: null`, and `obrigado install --agent
+codex` was accepted *specifically so it could be refused with the reason and a non-zero exit*,
+rather than answering "Unsupported agent" to somebody who asked about something real.
 
-So a host with no countable surface is still worth a row. It is not worth an integration.
+So a host with no countable surface is still worth a row. It is not worth an integration, until
+the host adds one: Codex 0.171.0 did (a status line provider), and the row has a surface now.
 
 If you are unsure, open an issue describing the slot — where it renders, whether the host
 documents it, and how long it stays — before building anything. That conversation is cheaper
@@ -111,7 +112,7 @@ you edit the expectation — it usually means a field is set wrong.
 
 ## Choosing an integration
 
-The host decides this, not us. There are three precedents:
+The host decides this, not us. There are four precedents:
 
 1. **The host calls a command.** Claude Code is configured to run `obrigado statusline`, and
    the client prints one line to stdout. This is the simplest case and the one to copy when
@@ -129,6 +130,16 @@ The host decides this, not us. There are three precedents:
    registers a status bar widget through `statusBarWidgetFactory`; see
    `packages/jetbrains-plugin/`. Neither is in its store yet, so the CLI installs both through
    the editor's own tool: `--install-extension` (A40), and each IDE's `installPlugins` (A43).
+
+4. **The host reads a provider.** Codex starts an MCP server and reads its footer from it, about
+   once a second, as a tree of text, rows and links. The server is the client itself, `obrigado
+   codex-provider`, and it gets each line from the renderer as `--json` parts. Two things about
+   this one are worth knowing before copying it. The provider is the *whole* footer, so ours
+   draws the developer's own footer back before adding to it (`packages/client/src/codex-footer.ts`),
+   refuses to install where it could not, and runs another provider the developer already had
+   when asked to (`--chain`). And the host asks far more often than anything changes, so the
+   renderer is asked only when something happened in the session. See
+   `packages/client/src/codex-provider.ts`.
 
 Whichever applies, the rendering rules — the disclosure, the allowed styles, the
 control-character ban — live in `packages/shared` and are not per-host. Do not reimplement

@@ -5,7 +5,6 @@ import {
   claudeIntegration,
   piIntegration,
   CLAUDE_SETTINGS_PATH,
-  codexIntegration,
   opencodeIntegration,
   generateInstallKey,
   OBRIGADO_DIR,
@@ -13,11 +12,7 @@ import {
   writeConfig,
 } from "../config.ts";
 import type { ClientConfig, ClientIntegrations, SponsoredPosition } from "../config.ts";
-import {
-  CODEX_TRACKING_ISSUE,
-  CodexUnsupportedError,
-  uninstallCodexStatusLine,
-} from "../codex-statusline.ts";
+import { installCodexAdapter, removeCodex } from "./install-codex.ts";
 import { installOpenCodePlugin, uninstallOpenCodePlugin } from "../opencode-plugin.ts";
 
 import { installStatusLine, uninstallStatusLine } from "../statusline.ts";
@@ -79,36 +74,6 @@ async function installClaudeAdapter(
   }
 }
 
-/**
- * Codex, for as long as it has nowhere to put a sponsored line.
- *
- * Two different answers for two different questions. Asking for Codex by name
- * deserves the whole reason and a non-zero exit — the developer wanted a
- * specific thing and did not get it, and a script should be able to tell. Plain
- * `install` merely NOTICED Codex; saying so once and moving on is right, and
- * failing the run would punish a machine that has Codex sitting next to a Claude
- * install we configured perfectly well.
- */
-function installCodexAdapter(explicit: boolean): AdapterResult {
-  if (explicit) {
-    const reason = new CodexUnsupportedError().message.split("\n").filter((line) => line !== "");
-    return {
-      changed: false,
-      failed: true,
-      row: { mark: "failed", host: "Codex", detail: "nothing installed", notes: reason },
-    };
-  }
-  return {
-    changed: false,
-    failed: false,
-    row: {
-      mark: "skipped",
-      host: "Codex",
-      detail: `no status line to use yet · ${CODEX_TRACKING_ISSUE.replace("https://", "")}`,
-    },
-  };
-}
-
 async function installOpenCodeAdapter(
   existing: ClientConfig | null,
   integrations: ClientIntegrations,
@@ -137,16 +102,22 @@ async function installOpenCodeAdapter(
   }
 }
 
-export async function install(argv: readonly string[] = []): Promise<number> {
-  const targets = targetsForInstall(argv);
-  const chain = argv.includes("--chain");
-  const replace = argv.includes("--replace") || chain;
-  if ((chain || replace) && !targets.includes("claude-code")) {
-    throw new Error("--chain and --replace apply only to Claude Code's status line");
+/** Flags that mean something only to some hosts are refused where none of those is a target. */
+function checkFlags(argv: readonly string[], targets: readonly string[], slot: boolean): void {
+  // The two hosts with one slot that a developer may already have filled.
+  if (slot && !targets.includes("claude-code") && !targets.includes("codex")) {
+    throw new Error("--chain and --replace apply only to Claude Code's and Codex's status lines");
   }
   if ((argv.includes("--above") || argv.includes("--below")) && !targets.includes("claude-code")) {
     throw new Error("--above and --below apply only to Claude Code's status line");
   }
+}
+
+export async function install(argv: readonly string[] = []): Promise<number> {
+  const targets = targetsForInstall(argv);
+  const chain = argv.includes("--chain");
+  const replace = argv.includes("--replace") || chain;
+  checkFlags(argv, targets, chain || replace);
 
   const existing = await readConfig();
   // The editors are asked about first (A40), so a bare install's questions come before any write.
@@ -167,7 +138,14 @@ export async function install(argv: readonly string[] = []): Promise<number> {
   }
 
   if (targets.includes("codex")) {
-    results.push(installCodexAdapter(requestedAgent(argv) === "codex"));
+    results.push(
+      await installCodexAdapter(existing, integrations, {
+        explicit: requestedAgent(argv) === "codex",
+        chain,
+        // `replace` is true under `--chain` for Claude Code's sake; here they are two requests.
+        replace: argv.includes("--replace"),
+      }),
+    );
   }
 
   if (targets.includes("opencode")) {
@@ -219,7 +197,7 @@ export async function install(argv: readonly string[] = []): Promise<number> {
  */
 const INSTALLED_CHECK: Record<InstallAgent, (config: ClientConfig) => boolean> = {
   "claude-code": (config) => claudeIntegration(config)?.installed === true,
-  codex: (config) => codexIntegration(config)?.installed === true,
+  codex: (config) => config.integrations?.codex?.installed === true,
   opencode: (config) => opencodeIntegration(config)?.installed === true,
   pi: (config) => piIntegration(config, "pi")?.installed === true,
   "oh-my-pi": (config) => piIntegration(config, "oh-my-pi")?.installed === true,
@@ -288,15 +266,6 @@ async function removeOpenCode(
     ...(opencodeIntegration(config) ?? { installed: false }),
     installed: false,
   };
-}
-
-async function removeCodex(
-  config: ClientConfig | null,
-  integrations: ClientIntegrations,
-): Promise<void> {
-  await uninstallCodexStatusLine();
-  console.log("Codex: nothing of ours was installed, so nothing was removed.");
-  integrations.codex = { ...(codexIntegration(config) ?? { installed: false }), installed: false };
 }
 
 /** Keyed, so a new installable agent cannot ship without a way to remove it. */

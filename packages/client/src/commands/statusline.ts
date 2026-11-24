@@ -244,6 +244,9 @@ export async function statusline(argv: readonly string[] = []): Promise<number> 
   const agent = agentFromArgv(argv);
   // A host this build does not know gets nothing, not somebody else's line. See `agentFromArgv`.
   if (agent === null) return 0;
+  // Uninstalled from Codex while a session of it is open: the provider it started goes on asking
+  // until Codex is restarted, and is given nothing.
+  if (agent === "codex" && config.integrations?.codex?.installed === false) return 0;
   // Uninstalled from the JetBrains IDEs, whose plugin only the IDE can remove: it draws nothing.
   if (agent === "jetbrains" && config.integrations?.jetbrains?.installed === false) return 0;
   // Hosts that draw their own UI ask for the parts rather than a rendered line.
@@ -258,7 +261,8 @@ export async function statusline(argv: readonly string[] = []): Promise<number> 
   // Code's `statusLine` — the one slot we displaced. Other hosts append their
   // own item beside their built-ins, so there is nothing of the developer's to
   // hand back, and running their Claude command under a different host would
-  // feed it a payload it was never written for.
+  // feed it a payload it was never written for. Codex's one slot is chained too,
+  // but by its provider, which draws a tree and not a line (`codex-chain.ts`).
   const chainedCommand =
     agent === DEFAULT_AGENT ? claudeIntegration(config)?.chained_command : undefined;
   const chained = chainedCommand === undefined ? null : await runChained(chainedCommand, payload);

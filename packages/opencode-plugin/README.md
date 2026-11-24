@@ -16,11 +16,13 @@ Solid components into named slots of the host's layout. The slot under the route
 (`app_bottom` in OpenCode 1, `app` in OpenCode 2) is persistent and host-owned, which is the
 property that makes a status line a countable impression and a toast not.
 
-**This is why OpenCode gets an integration and Codex does not.** Codex's reachable surfaces
-were a warning cell, an Enterprise-only push field, the model's own plan output, and the
+**This is why OpenCode got an integration when Codex did not.** Codex's reachable surfaces
+were then a warning cell, an Enterprise-only push field, the model's own plan output, and the
 developer's thread title — see `docs/SPEC-AMENDMENTS.md` A19. The decisive difference is
 clickability: OpenTUI exposes `a` with an `href`, so the creative is a genuine link.
 Codex rendered Markdown literally and stripped OSC 8, and that is what disqualified it.
+(Codex 0.171.0 added a status line provider with a link element of its own, and has an
+integration since: A55.)
 
 ## How it delivers
 

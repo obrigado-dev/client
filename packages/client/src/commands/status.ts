@@ -11,7 +11,8 @@ import {
   readConfig,
   SESSION_STATE_DIR,
 } from "../config.ts";
-import { codexSupport } from "../codex-statusline.ts";
+import type { ClientConfig } from "../config.ts";
+import { codexConfigured, codexVersion, MINIMUM_CODEX } from "../codex-statusline.ts";
 import { openCodePluginFiles } from "../opencode-plugin.ts";
 import { resolveDeps } from "../deps.ts";
 import { supportsHyperlinks } from "../link.ts";
@@ -79,7 +80,7 @@ export async function status(): Promise<number> {
     `  Claude Code   ${isOurStatusLine(settings?.["statusLine"]) ? "configured" : "not installed"}`,
   );
   console.log(`  OpenCode      ${opencodeFiles.length > 0 ? "configured" : "not installed"}`);
-  console.log(`  Codex         unsupported upstream (${codexSupport().issue})`);
+  console.log(`  Codex         ${(await codexConfigured()) ? "configured" : "not installed"}`);
   console.log(`  API           ${origin}`);
 
   console.log(
@@ -137,6 +138,14 @@ export function describeServing(payload: unknown): string {
   return `NO — ${because}`;
 }
 
+/** Codex's line in `doctor`: whether ours has its footer, which Codex that is, and any chain. */
+async function codexLine(config: ClientConfig | null): Promise<string> {
+  const state = (await codexConfigured()) ? "status line provider" : "not configured";
+  const version = codexVersion() ?? "not on PATH";
+  const chained = codexIntegration(config)?.chained_provider?.server ?? "none";
+  return `  codex          ${state} (Codex ${version}, needs ${MINIMUM_CODEX}; chained: ${chained})`;
+}
+
 export async function doctor(): Promise<number> {
   // Non-zero when something a person would want to fix was found. `doctor` exists to detect
   // an unreadable settings file and an unreachable server, and it used to exit 0 for both —
@@ -167,7 +176,7 @@ export async function doctor(): Promise<number> {
   );
   console.log(`  statusLine     ${owner}`);
   console.log(`  chained        ${claudeIntegration(config)?.chained_command ?? "none"}`);
-  console.log(`  codex          ${codexSupport().reason}; see ${codexSupport().issue}`);
+  console.log(await codexLine(config));
   console.log(
     `  opencode       ${opencodeFiles.length > 0 ? `plugin entry in ${opencodeFiles.join(", ")}` : "not configured"}`,
   );

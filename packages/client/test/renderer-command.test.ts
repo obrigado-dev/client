@@ -4,7 +4,12 @@
  */
 import { describe, expect, test } from "bun:test";
 
-import { forShell, rendererCommand, spawnedRendererCommand } from "../src/renderer-command.ts";
+import {
+  forShell,
+  providerArgv,
+  rendererCommand,
+  spawnedRendererCommand,
+} from "../src/renderer-command.ts";
 import { statusLineOwner } from "../src/statusline.ts";
 
 const NODE = "/home/dev/.nvm/versions/node/v22.11.0";
@@ -164,5 +169,30 @@ describe("the renderer command for a host with no shell", () => {
         compiled: true,
       }),
     ).toBe("/home/dev/bin/obrigado statusline");
+  });
+});
+
+describe("the command Codex starts the status line provider with", () => {
+  const RELEASE = "/home/dev/.local/bin/obrigado";
+
+  test("a release names the obrigado on PATH, by its full path: Codex runs it with no shell", () => {
+    expect(providerArgv({ onPath: RELEASE, binary: RELEASE, compiled: true })).toEqual([
+      RELEASE,
+      "codex-provider",
+    ]);
+  });
+
+  test("a release that is not on PATH names itself", () => {
+    expect(providerArgv({ onPath: null, binary: "/tmp/obrigado", compiled: true })).toEqual([
+      "/tmp/obrigado",
+      "codex-provider",
+    ]);
+  });
+
+  test("a checkout names itself even beside a release, which may be older than the provider", () => {
+    const argv = providerArgv({ onPath: RELEASE, binary: "/usr/local/bin/bun", compiled: false });
+    expect(argv[0]).toBe("/usr/local/bin/bun");
+    expect(argv[1]).toEndWith("cli.ts");
+    expect(argv[2]).toBe("codex-provider");
   });
 });
